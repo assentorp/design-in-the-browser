@@ -1,0 +1,52 @@
+{
+  "name": "claudedesign",
+  "version": "1.0.0",
+  "description": "Visual annotation tool for Claude Code",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "postinstall": "electron-rebuild",
+    "dev": "npm run build:main && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build": "npm run build:main && vite build && electron-builder",
+    "build:mac": "npm run build:main && vite build && electron-builder --mac",
+    "build:win": "npm run build:main && vite build && electron-builder --win",
+    "build:linux": "npm run build:main && vite build && electron-builder --linux",
+    "typecheck": "tsc --noEmit -p tsconfig.main.json"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "node-pty": "^1.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.claudedesign.app",
+    "productName": "Claude Design",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}
