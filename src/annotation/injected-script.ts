@@ -9,9 +9,18 @@ export const annotationScript = `
 
   // State
   let annotateMode = false;
+  let todoMode = false; // When true, we're building a list of edits
   let highlightedElement = null;
   let selectedElement = null;
   let popoverElement = null;
+  let toolbarElement = null;
+
+  // Multi-edit state - stores pending annotations with individual notes
+  let pendingAnnotations = []; // Array of {element, note, bounds, selector, tagName, text, attributes}
+
+  // Text selection state
+  let selectedText = null;
+  let selectedTextRange = null;
 
   // Inject styles
   const styleId = 'claude-design-annotation-styles';
@@ -31,31 +40,41 @@ export const annotationScript = `
       .claude-design-popover {
         position: fixed;
         z-index: 2147483647;
-        background: #1f1f1f;
-        border: 1px solid #333;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        padding: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         width: 320px;
         color: #e5e5e5;
+        cursor: default !important;
+      }
+      .claude-design-popover * {
+        cursor: default !important;
+      }
+      .claude-design-popover button {
+        cursor: pointer !important;
+      }
+      .claude-design-popover textarea {
+        cursor: text !important;
       }
       .claude-design-popover-textarea {
         width: 100%;
-        min-height: 100px;
-        background: #2a2a2a;
-        border: 1px solid #444;
-        border-radius: 8px;
-        padding: 12px;
+        min-height: 120px;
+        background: #303030;
+        border: 1px solid #4a4a4a;
+        border-radius: 24px;
+        padding: 18px 22px;
         color: #e5e5e5;
         font-size: 14px;
         font-family: inherit;
-        resize: vertical;
+        resize: none;
         outline: none;
         box-sizing: border-box;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
       }
       .claude-design-popover-textarea:focus {
-        border-color: #c6613f;
+        border-color: #5a5a5a;
       }
       .claude-design-popover-textarea::placeholder {
         color: #666;
@@ -64,16 +83,13 @@ export const annotationScript = `
         position: relative;
       }
       .claude-design-popover-input-row .claude-design-popover-textarea {
-        padding-right: 52px;
-        padding-bottom: 16px;
+        padding-right: 22px;
+        padding-bottom: 60px;
       }
       .claude-design-popover-send {
-        position: absolute;
-        right: 10px;
-        bottom: 10px;
         width: 32px;
         height: 32px;
-        border-radius: 50%;
+        border-radius: 8px;
         background: #c6613f;
         border: none;
         cursor: pointer;
@@ -86,12 +102,260 @@ export const annotationScript = `
         background: #a8522f;
       }
       .claude-design-popover-send svg {
+        width: 16px;
+        height: 16px;
+        color: white;
+      }
+      .claude-design-popover-add {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: #c6613f;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s ease;
+      }
+      .claude-design-popover-add:hover {
+        background: #a8522f;
+      }
+      .claude-design-popover-add svg {
         width: 14px;
         height: 14px;
         color: white;
       }
+      .claude-design-popover-add-another {
+        height: 32px;
+        padding: 0 10px;
+        background: transparent;
+        border: none;
+        border-radius: 8px;
+        color: #888;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .claude-design-popover-add-another:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .claude-design-popover-add-another svg {
+        flex-shrink: 0;
+      }
       .claude-design-crosshair * {
         cursor: crosshair !important;
+      }
+      .claude-design-popover-textarea.dragover {
+        border-color: #c6613f;
+        background: rgba(198, 97, 63, 0.1);
+      }
+      .claude-design-popover-image-pill {
+        display: none;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        border-radius: 8px;
+        color: #ccc;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .claude-design-popover-image-pill.active {
+        display: flex;
+      }
+      .claude-design-popover-image-pill:hover {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+      }
+      .claude-design-popover-image-pill svg {
+        width: 12px;
+        height: 12px;
+      }
+      .claude-design-popover-actions {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .claude-design-popover-actions-left {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .claude-design-popover-actions-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .claude-design-popover-image-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s ease;
+      }
+      .claude-design-popover-image-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .claude-design-popover-image-btn svg {
+        width: 18px;
+        height: 18px;
+        color: #888;
+      }
+      .claude-design-popover-badge {
+        position: absolute;
+        top: -8px;
+        left: -8px;
+        background: #c6613f;
+        color: white;
+        font-size: 11px;
+        font-weight: 600;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1;
+      }
+      .claude-design-text-highlight {
+        background: rgba(198, 97, 63, 0.3) !important;
+        outline: 2px solid #c6613f !important;
+        outline-offset: 1px !important;
+      }
+      .claude-design-selected-text {
+        font-size: 13px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        color: #e5e5e5;
+        background: #252525;
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 80px;
+        overflow-y: auto;
+      }
+      .claude-design-selected-text::before {
+        content: '"';
+        color: #666;
+      }
+      .claude-design-selected-text::after {
+        content: '"';
+        color: #666;
+      }
+      .claude-design-multi-selected {
+        outline: 3px solid #c6613f !important;
+        outline-offset: 2px !important;
+        position: relative;
+      }
+      .claude-design-multi-badge {
+        position: absolute;
+        top: -10px;
+        left: -10px;
+        width: 20px;
+        height: 20px;
+        background: #c6613f;
+        color: white;
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483646;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      .claude-design-toolbar {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2147483647;
+        background: #1f1f1f;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        cursor: default !important;
+      }
+      .claude-design-toolbar * {
+        cursor: default !important;
+      }
+      .claude-design-toolbar button {
+        cursor: pointer !important;
+      }
+      .claude-design-toolbar-count {
+        font-size: 13px;
+        color: #888;
+      }
+      .claude-design-toolbar-count strong {
+        color: #e5e5e5;
+      }
+      .claude-design-toolbar-hint {
+        font-size: 12px;
+        color: #666;
+        padding-left: 12px;
+        border-left: 1px solid #333;
+      }
+      .claude-design-toolbar-btn {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        transition: background 0.15s ease;
+      }
+      .claude-design-toolbar-btn-primary {
+        background: #c6613f;
+        color: white;
+      }
+      .claude-design-toolbar-btn-primary:hover {
+        background: #a8522f;
+      }
+      .claude-design-toolbar-btn-secondary {
+        background: transparent;
+        color: #888;
+      }
+      .claude-design-toolbar-btn-secondary:hover {
+        background: #333;
+        color: #e5e5e5;
+      }
+      .claude-design-toolbar-btn-send {
+        background: #c6613f;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .claude-design-toolbar-btn-send:hover {
+        background: #a8522f;
+      }
+      .claude-design-toolbar-btn-send svg {
+        width: 14px;
+        height: 14px;
       }
     \`;
     document.head.appendChild(style);
@@ -168,12 +432,180 @@ export const annotationScript = `
     return styles;
   }
 
-  // Create popover
-  function createPopover(el) {
-    removePopover();
+  // Generate display selector like <button.upgrade-btn>
+  function generateDisplaySelector(el) {
+    let display = el.tagName.toLowerCase();
+    if (el.className && typeof el.className === 'string') {
+      const mainClass = el.className
+        .split(' ')
+        .filter(c => c && !c.startsWith('claude-design-'))
+        .slice(0, 1)
+        .join('');
+      if (mainClass) display += '.' + mainClass;
+    }
+    return '<' + display + '>';
+  }
 
+  // Escape HTML for safe display
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function removeToolbar() {
+    if (toolbarElement) {
+      toolbarElement.remove();
+      toolbarElement = null;
+    }
+  }
+
+  // Find pending annotation for an element
+  function findPendingAnnotation(el) {
+    return pendingAnnotations.find(function(a) { return a.element === el; });
+  }
+
+  // Add or update pending annotation
+  function savePendingAnnotation(el, note) {
+    const existing = findPendingAnnotation(el);
     const rect = el.getBoundingClientRect();
-    const selector = generateSelector(el);
+    const padding = 10;
+    const bounds = {
+      x: Math.max(0, Math.floor(rect.left - padding)),
+      y: Math.max(0, Math.floor(rect.top - padding)),
+      width: Math.ceil(rect.width + padding * 2),
+      height: Math.ceil(rect.height + padding * 2),
+    };
+
+    const textContent = (el.textContent || '').trim().substring(0, 50);
+    const attrs = [];
+    if (el.id) attrs.push('id="' + el.id + '"');
+    if (el.className && typeof el.className === 'string') {
+      attrs.push('class="' + el.className.split(' ').slice(0, 3).join(' ') + '"');
+    }
+    ['data-testid', 'data-component', 'aria-label', 'name', 'href'].forEach(function(attr) {
+      const val = el.getAttribute(attr);
+      if (val) attrs.push(attr + '="' + val.substring(0, 30) + '"');
+    });
+
+    if (existing) {
+      existing.note = note;
+      existing.bounds = bounds;
+    } else {
+      pendingAnnotations.push({
+        element: el,
+        note: note,
+        bounds: bounds,
+        selector: generateSelector(el),
+        tagName: el.tagName.toLowerCase(),
+        text: textContent,
+        attributes: attrs.join(' '),
+      });
+      el.classList.add('claude-design-multi-selected');
+      updatePendingBadges();
+    }
+    notifyPendingUpdate();
+  }
+
+  function updatePendingBadges() {
+    pendingAnnotations.forEach(function(ann, index) {
+      const el = ann.element;
+      // Remove any existing badge first
+      const existingBadge = el.querySelector('.claude-design-multi-badge');
+      if (existingBadge) existingBadge.remove();
+
+      const badge = document.createElement('div');
+      badge.className = 'claude-design-multi-badge';
+      badge.textContent = index + 1;
+
+      // Position badge relative to element
+      const computed = window.getComputedStyle(el);
+      if (computed.position === 'static') {
+        el.style.position = 'relative';
+      }
+      el.appendChild(badge);
+    });
+  }
+
+  function clearPendingAnnotations() {
+    pendingAnnotations.forEach(function(ann) {
+      ann.element.classList.remove('claude-design-multi-selected');
+      const badge = ann.element.querySelector('.claude-design-multi-badge');
+      if (badge) badge.remove();
+    });
+    pendingAnnotations = [];
+    removeToolbar();
+    notifyPendingUpdate();
+  }
+
+  // Notify React about pending annotations changes
+  function notifyPendingUpdate() {
+    const items = pendingAnnotations.map(function(ann) {
+      return { note: ann.note, selector: ann.selector };
+    });
+    window.postMessage({
+      type: 'claude-design-pending-update',
+      items: items
+    }, '*');
+  }
+
+  function removePendingAnnotation(index) {
+    if (index < 0 || index >= pendingAnnotations.length) return;
+
+    const ann = pendingAnnotations[index];
+    ann.element.classList.remove('claude-design-multi-selected');
+    const badge = ann.element.querySelector('.claude-design-multi-badge');
+    if (badge) badge.remove();
+
+    pendingAnnotations.splice(index, 1);
+    updatePendingBadges();
+    notifyPendingUpdate();
+
+    // Reset todoMode if list is empty
+    if (pendingAnnotations.length === 0) {
+      todoMode = false;
+    }
+
+    // Close the popover
+    cancelAnnotation();
+  }
+
+  function sendAllAnnotations() {
+    if (pendingAnnotations.length === 0) return;
+
+    const data = {
+      type: 'multi-edit',
+      url: window.location.href,
+      annotations: pendingAnnotations.map(function(ann) {
+        return {
+          selector: ann.selector,
+          tagName: ann.tagName,
+          text: ann.text,
+          attributes: ann.attributes,
+          bounds: ann.bounds,
+          note: ann.note,
+        };
+      }),
+    };
+
+    console.log('[ClaudeDesign] Sending multi-edit annotations, count:', pendingAnnotations.length);
+    window.__claudeDesignSendAnnotation(data);
+    clearPendingAnnotations();
+    todoMode = false;
+    cancelAnnotation();
+  }
+
+  // Reference image state
+  let referenceImageData = null;
+
+  // Create popover for element selection
+  function createPopover(el, textSelection) {
+    removePopover();
+    removeToolbar();
+    referenceImageData = null;
+
+    const rect = textSelection ? textSelection.rect : el.getBoundingClientRect();
+    const displaySelector = el ? generateDisplaySelector(el) : null;
 
     popoverElement = document.createElement('div');
     popoverElement.className = 'claude-design-popover';
@@ -181,7 +613,7 @@ export const annotationScript = `
     let top = rect.bottom + 10;
     let left = rect.left;
 
-    if (top + 250 > window.innerHeight) top = rect.top - 250;
+    if (top + 300 > window.innerHeight) top = rect.top - 300;
     if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
     if (left < 10) left = 10;
     if (top < 10) top = 10;
@@ -189,30 +621,223 @@ export const annotationScript = `
     popoverElement.style.top = top + 'px';
     popoverElement.style.left = left + 'px';
 
-    popoverElement.innerHTML =
-      '<div class="claude-design-popover-input-row">' +
-        '<textarea class="claude-design-popover-textarea" placeholder="What do you want to change?"></textarea>' +
-        '<button class="claude-design-popover-send" data-action="send">' +
-          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-            '<path d="M8 12V4M8 4L4 8M8 4L12 8"/>' +
+    // Build header based on selection type
+    let headerHTML = '';
+    if (textSelection) {
+      const truncatedText = textSelection.text.length > 60
+        ? textSelection.text.substring(0, 60) + '...'
+        : textSelection.text;
+      headerHTML = '<div class="claude-design-selected-text">' + escapeHtml(truncatedText) + '</div>';
+    } else if (el && pendingAnnotations.length > 0) {
+      // Show badge number when there are pending annotations
+      const existingIndex = pendingAnnotations.findIndex(function(a) { return a.element === el; });
+      const badgeNum = existingIndex !== -1 ? existingIndex + 1 : pendingAnnotations.length + 1;
+      headerHTML = '<span class="claude-design-popover-badge">' + badgeNum + '</span>';
+    }
+
+    const placeholder = textSelection ? 'Fix typo...' : 'What do you want to change?';
+
+    // Check if element already has a pending note
+    const existingAnnotation = el ? findPendingAnnotation(el) : null;
+    const existingNote = existingAnnotation ? existingAnnotation.note : '';
+
+    // In todo mode or with pending items: show plus button. Otherwise show send button.
+    const inListMode = todoMode || pendingAnnotations.length > 0;
+
+    const actionButton = inListMode
+      ? '<button class="claude-design-popover-add" data-action="save" title="Add to list (↵)">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M5 12h14"/><path d="M12 5v14"/>' +
           '</svg>' +
-        '</button>' +
-      '</div>';
+        '</button>'
+      : '<button class="claude-design-popover-send" data-action="send" title="Send (⌘↵)">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>' +
+          '</svg>' +
+        '</button>';
+
+    // Add another edit button - small circle with dotted border, only show when not in list mode yet
+    const addAnotherButton = !inListMode
+      ? '<button class="claude-design-popover-add-another" data-action="enter-list-mode" title="Add to list (⇧↵)">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M16 5H3"/><path d="M16 12H3"/><path d="M9 19H3"/>' +
+            '<path d="m16 16-3 3 3 3"/><path d="M21 5v12a2 2 0 0 1-2 2h-6"/>' +
+          '</svg>' +
+          'Add' +
+        '</button>'
+      : '';
+
+    // List is now shown in React panel, not in popover
+    let listHTML = '';
+
+    // If element already has annotation, just show the list (no input needed)
+    let inputAreaHTML = '';
+    if (existingAnnotation && !textSelection) {
+      // No input area - just show the list below
+      inputAreaHTML = '';
+    } else {
+      inputAreaHTML =
+        '<input type="file" class="claude-design-popover-file" accept="image/*" style="display: none;" />' +
+        '<div class="claude-design-popover-input-row">' +
+          headerHTML +
+          '<textarea class="claude-design-popover-textarea" placeholder="' + placeholder + '"></textarea>' +
+          '<div class="claude-design-popover-actions">' +
+            '<div class="claude-design-popover-actions-left">' +
+              '<button class="claude-design-popover-image-btn" data-action="browse" title="Add image (⌘I)">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                  '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>' +
+                  '<circle cx="9" cy="9" r="2"/>' +
+                  '<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>' +
+                '</svg>' +
+              '</button>' +
+              '<button class="claude-design-popover-image-pill" data-action="remove-image" title="Remove image">' +
+                'Image' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                  '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>' +
+                '</svg>' +
+              '</button>' +
+            '</div>' +
+            '<div class="claude-design-popover-actions-right">' +
+              addAnotherButton +
+              actionButton +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    popoverElement.innerHTML = inputAreaHTML + listHTML;
 
     document.body.appendChild(popoverElement);
 
     const textarea = popoverElement.querySelector('textarea');
+    const fileInput = popoverElement.querySelector('.claude-design-popover-file');
+    const imageBtn = popoverElement.querySelector('.claude-design-popover-image-btn');
+    const imagePill = popoverElement.querySelector('.claude-design-popover-image-pill');
+
     setTimeout(() => textarea && textarea.focus(), 50);
 
+    function handleFile(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        referenceImageData = e.target.result;
+        imageBtn.style.display = 'none';
+        imagePill.classList.add('active');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeImage() {
+      referenceImageData = null;
+      fileInput.value = '';
+      imageBtn.style.display = 'flex';
+      imagePill.classList.remove('active');
+    }
+
+    fileInput.addEventListener('change', function(e) {
+      if (e.target.files && e.target.files[0]) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    // Drag and drop on textarea
+    textarea.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      textarea.classList.add('dragover');
+    });
+
+    textarea.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      textarea.classList.remove('dragover');
+    });
+
+    textarea.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      textarea.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
     popoverElement.addEventListener('click', function(e) {
-      const action = e.target.dataset.action || (e.target.closest && e.target.closest('[data-action]') && e.target.closest('[data-action]').dataset.action);
+      const target = e.target.closest ? e.target.closest('[data-action]') : null;
+      const action = e.target.dataset && e.target.dataset.action ? e.target.dataset.action : (target && target.dataset.action);
+      if (action === 'save') saveCurrentAnnotation();
       if (action === 'send') sendAnnotation();
+      if (action === 'send-all') sendAllAnnotations();
+      if (action === 'enter-list-mode') {
+        todoMode = true;
+        // Save current note if there's text, then close popover to select another element
+        var ta = popoverElement && popoverElement.querySelector('textarea');
+        var currentNote = ta && ta.value.trim();
+        if (currentNote && selectedElement) {
+          savePendingAnnotation(selectedElement, currentNote);
+        }
+        // Close popover so user can select another element
+        cancelAnnotation();
+      }
+      if (action === 'browse') fileInput.click();
+      if (action === 'remove-image') {
+        removeImage();
+      }
+      if (action === 'remove-item') {
+        var idx = target && target.dataset.index ? parseInt(target.dataset.index, 10) : -1;
+        if (idx >= 0) removePendingAnnotation(idx);
+      }
     });
 
     textarea && textarea.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Cmd/Ctrl+Enter: Always send immediately (sends all if in list mode)
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        sendAnnotation();
+        if (todoMode || pendingAnnotations.length > 0) {
+          // Save current note first if there's text, then send all
+          var currentNote = textarea.value.trim();
+          if (currentNote && selectedElement) {
+            savePendingAnnotation(selectedElement, currentNote);
+          }
+          sendAllAnnotations();
+        } else {
+          sendAnnotation();
+        }
+        return;
+      }
+      // Shift+Enter: Add to list (enter list mode and save)
+      if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        var note = textarea.value.trim();
+        if (!note) {
+          textarea.focus();
+          return;
+        }
+        if (!todoMode && pendingAnnotations.length === 0) {
+          todoMode = true;
+        }
+        if (selectedElement) {
+          savePendingAnnotation(selectedElement, note);
+        }
+        cancelAnnotation();
+        return;
+      }
+      // Enter: Send if not in list mode, add to list if in list mode
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (todoMode || pendingAnnotations.length > 0) {
+          saveCurrentAnnotation();
+        } else {
+          sendAnnotation();
+        }
+      }
+      // Cmd/Ctrl+I: Open image picker
+      if (e.key === 'i' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        var fileInput = popoverElement && popoverElement.querySelector('.claude-design-popover-file');
+        if (fileInput) fileInput.click();
+        return;
       }
       if (e.key === 'Escape') cancelAnnotation();
     });
@@ -227,14 +852,51 @@ export const annotationScript = `
 
   function cancelAnnotation() {
     removePopover();
+    referenceImageData = null;
+
+    // Clear element selection highlight (but keep pending annotations)
     if (selectedElement) {
-      selectedElement.classList.remove('claude-design-selected');
+      // Only remove selected class if not in pending annotations
+      if (!findPendingAnnotation(selectedElement)) {
+        selectedElement.classList.remove('claude-design-selected');
+      }
       selectedElement = null;
+    }
+
+    // Clear text selection
+    selectedText = null;
+    selectedTextRange = null;
+    const selection = window.getSelection();
+    if (selection) selection.removeAllRanges();
+  }
+
+  // Save annotation locally (for multi-edit mode)
+  function saveCurrentAnnotation() {
+    if (!popoverElement) return;
+
+    const textarea = popoverElement.querySelector('textarea');
+    const note = textarea && textarea.value.trim();
+
+    if (!note) {
+      textarea && textarea.focus();
+      return;
+    }
+
+    // Handle text selection - still sends immediately
+    if (selectedText && selectedTextRange) {
+      sendAnnotation();
+      return;
+    }
+
+    // For element selection - save locally and close popover to select another element
+    if (selectedElement) {
+      savePendingAnnotation(selectedElement, note);
+      cancelAnnotation();
     }
   }
 
   function sendAnnotation() {
-    if (!selectedElement || !popoverElement) return;
+    if (!popoverElement) return;
 
     const textarea = popoverElement.querySelector('textarea');
     const request = textarea && textarea.value.trim();
@@ -243,6 +905,45 @@ export const annotationScript = `
       textarea && textarea.focus();
       return;
     }
+
+    // Handle text selection annotation
+    if (selectedText && selectedTextRange) {
+      const range = selectedTextRange;
+      const rect = range.getBoundingClientRect();
+      const padding = 10;
+      const bounds = {
+        x: Math.max(0, Math.floor(rect.left - padding)),
+        y: Math.max(0, Math.floor(rect.top - padding)),
+        width: Math.ceil(rect.width + padding * 2),
+        height: Math.ceil(rect.height + padding * 2),
+      };
+
+      // Find the containing element for context
+      const container = range.commonAncestorContainer;
+      const contextEl = container.nodeType === 3 ? container.parentElement : container;
+
+      const data = {
+        url: window.location.href,
+        element: {
+          tagName: 'text-selection',
+          text: selectedText,
+          attributes: '',
+          selector: contextEl ? generateSelector(contextEl) : '',
+        },
+        selectedText: selectedText,
+        bounds: bounds,
+        referenceImage: referenceImageData,
+        request: request,
+      };
+
+      console.log('[ClaudeDesign] Sending text annotation:', selectedText.substring(0, 30));
+      window.__claudeDesignSendAnnotation(data);
+      cancelAnnotation();
+      return;
+    }
+
+    // Handle single element annotation (only used for text selection fallback now)
+    if (!selectedElement) return;
 
     // Get searchable text content
     const textContent = (selectedElement.textContent || '').trim().substring(0, 50);
@@ -275,8 +976,11 @@ export const annotationScript = `
         selector: generateSelector(selectedElement),
       },
       bounds: bounds,
+      referenceImage: referenceImageData,
       request: request,
     };
+
+    console.log('[ClaudeDesign] Sending annotation, has referenceImage:', !!referenceImageData);
 
     // Post message to parent
     window.__claudeDesignSendAnnotation(data);
@@ -289,7 +993,8 @@ export const annotationScript = `
 
     const target = e.target;
     if (target === document.body || target === document.documentElement ||
-        target.closest && target.closest('.claude-design-popover')) return;
+        (target.closest && target.closest('.claude-design-popover')) ||
+        (target.closest && target.closest('.claude-design-toolbar'))) return;
 
     if (highlightedElement && highlightedElement !== target) {
       highlightedElement.classList.remove('claude-design-highlight');
@@ -308,27 +1013,74 @@ export const annotationScript = `
     }
   }
 
+  // Handle text selection (mouseup)
+  function handleMouseUp(e) {
+    if (!annotateMode) return;
+    if (e.target.closest && e.target.closest('.claude-design-popover')) return;
+    if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
+
+    const selection = window.getSelection();
+    const text = selection && selection.toString().trim();
+
+    if (text && text.length > 0) {
+      // Text was selected - create text annotation
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Clear any element selections
+      if (selectedElement) {
+        selectedElement.classList.remove('claude-design-selected');
+        selectedElement = null;
+      }
+      if (highlightedElement) {
+        highlightedElement.classList.remove('claude-design-highlight');
+        highlightedElement = null;
+      }
+
+      selectedText = text;
+      selectedTextRange = selection.getRangeAt(0).cloneRange();
+      const rect = selectedTextRange.getBoundingClientRect();
+
+      createPopover(null, { text: text, rect: rect, range: selectedTextRange });
+    }
+  }
+
   function handleClick(e) {
     if (!annotateMode) return;
     if (e.target.closest && e.target.closest('.claude-design-popover')) return;
+    if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
+
+    // Check for text selection first - don't intercept if selecting text
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      return; // Let mouseup handle text selection
+    }
 
     e.preventDefault();
     e.stopPropagation();
 
     // If popover is open, clicking outside cancels it
-    if (selectedElement && popoverElement) {
+    if ((selectedElement || selectedText) && popoverElement) {
       cancelAnnotation();
       return;
     }
 
-    if (selectedElement) selectedElement.classList.remove('claude-design-selected');
-    if (highlightedElement) highlightedElement.classList.remove('claude-design-highlight');
+    // Clear highlight
+    if (highlightedElement) {
+      highlightedElement.classList.remove('claude-design-highlight');
+      highlightedElement = null;
+    }
 
+    // Clear previous selected element highlight (if not in pending)
+    if (selectedElement && !findPendingAnnotation(selectedElement)) {
+      selectedElement.classList.remove('claude-design-selected');
+    }
+
+    // Set new selected element and show popover
     selectedElement = e.target;
     selectedElement.classList.add('claude-design-selected');
-    highlightedElement = null;
 
-    createPopover(e.target);
+    createPopover(e.target, null);
   }
 
   function handleKeyDown(e) {
@@ -350,23 +1102,29 @@ export const annotationScript = `
     document.addEventListener('mouseover', handleMouseOver, true);
     document.addEventListener('mouseout', handleMouseOut, true);
     document.addEventListener('click', handleClick, true);
+    document.addEventListener('mouseup', handleMouseUp, true);
     document.addEventListener('keydown', handleKeyDown, true);
   }
 
   function disableAnnotateMode() {
     if (!annotateMode) return;
     annotateMode = false;
+    todoMode = false;
     document.body.classList.remove('claude-design-crosshair');
 
     document.removeEventListener('mouseover', handleMouseOver, true);
     document.removeEventListener('mouseout', handleMouseOut, true);
     document.removeEventListener('click', handleClick, true);
+    document.removeEventListener('mouseup', handleMouseUp, true);
     document.removeEventListener('keydown', handleKeyDown, true);
 
     if (highlightedElement) {
       highlightedElement.classList.remove('claude-design-highlight');
       highlightedElement = null;
     }
+
+    // Clear pending annotations
+    clearPendingAnnotations();
 
     cancelAnnotation();
   }
@@ -375,5 +1133,7 @@ export const annotationScript = `
   window.__claudeDesignEnable = enableAnnotateMode;
   window.__claudeDesignDisable = disableAnnotateMode;
   window.__claudeDesignIsEnabled = function() { return annotateMode; };
+  window.__claudeDesignSendAll = sendAllAnnotations;
+  window.__claudeDesignRemoveItem = removePendingAnnotation;
 })();
 `;

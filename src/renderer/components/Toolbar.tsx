@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import type { ViewportType, ViewportSizes } from './Browser';
 
 interface ToolbarProps {
   url: string;
@@ -12,6 +13,10 @@ interface ToolbarProps {
   onForward: () => void;
   onReload: () => void;
   onToggleAnnotate: () => void;
+  viewport: ViewportType | null;
+  viewportSizes: ViewportSizes;
+  onViewportChange: (viewport: ViewportType | null) => void;
+  onViewportSizeChange: (sizes: ViewportSizes) => void;
 }
 
 export default function Toolbar({
@@ -26,7 +31,13 @@ export default function Toolbar({
   onForward,
   onReload,
   onToggleAnnotate,
+  viewport,
+  viewportSizes,
+  onViewportChange,
+  onViewportSizeChange,
 }: ToolbarProps) {
+  const [editingViewport, setEditingViewport] = useState<ViewportType | null>(null);
+  const [editValue, setEditValue] = useState('');
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -116,10 +127,86 @@ export default function Toolbar({
         />
       </form>
 
+      <div className="toolbar-viewport">
+        <button
+          className={`toolbar-btn toolbar-viewport-btn ${viewport === 'mobile' ? 'active' : ''}`}
+          onClick={() => onViewportChange(viewport === 'mobile' ? null : 'mobile')}
+          onDoubleClick={() => {
+            setEditingViewport('mobile');
+            setEditValue(String(viewportSizes.mobile));
+          }}
+          title={`Mobile (${viewportSizes.mobile}px) - Double-click to edit`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect width="14" height="20" x="5" y="2" rx="2" ry="2"/>
+            <path d="M12 18h.01"/>
+          </svg>
+        </button>
+        <button
+          className={`toolbar-btn toolbar-viewport-btn ${viewport === 'tablet' ? 'active' : ''}`}
+          onClick={() => onViewportChange(viewport === 'tablet' ? null : 'tablet')}
+          onDoubleClick={() => {
+            setEditingViewport('tablet');
+            setEditValue(String(viewportSizes.tablet));
+          }}
+          title={`Tablet (${viewportSizes.tablet}px) - Double-click to edit`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect width="16" height="20" x="4" y="2" rx="2" ry="2"/>
+            <line x1="12" x2="12.01" y1="18" y2="18"/>
+          </svg>
+        </button>
+        <button
+          className={`toolbar-btn toolbar-viewport-btn ${viewport === 'desktop' ? 'active' : ''}`}
+          onClick={() => onViewportChange(viewport === 'desktop' ? null : 'desktop')}
+          onDoubleClick={() => {
+            setEditingViewport('desktop');
+            setEditValue(String(viewportSizes.desktop));
+          }}
+          title={`Desktop (${viewportSizes.desktop}px) - Double-click to edit`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect width="20" height="14" x="2" y="3" rx="2"/>
+            <line x1="8" x2="16" y1="21" y2="21"/>
+            <line x1="12" x2="12" y1="17" y2="21"/>
+          </svg>
+        </button>
+        {editingViewport && (
+          <div className="viewport-edit-popup">
+            <input
+              type="number"
+              className="viewport-edit-input"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const newValue = parseInt(editValue, 10);
+                  if (newValue > 0) {
+                    onViewportSizeChange({ ...viewportSizes, [editingViewport]: newValue });
+                  }
+                  setEditingViewport(null);
+                } else if (e.key === 'Escape') {
+                  setEditingViewport(null);
+                }
+              }}
+              onBlur={() => {
+                const newValue = parseInt(editValue, 10);
+                if (newValue > 0) {
+                  onViewportSizeChange({ ...viewportSizes, [editingViewport]: newValue });
+                }
+                setEditingViewport(null);
+              }}
+              autoFocus
+            />
+            <span className="viewport-edit-unit">px</span>
+          </div>
+        )}
+      </div>
+
       <button
         className={`toolbar-btn toolbar-annotate-btn ${annotateMode ? 'active' : ''}`}
         onClick={onToggleAnnotate}
-        title={annotateMode ? 'Exit Annotate Mode (Esc)' : 'Enter Annotate Mode'}
+        title={annotateMode ? 'Exit Edit Mode (Esc)' : 'Enter Edit Mode'}
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <circle
@@ -139,6 +226,7 @@ export default function Toolbar({
         </svg>
         <span>{annotateMode ? 'Editing' : 'Edit'}</span>
       </button>
+
     </div>
   );
 }

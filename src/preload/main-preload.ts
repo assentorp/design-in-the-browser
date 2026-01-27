@@ -4,24 +4,32 @@ import type { AnnotationData, MainAPI } from '../shared/types';
 console.log('[Preload] Script starting...');
 
 const mainAPI: MainAPI = {
-  sendTerminalInput: (data: string) => {
-    ipcRenderer.send('terminal:input', data);
+  createTerminal: (sessionId: string, cwd?: string) => {
+    ipcRenderer.send('terminal:create', { sessionId, cwd });
   },
 
-  resizeTerminal: (cols: number, rows: number) => {
-    ipcRenderer.send('terminal:resize', { cols, rows });
+  destroyTerminal: (sessionId: string) => {
+    ipcRenderer.send('terminal:destroy', { sessionId });
   },
 
-  terminalReady: () => {
-    ipcRenderer.send('terminal:ready');
+  sendTerminalInput: (sessionId: string, data: string) => {
+    ipcRenderer.send('terminal:input', { sessionId, data });
+  },
+
+  resizeTerminal: (sessionId: string, cols: number, rows: number) => {
+    ipcRenderer.send('terminal:resize', { sessionId, cols, rows });
+  },
+
+  terminalReady: (sessionId: string) => {
+    ipcRenderer.send('terminal:ready', { sessionId });
   },
 
   sendAnnotation: (data: AnnotationData) => {
     ipcRenderer.send('annotation:send', data);
   },
 
-  onTerminalData: (callback: (data: string) => void) => {
-    ipcRenderer.on('terminal:data', (_, data) => callback(data));
+  onTerminalData: (callback: (sessionId: string, data: string) => void) => {
+    ipcRenderer.on('terminal:data', (_, { sessionId, data }) => callback(sessionId, data));
   },
 
   toggleAnnotateMode: () => {
@@ -30,6 +38,18 @@ const mainAPI: MainAPI = {
 
   onAnnotateModeChanged: (callback: (enabled: boolean) => void) => {
     ipcRenderer.on('toggle-annotate', (_, enabled) => callback(enabled));
+  },
+
+  showOpenDialog: async () => {
+    return ipcRenderer.invoke('dialog:showOpenDialog');
+  },
+
+  runCommand: (sessionId: string, command: string) => {
+    ipcRenderer.send('terminal:run-command', { sessionId, command });
+  },
+
+  onUpdateAvailable: (callback: (info: { version: string; url: string }) => void) => {
+    ipcRenderer.on('app:update-available', (_, info) => callback(info));
   },
 };
 

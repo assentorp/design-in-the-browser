@@ -1,7 +1,21 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session, nativeImage } from 'electron';
 import * as path from 'path';
 import { setupIPC } from './ipc';
 import { createMenu } from './menu';
+import { checkForUpdates } from './updater';
+
+// Set dock icon on macOS
+if (process.platform === 'darwin') {
+  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
+  try {
+    const icon = nativeImage.createFromPath(iconPath);
+    if (!icon.isEmpty()) {
+      app.dock.setIcon(icon);
+    }
+  } catch (e) {
+    // Icon not found, use default
+  }
+}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -14,14 +28,25 @@ if (isDev) {
 
 function createWindow() {
   const preloadPath = path.join(__dirname, '..', 'preload', 'main-preload.js');
+  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
   console.log('[Main] Preload path:', preloadPath);
+
+  // Create icon for window
+  let icon;
+  try {
+    icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) icon = undefined;
+  } catch (e) {
+    icon = undefined;
+  }
 
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
     minWidth: 1000,
     minHeight: 600,
-    title: 'Claude Design',
+    title: 'Design In The Browser',
+    icon,
     backgroundColor: '#1a1a1a',
     webPreferences: {
       nodeIntegration: false,
@@ -44,7 +69,6 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   }
@@ -55,6 +79,7 @@ function createWindow() {
 
   setupIPC(mainWindow);
   createMenu(mainWindow);
+  checkForUpdates(mainWindow);
 }
 
 app.whenReady().then(createWindow);

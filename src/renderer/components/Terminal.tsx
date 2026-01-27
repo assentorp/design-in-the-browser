@@ -1,20 +1,60 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import type { TerminalTab } from '../../shared/types';
 
-// Check if running in Electron (must be called at runtime, not module load time)
-const getMainAPI = () => typeof window !== 'undefined' ? window.mainAPI : undefined;
+const getMainAPI = () => (typeof window !== 'undefined' ? window.mainAPI : undefined);
 
-export default function Terminal() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<XTerm | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+interface TerminalInstance {
+  terminal: XTerm;
+  fitAddon: FitAddon;
+  containerEl: HTMLDivElement;
+}
 
+// Global state for terminal instances (keyed by tab ID)
+const terminalInstances = new Map<string, TerminalInstance>();
+const createdTabs = new Set<string>();
+let dataListenerSetup = false;
+
+interface TerminalProps {
+  sessionId: string;
+  collapsed?: boolean;
+  tabs: TerminalTab[];
+  activeTabId: string;
+  tabCounter: number;
+  onTabsChange: (tabs: TerminalTab[], activeTabId: string, tabCounter: number) => void;
+  children?: React.ReactNode;
+  projectPath?: string;
+}
+
+export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath }: TerminalProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const projectPathRef = useRef(projectPath);
+  projectPathRef.current = projectPath;
+
+  // Set up global data listener once
   useEffect(() => {
-    if (!containerRef.current || terminalRef.current) return;
+    if (dataListenerSetup) return;
+    dataListenerSetup = true;
 
-    // Create terminal
+    const mainAPI = getMainAPI();
+    if (!mainAPI) return;
+
+    mainAPI.onTerminalData((tabId: string, data: string) => {
+      const instance = terminalInstances.get(tabId);
+      if (instance) {
+        instance.terminal.write(data);
+      }
+    });
+  }, []);
+
+  // Create terminal for a tab
+  const createTerminalForTab = useCallback((tabId: string) => {
+    if (terminalInstances.has(tabId)) return;
+
+    const mainAPI = getMainAPI();
+
     const terminal = new XTerm({
       cursorBlink: true,
       fontSize: 13,
@@ -49,99 +89,224 @@ export default function Terminal() {
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
 
-    terminal.open(containerRef.current);
+    const containerEl = document.createElement('div');
+    containerEl.className = 'terminal-tab-content';
+    containerEl.style.cssText = 'width: 100%; height: 100%; display: none;';
 
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
+    terminalInstances.set(tabId, { terminal, fitAddon, containerEl });
+    terminal.open(containerEl);
 
-    // Safe fit function that checks dimensions
-    const safeFit = () => {
-      try {
-        const container = containerRef.current;
-        if (!container || !fitAddonRef.current || !terminalRef.current) return;
+    if (mainAPI && !createdTabs.has(tabId)) {
+      createdTabs.add(tabId);
+      mainAPI.createTerminal(tabId, projectPathRef.current);
 
-        // Only fit if container has dimensions
-        if (container.offsetWidth > 0 && container.offsetHeight > 0) {
-          fitAddonRef.current.fit();
-          return true;
-        }
-        return false;
-      } catch {
-        // Ignore fit errors
-        return false;
-      }
-    };
-
-    const mainAPI = getMainAPI();
-    console.log('[Terminal] mainAPI available:', !!mainAPI);
-
-    // Delay initial fit to ensure container has dimensions
-    const initTimeout = setTimeout(() => {
-      console.log('[Terminal] Fitting terminal...');
-      if (safeFit() && mainAPI && terminalRef.current) {
-        console.log('[Terminal] Resizing:', terminalRef.current.cols, terminalRef.current.rows);
-        mainAPI.resizeTerminal(terminalRef.current.cols, terminalRef.current.rows);
-      }
-    }, 50);
-
-    if (mainAPI) {
-      console.log('[Terminal] Setting up IPC handlers');
-      // Handle user input
       terminal.onData((data) => {
-        console.log('[Terminal] Sending input:', data.length, 'chars');
-        mainAPI.sendTerminalInput(data);
+        mainAPI.sendTerminalInput(tabId, data);
       });
-
-      // Handle output from main process
-      mainAPI.onTerminalData((data) => {
-        console.log('[Terminal] Received data:', data.length, 'chars');
-        terminal.write(data);
-      });
-
-      // Signal that terminal is ready to receive data
-      console.log('[Terminal] Signaling ready');
-      mainAPI.terminalReady();
-    } else {
-      console.log('[Terminal] No mainAPI - running in demo mode');
-      // Demo mode for browser testing
-      terminal.writeln('\x1b[1;35m  Claude Design \x1b[0m');
+    } else if (!mainAPI) {
+      terminal.writeln('\x1b[1;35m  Claude Code \x1b[0m');
       terminal.writeln('');
       terminal.writeln('\x1b[33mRunning in browser preview mode.\x1b[0m');
-      terminal.writeln('Run with Electron to connect to Claude Code.');
       terminal.writeln('');
       terminal.write('\x1b[32m$ \x1b[0m');
     }
+  }, []);
+
+  // Create new tab
+  const createNewTab = useCallback(() => {
+    const newCounter = tabCounter + 1;
+    const newTabId = `${sessionId}-${newCounter}`;
+    const newTab: TerminalTab = {
+      id: newTabId,
+      name: `Terminal ${newCounter}`,
+    };
+    onTabsChange([...tabs, newTab], newTabId, newCounter);
+  }, [sessionId, tabs, tabCounter, onTabsChange]);
+
+  // Close tab
+  const closeTab = useCallback((tabId: string) => {
+    const mainAPI = getMainAPI();
+    const instance = terminalInstances.get(tabId);
+
+    if (instance) {
+      instance.terminal.dispose();
+      instance.containerEl.remove();
+      terminalInstances.delete(tabId);
+    }
+
+    if (mainAPI) {
+      mainAPI.destroyTerminal(tabId);
+    }
+    createdTabs.delete(tabId);
+
+    const filtered = tabs.filter(t => t.id !== tabId);
+    if (filtered.length === 0) {
+      // Create a new tab if all are closed
+      const newCounter = tabCounter + 1;
+      const newTabId = `${sessionId}-${newCounter}`;
+      onTabsChange([{ id: newTabId, name: `Terminal ${newCounter}` }], newTabId, newCounter);
+    } else {
+      // Switch to another tab if closing active
+      let newActiveId = activeTabId;
+      if (tabId === activeTabId) {
+        const index = tabs.findIndex(t => t.id === tabId);
+        const newActiveIndex = Math.max(0, index - 1);
+        newActiveId = filtered[newActiveIndex]?.id || filtered[0].id;
+      }
+      onTabsChange(filtered, newActiveId, tabCounter);
+    }
+  }, [tabs, activeTabId, sessionId, tabCounter, onTabsChange]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+T or Ctrl+T: New tab
+      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+        e.preventDefault();
+        createNewTab();
+      }
+      // Cmd+W or Ctrl+W: Close tab
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        closeTab(activeTabId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [createNewTab, closeTab, activeTabId]);
+
+  // Create and manage terminal instances for tabs
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+
+    const mainAPI = getMainAPI();
+
+    // Create terminals for all tabs (not just active) so background tabs work
+    for (const tab of tabs) {
+      createTerminalForTab(tab.id);
+    }
+
+    const instance = terminalInstances.get(activeTabId);
+    if (!instance) return;
+
+    // Ensure all terminal containers are in the wrapper
+    for (const [id, inst] of terminalInstances) {
+      if (!wrapperRef.current.contains(inst.containerEl)) {
+        wrapperRef.current.appendChild(inst.containerEl);
+      }
+      inst.containerEl.style.display = id === activeTabId ? 'block' : 'none';
+    }
+
+    // Fit and signal ready
+    const initTimeout = setTimeout(() => {
+      try {
+        if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
+          instance.fitAddon.fit();
+          if (mainAPI) {
+            mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
+            mainAPI.terminalReady(activeTabId);
+          }
+        }
+      } catch {
+        // Ignore fit errors
+      }
+    }, 50);
 
     // Handle resize
     const handleResize = () => {
-      if (safeFit() && mainAPI && terminalRef.current) {
-        mainAPI.resizeTerminal(
-          terminalRef.current.cols,
-          terminalRef.current.rows
-        );
+      try {
+        if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
+          instance.fitAddon.fit();
+          if (mainAPI) {
+            mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
+          }
+        }
+      } catch {
+        // Ignore fit errors
       }
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(containerRef.current);
+    resizeObserver.observe(wrapperRef.current);
     window.addEventListener('resize', handleResize);
 
     return () => {
       clearTimeout(initTimeout);
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
-      terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
     };
-  }, []);
+  }, [activeTabId, tabs, createTerminalForTab]);
+
+  // Focus terminal when tab changes
+  useEffect(() => {
+    const instance = terminalInstances.get(activeTabId);
+    if (instance) {
+      setTimeout(() => instance.terminal.focus(), 100);
+    }
+  }, [activeTabId]);
 
   return (
     <div className="terminal-container">
-      <div className="terminal-header">
-        <span className="terminal-title">Claude Code</span>
+      {children && (
+        <div className="todo-section">
+          <div className="todo-header">Todo</div>
+          {children}
+        </div>
+      )}
+      <div className="terminal-tabs-bar">
+        <div className="terminal-tabs">
+          {tabs.map(tab => (
+            <div
+              key={tab.id}
+              className={`terminal-tab ${tab.id === activeTabId ? 'active' : ''}`}
+              onClick={() => onTabsChange(tabs, tab.id, tabCounter)}
+            >
+              <span className="terminal-tab-name">{tab.name}</span>
+              {tabs.length > 1 && (
+                <button
+                  className="terminal-tab-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              )}
+            </div>
+          ))}
+          <button className="terminal-new-tab" onClick={createNewTab} title="New tab (⌘T)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
       </div>
-      <div ref={containerRef} className="terminal-content" />
+      <div ref={wrapperRef} className="terminal-content" />
     </div>
   );
+}
+
+// Cleanup function for when sessions are closed
+export function destroyTerminalSession(sessionId: string) {
+  const mainAPI = getMainAPI();
+
+  // Destroy all tabs for this session
+  for (const [tabId, instance] of terminalInstances) {
+    if (tabId.startsWith(sessionId)) {
+      instance.terminal.dispose();
+      instance.containerEl.remove();
+      terminalInstances.delete(tabId);
+
+      if (mainAPI) {
+        mainAPI.destroyTerminal(tabId);
+      }
+      createdTabs.delete(tabId);
+    }
+  }
 }

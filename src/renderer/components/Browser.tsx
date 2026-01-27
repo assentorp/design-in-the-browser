@@ -1,24 +1,54 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Toolbar from './Toolbar';
-import type { AnnotationData } from '../../shared/types';
+import type { AnnotationData, MultiEditData } from '../../shared/types';
 import { annotationScript } from '../../annotation/injected-script';
 
 // Check if running in Electron (must be called at runtime)
 const getMainAPI = () => typeof window !== 'undefined' ? window.mainAPI : undefined;
 
-interface BrowserProps {
-  annotateMode: boolean;
-  onAnnotateModeChange: (enabled: boolean) => void;
+export interface PendingEdit {
+  note: string;
+  selector: string;
 }
 
-export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserProps) {
-  const [url, setUrl] = useState('http://transloadit.dev:3001');
-  const [inputUrl, setInputUrl] = useState('http://transloadit.dev:3001');
+export interface EditActions {
+  sendAll: () => void;
+  removeItem: (index: number) => void;
+}
+
+interface BrowserProps {
+  sessionId: string;
+  url: string;
+  onUrlChange: (url: string) => void;
+  annotateMode: boolean;
+  onAnnotateModeChange: (enabled: boolean) => void;
+  onPendingEditsChange: (edits: PendingEdit[], actions: EditActions) => void;
+  activeTerminalTabId: string;
+}
+
+export type ViewportType = 'desktop' | 'tablet' | 'mobile';
+
+export interface ViewportSizes {
+  desktop: number;
+  tablet: number;
+  mobile: number;
+}
+
+const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
+  desktop: 1280,
+  tablet: 768,
+  mobile: 375,
+};
+
+export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId }: BrowserProps) {
+  const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [hasMainAPI, setHasMainAPI] = useState(() => !!getMainAPI());
+  const [viewport, setViewport] = useState<ViewportType | null>(null);
+  const [viewportSizes, setViewportSizes] = useState<ViewportSizes>(DEFAULT_VIEWPORT_SIZES);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const injectedRef = useRef(false);
 
@@ -73,6 +103,26 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
     }
   }, []);
 
+  const sendAllEdits = useCallback(async () => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+    try {
+      await webview.executeJavaScript('window.__claudeDesignSendAll && window.__claudeDesignSendAll(); true;');
+    } catch (err) {
+      console.error('Send all edits error:', err);
+    }
+  }, []);
+
+  const removeEditItem = useCallback(async (index: number) => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+    try {
+      await webview.executeJavaScript(`window.__claudeDesignRemoveItem && window.__claudeDesignRemoveItem(${index}); true;`);
+    } catch (err) {
+      console.error('Remove edit item error:', err);
+    }
+  }, []);
+
   // Load initial URL after webview is mounted in DOM
   useEffect(() => {
     const webview = webviewRef.current;
@@ -95,7 +145,7 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
     if (!webview) return;
 
     const handleDidNavigate = () => {
-      setUrl(webview.getURL());
+      onUrlChange(webview.getURL());
       setInputUrl(webview.getURL());
       setCanGoBack(webview.canGoBack());
       setCanGoForward(webview.canGoForward());
@@ -144,7 +194,7 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
       webview.removeEventListener('dom-ready', handleDomReady);
       webview.removeEventListener('did-fail-load', handleDidFailLoad);
     };
-  }, [injectAndSetup]);
+  }, [injectAndSetup, onUrlChange]);
 
   // Poll for messages from the injected script
   useEffect(() => {
@@ -162,7 +212,7 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
             window.__claudeDesignMessages = [];
 
             window.addEventListener('message', function(e) {
-              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change')) {
+              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update')) {
                 window.__claudeDesignMessages.push(e.data);
               }
             });
@@ -193,25 +243,60 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
             for (const msg of messages) {
               if (msg.type === 'claude-design-annotation') {
                 const mainAPI = getMainAPI();
-                const data = msg.data as AnnotationData;
+                const data = msg.data as AnnotationData | MultiEditData;
 
-                // Capture screenshot of the element
-                if (data.bounds && webview) {
-                  try {
-                    const image = await webview.capturePage(data.bounds);
-                    data.screenshot = image.toDataURL();
-                  } catch (err) {
-                    console.error('Screenshot capture failed:', err);
+                // Handle multi-edit annotations
+                if ('annotations' in data && Array.isArray(data.annotations)) {
+                  const multiData = data as MultiEditData;
+                  console.log('[Browser] Multi-edit received, count:', multiData.annotations.length);
+                  multiData.sessionId = sessionId;
+                  multiData.terminalTabId = activeTerminalTabId;
+
+                  // Capture screenshot for each annotation
+                  for (const annotation of multiData.annotations) {
+                    if (annotation.bounds && webview) {
+                      try {
+                        const image = await webview.capturePage(annotation.bounds);
+                        annotation.screenshot = image.toDataURL();
+                      } catch (err) {
+                        console.error('Screenshot capture failed for annotation:', err);
+                      }
+                    }
                   }
-                }
 
-                if (mainAPI) {
-                  mainAPI.sendAnnotation(data);
+                  if (mainAPI) {
+                    // Send as multi-edit data
+                    mainAPI.sendAnnotation(multiData as unknown as AnnotationData);
+                  } else {
+                    console.log('Multi-edit data:', multiData);
+                  }
                 } else {
-                  console.log('Annotation data:', data);
+                  // Handle single annotation
+                  const singleData = data as AnnotationData;
+                  console.log('[Browser] Annotation received, has referenceImage:', !!singleData.referenceImage);
+                  singleData.sessionId = sessionId;
+                  singleData.terminalTabId = activeTerminalTabId;
+
+                  // Capture screenshot of the element
+                  if (singleData.bounds && webview) {
+                    try {
+                      const image = await webview.capturePage(singleData.bounds);
+                      singleData.screenshot = image.toDataURL();
+                    } catch (err) {
+                      console.error('Screenshot capture failed:', err);
+                    }
+                  }
+
+                  if (mainAPI) {
+                    mainAPI.sendAnnotation(singleData);
+                  } else {
+                    console.log('Annotation data:', singleData);
+                  }
                 }
               } else if (msg.type === 'claude-design-mode-change') {
                 onAnnotateModeChange(msg.enabled);
+              } else if (msg.type === 'claude-design-pending-update') {
+                onPendingEditsChange(msg.items || [], { sendAll: sendAllEdits, removeItem: removeEditItem });
               }
             }
           }
@@ -222,7 +307,7 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
     }, 100);
 
     return () => clearInterval(pollInterval);
-  }, [isReady, onAnnotateModeChange]);
+  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem]);
 
   // Toggle annotate mode in webview
   useEffect(() => {
@@ -249,18 +334,21 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
     toggle();
   }, [annotateMode, isReady]);
 
+  
   const navigate = useCallback((targetUrl: string) => {
     const webview = webviewRef.current;
     if (!webview) return;
 
     let finalUrl = targetUrl;
     if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-      finalUrl = 'https://' + targetUrl;
+      // Use http:// for localhost/127.0.0.1, https:// for everything else
+      const isLocal = targetUrl.startsWith('localhost') || targetUrl.startsWith('127.0.0.1');
+      finalUrl = (isLocal ? 'http://' : 'https://') + targetUrl;
     }
 
     webview.src = finalUrl;
-    setUrl(finalUrl);
-  }, []);
+    onUrlChange(finalUrl);
+  }, [onUrlChange]);
 
   const handleUrlSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -286,6 +374,8 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
     onAnnotateModeChange(!annotateMode);
   }, [annotateMode, onAnnotateModeChange]);
 
+  const currentWidth = viewport ? viewportSizes[viewport] : null;
+
   return (
     <div className="browser">
       <Toolbar
@@ -300,14 +390,26 @@ export default function Browser({ annotateMode, onAnnotateModeChange }: BrowserP
         onForward={goForward}
         onReload={reload}
         onToggleAnnotate={toggleAnnotate}
+        viewport={viewport}
+        viewportSizes={viewportSizes}
+        onViewportChange={setViewport}
+        onViewportSizeChange={setViewportSizes}
       />
-      <div className="browser-content">
+      <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
         {hasMainAPI ? (
-          <webview
-            ref={webviewRef}
-            className="webview"
-            allowpopups="true"
-          />
+          <div
+            className="webview-container"
+            style={currentWidth ? {
+              width: currentWidth,
+              maxWidth: '100%',
+            } : undefined}
+          >
+            <webview
+              ref={webviewRef}
+              className="webview"
+              allowpopups={true}
+            />
+          </div>
         ) : (
           <div className="browser-placeholder">
             <div className="browser-placeholder-content">

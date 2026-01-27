@@ -5,3 +5,21 @@ release/
 *.log
 .env
 .env.local
+.env.*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Electron
+out/
+
+# Package manager
+yarn.lock
+pnpm-lock.yaml
