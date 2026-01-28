@@ -4,6 +4,11 @@ import { setupIPC } from './ipc';
 import { createMenu } from './menu';
 import { checkForUpdates } from './updater';
 
+// Disable hardware acceleration on Windows to prevent gray screen issues
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration();
+}
+
 // Set dock icon on macOS
 if (process.platform === 'darwin') {
   const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
@@ -19,20 +24,33 @@ if (process.platform === 'darwin') {
 
 let mainWindow: BrowserWindow | null = null;
 
-const isDev = process.env.NODE_ENV !== 'production' || !app.isPackaged;
+const isDev = !app.isPackaged;
 
 // Suppress security warnings in dev mode (they're expected for webview usage)
 if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
+// Get the correct base path for resources
+function getResourcePath(...segments: string[]): string {
+  if (isDev) {
+    // In dev, use __dirname which points to dist/main
+    return path.join(__dirname, '..', ...segments);
+  } else {
+    // In production, use app.getAppPath() which points to the asar/app directory
+    return path.join(app.getAppPath(), 'dist', ...segments);
+  }
+}
+
 function createWindow() {
-  const preloadPath = path.join(__dirname, '..', 'preload', 'main-preload.js');
-  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
+  const preloadPath = getResourcePath('preload', 'main-preload.js');
+  console.log('[Main] isDev:', isDev);
+  console.log('[Main] App path:', app.getAppPath());
   console.log('[Main] Preload path:', preloadPath);
 
   // Create icon for window
   let icon;
+  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
   try {
     icon = nativeImage.createFromPath(iconPath);
     if (icon.isEmpty()) icon = undefined;
@@ -67,10 +85,21 @@ function createWindow() {
     });
   });
 
+  // Log load failures for debugging
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('[Main] Failed to load:', errorCode, errorDescription, validatedURL);
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[Main] Page loaded successfully');
+  });
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    const rendererPath = getResourcePath('renderer', 'index.html');
+    console.log('[Main] Loading renderer from:', rendererPath);
+    mainWindow.loadFile(rendererPath);
   }
 
   mainWindow.on('closed', () => {

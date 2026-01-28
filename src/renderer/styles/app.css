@@ -1135,3 +1135,18 @@ body,
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
 }
+
+.update-banner-action {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.update-banner-action:hover {
+  text-decoration: underline;
+}

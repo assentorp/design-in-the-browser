@@ -52,6 +52,22 @@ const mainAPI: MainAPI = {
     ipcRenderer.on('app:update-available', (_, info) => callback(info));
   },
 
+  onUpdateProgress: (callback: (info: { percent: number; transferred: number; total: number }) => void) => {
+    ipcRenderer.on('app:update-progress', (_, info) => callback(info));
+  },
+
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => {
+    ipcRenderer.on('app:update-downloaded', (_, info) => callback(info));
+  },
+
+  downloadUpdate: () => {
+    ipcRenderer.send('app:download-update');
+  },
+
+  installUpdate: () => {
+    ipcRenderer.send('app:install-update');
+  },
+
   startVSCodeServer: (projectPath: string) => {
     return ipcRenderer.invoke('vscode:start', { projectPath });
   },

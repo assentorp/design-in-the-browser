@@ -123,6 +123,10 @@ export interface MainAPI {
   showOpenDialog: () => Promise<string | null>;
   runCommand: (sessionId: string, command: string) => void;
   onUpdateAvailable: (callback: (info: { version: string; url: string }) => void) => void;
+  onUpdateProgress: (callback: (info: { percent: number; transferred: number; total: number }) => void) => void;
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
+  downloadUpdate: () => void;
+  installUpdate: () => void;
   startVSCodeServer: (projectPath: string) => Promise<number>;
   stopVSCodeServer: () => Promise<void>;
   openInVSCode: (filePath: string, line?: number, column?: number) => void;

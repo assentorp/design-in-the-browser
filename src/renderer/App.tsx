@@ -16,6 +16,9 @@ const CLI_COMMANDS: Record<CliTool, string> = {
 interface UpdateInfo {
   version: string;
   url: string;
+  downloading?: boolean;
+  progress?: number;
+  downloaded?: boolean;
 }
 
 const PRESETS_STORAGE_KEY = 'claudedesign-project-presets';
@@ -83,6 +86,16 @@ export default function App() {
     if (window.mainAPI?.onUpdateAvailable) {
       window.mainAPI.onUpdateAvailable((info) => {
         setUpdateInfo(info);
+      });
+    }
+    if (window.mainAPI?.onUpdateProgress) {
+      window.mainAPI.onUpdateProgress((info) => {
+        setUpdateInfo((prev) => prev ? { ...prev, downloading: true, progress: info.percent } : null);
+      });
+    }
+    if (window.mainAPI?.onUpdateDownloaded) {
+      window.mainAPI.onUpdateDownloaded(() => {
+        setUpdateInfo((prev) => prev ? { ...prev, downloading: false, downloaded: true } : null);
       });
     }
   }, []);
@@ -296,17 +309,32 @@ export default function App() {
   const updateBanner = updateInfo && (
     <div className="update-banner">
       <span>
-        Version {updateInfo.version} is available.{' '}
-        <a href={updateInfo.url} target="_blank" rel="noopener noreferrer">
-          Download update
-        </a>
+        {updateInfo.downloaded ? (
+          <>
+            Version {updateInfo.version} ready.{' '}
+            <button className="update-banner-action" onClick={() => window.mainAPI?.installUpdate()}>
+              Restart to update
+            </button>
+          </>
+        ) : updateInfo.downloading ? (
+          <>Downloading update... {Math.round(updateInfo.progress || 0)}%</>
+        ) : (
+          <>
+            Version {updateInfo.version} is available.{' '}
+            <button className="update-banner-action" onClick={() => window.mainAPI?.downloadUpdate()}>
+              Download update
+            </button>
+          </>
+        )}
       </span>
-      <button className="update-banner-close" onClick={() => setUpdateInfo(null)}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
+      {!updateInfo.downloading && (
+        <button className="update-banner-close" onClick={() => setUpdateInfo(null)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 

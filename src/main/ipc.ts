@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, app, dialog } from 'electron';
+import { downloadUpdate, installUpdate } from './updater';
 import * as pty from 'node-pty';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -528,6 +529,18 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
     console.log('[IPC] Could not find element source');
     return null;
+  });
+
+  // Handle update download request
+  ipcMain.on('app:download-update', () => {
+    console.log('[IPC] Download update requested');
+    downloadUpdate();
+  });
+
+  // Handle update install request
+  ipcMain.on('app:install-update', () => {
+    console.log('[IPC] Install update requested');
+    installUpdate();
   });
 
   // Clean up on window close
