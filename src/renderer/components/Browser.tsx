@@ -24,6 +24,9 @@ interface BrowserProps {
   onAnnotateModeChange: (enabled: boolean) => void;
   onPendingEditsChange: (edits: PendingEdit[], actions: EditActions) => void;
   activeTerminalTabId: string;
+  codeViewActive: boolean;
+  onCodeViewChange: (active: boolean) => void;
+  projectPath: string;
 }
 
 export type ViewportType = 'desktop' | 'tablet' | 'mobile';
@@ -40,7 +43,7 @@ const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
   mobile: 375,
 };
 
-export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId }: BrowserProps) {
+export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, codeViewActive, onCodeViewChange, projectPath }: BrowserProps) {
   const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -49,8 +52,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [hasMainAPI, setHasMainAPI] = useState(() => !!getMainAPI());
   const [viewport, setViewport] = useState<ViewportType | null>(null);
   const [viewportSizes, setViewportSizes] = useState<ViewportSizes>(DEFAULT_VIEWPORT_SIZES);
+  const [codeLoading, setCodeLoading] = useState(false);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const injectedRef = useRef(false);
+  const savedUrlRef = useRef<string | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const vscodePortRef = useRef<number | null>(null);
+  const pendingFileRef = useRef<{ file: string; line?: number } | null>(null);
 
   // Check for mainAPI (might not be available immediately)
   useEffect(() => {
@@ -139,6 +147,63 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMainAPI]);
 
+  // Open a file in VS Code web via Quick Open (Cmd+P) using native input events
+  const injectOpenFile = useCallback(async (webview: Electron.WebviewTag, relativePath: string, line?: number) => {
+    const gotoLine = line && line > 1 ? line : 0;
+    const searchText = gotoLine ? `${relativePath}:${gotoLine}` : relativePath;
+    try {
+      // Wait for the workbench to be ready
+      const ready = await webview.executeJavaScript(`
+        new Promise(function(resolve) {
+          var attempts = 0;
+          function check() {
+            attempts++;
+            if (attempts > 40) { resolve(false); return; }
+            if (document.querySelector('.monaco-workbench')) { resolve(true); return; }
+            setTimeout(check, 500);
+          }
+          check();
+        });
+      `);
+      if (!ready) {
+        console.error('[Browser] VS Code workbench did not load in time');
+        return;
+      }
+
+      // Use Electron's native sendInputEvent for Cmd+P (VS Code ignores synthetic KeyboardEvents)
+      (webview as any).sendInputEvent({ type: 'keyDown', keyCode: 'p', modifiers: ['meta'] });
+      (webview as any).sendInputEvent({ type: 'keyUp', keyCode: 'p', modifiers: ['meta'] });
+
+      // Wait for Quick Open to appear, then fill in the filename
+      await new Promise(r => setTimeout(r, 800));
+
+      await webview.executeJavaScript(`
+        (function() {
+          var input = document.querySelector('.quick-input-widget input[type="text"]');
+          if (!input) input = document.querySelector('.quick-input-box input');
+          if (!input) input = document.querySelector('[class*="quick-input"] input');
+          if (input) {
+            input.focus();
+            var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(input, ${JSON.stringify(searchText)});
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        })();
+        true;
+      `);
+
+      // Wait for file list to populate, then press Enter via native event
+      await new Promise(r => setTimeout(r, 800));
+      (webview as any).sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+      (webview as any).sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+
+      // File opened successfully — clear pending
+      pendingFileRef.current = null;
+    } catch (err) {
+      console.error('[Browser] Failed to open file in VS Code:', err);
+    }
+  }, []);
+
   // Handle webview events
   useEffect(() => {
     const webview = webviewRef.current;
@@ -158,15 +223,26 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       setIsLoading(true);
       injectedRef.current = false;
       setIsReady(false);
+      // Clear retry timer if navigation starts successfully
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
     };
 
     const handleDidStopLoading = () => {
       setIsLoading(false);
-      injectAndSetup();
+      setCodeLoading(false);
+      if (!codeViewActive) {
+        injectAndSetup();
+      } else if (pendingFileRef.current && webview) {
+        const { file, line } = pendingFileRef.current;
+        injectOpenFile(webview, file, line);
+      }
     };
 
     const handleDomReady = () => {
-      injectAndSetup();
+      if (!codeViewActive) injectAndSetup();
     };
 
     // Suppress expected navigation errors (ERR_ABORTED is normal during navigation)
@@ -176,6 +252,28 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       const ignoredErrors = [-3, -20, -2];
       if (!ignoredErrors.includes(e.errorCode)) {
         console.warn('Page load failed:', e.errorDescription);
+
+        // Auto-retry on connection errors (dev server not ready yet)
+        const retryErrors = [-102, -324, -7]; // CONNECTION_REFUSED, EMPTY_RESPONSE, TIMED_OUT
+        if (retryErrors.includes(e.errorCode) && webview) {
+          if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+          const retryUrl = e.validatedURL || url;
+          const mainAPI = getMainAPI();
+
+          // Poll via main process (Node http) until server is reachable, then reload
+          const poll = () => {
+            retryTimerRef.current = setTimeout(async () => {
+              const up = mainAPI ? await mainAPI.checkUrl(retryUrl) : false;
+              if (up) {
+                console.log('[Browser] Server is up, reloading webview');
+                webview.src = retryUrl;
+              } else {
+                poll();
+              }
+            }, 1500);
+          };
+          poll();
+        }
       }
     };
 
@@ -187,6 +285,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     webview.addEventListener('did-fail-load', handleDidFailLoad);
 
     return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       webview.removeEventListener('did-navigate', handleDidNavigate);
       webview.removeEventListener('did-navigate-in-page', handleDidNavigate);
       webview.removeEventListener('did-start-loading', handleDidStartLoading);
@@ -194,7 +293,50 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       webview.removeEventListener('dom-ready', handleDomReady);
       webview.removeEventListener('did-fail-load', handleDidFailLoad);
     };
-  }, [injectAndSetup, onUrlChange]);
+  }, [injectAndSetup, onUrlChange, codeViewActive, injectOpenFile]);
+
+  // Open a file in the embedded VS Code web view
+  const openFileInCodeView = useCallback(async (filePath: string, line?: number) => {
+    const webview = webviewRef.current;
+    const mainAPI = getMainAPI();
+    if (!webview || !mainAPI) return;
+
+    // Compute the relative path for Quick Open
+    const relativePath = filePath.startsWith(projectPath)
+      ? filePath.slice(projectPath.length + 1)
+      : filePath;
+
+    // Store pending file to open after VS Code loads
+    pendingFileRef.current = { file: relativePath, line };
+
+    // Start VS Code server if not already running
+    let port = vscodePortRef.current;
+    if (!port) {
+      if (!codeViewActive) {
+        savedUrlRef.current = webview.getURL();
+      }
+      try {
+        port = await mainAPI.startVSCodeServer(projectPath);
+        vscodePortRef.current = port;
+        onCodeViewChange(true);
+      } catch (err) {
+        console.error('[Browser] Failed to start VS Code server:', err);
+        pendingFileRef.current = null;
+        return;
+      }
+    }
+
+    const vscodeUrl = `http://localhost:${port}?folder=${encodeURIComponent(projectPath)}`;
+    const currentUrl = webview.getURL();
+
+    // If already on VS Code, inject the file-open script directly
+    if (currentUrl.includes(`localhost:${port}`)) {
+      injectOpenFile(webview, relativePath, line);
+    } else {
+      // Navigate to VS Code — the pending file will be opened via did-stop-loading
+      webview.src = vscodeUrl;
+    }
+  }, [codeViewActive, onCodeViewChange, projectPath]);
 
   // Poll for messages from the injected script
   useEffect(() => {
@@ -212,7 +354,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             window.__claudeDesignMessages = [];
 
             window.addEventListener('message', function(e) {
-              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update')) {
+              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-open-source')) {
                 window.__claudeDesignMessages.push(e.data);
               }
             });
@@ -293,6 +435,30 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                     console.log('Annotation data:', singleData);
                   }
                 }
+              } else if (msg.type === 'claude-design-open-source') {
+                const mainAPI = getMainAPI();
+                if (mainAPI) {
+                  if (msg.fileName) {
+                    // Exact React source — open in embedded VS Code
+                    let filePath = msg.fileName as string;
+                    if (filePath && !filePath.startsWith('/')) {
+                      filePath = projectPath + '/' + filePath;
+                    }
+                    openFileInCodeView(filePath, msg.lineNumber);
+                  } else {
+                    // No exact source — search project, then open result in embedded VS Code
+                    const result = await mainAPI.searchAndOpenInVSCode(projectPath, {
+                      componentNames: msg.componentNames || [],
+                      id: msg.searchId || null,
+                      textContent: msg.searchText || '',
+                      dataAttrs: msg.searchDataAttrs || {},
+                      pageUrl: msg.pageUrl || '',
+                    });
+                    if (result) {
+                      openFileInCodeView(result.file, result.line);
+                    }
+                  }
+                }
               } else if (msg.type === 'claude-design-mode-change') {
                 onAnnotateModeChange(msg.enabled);
               } else if (msg.type === 'claude-design-pending-update') {
@@ -307,7 +473,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }, 100);
 
     return () => clearInterval(pollInterval);
-  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem]);
+  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, projectPath, openFileInCodeView]);
 
   // Toggle annotate mode in webview
   useEffect(() => {
@@ -371,8 +537,51 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   }, []);
 
   const toggleAnnotate = useCallback(() => {
+    if (!annotateMode && codeViewActive) {
+      // Switching from Code to Editing — deactivate code view, restore preview
+      const webview = webviewRef.current;
+      if (webview) {
+        onCodeViewChange(false);
+        vscodePortRef.current = null;
+        const restoreUrl = savedUrlRef.current || url;
+        savedUrlRef.current = null;
+        webview.src = restoreUrl;
+      }
+    }
     onAnnotateModeChange(!annotateMode);
-  }, [annotateMode, onAnnotateModeChange]);
+  }, [annotateMode, codeViewActive, onAnnotateModeChange, onCodeViewChange, url]);
+
+  const toggleCodeView = useCallback(async () => {
+    const webview = webviewRef.current;
+    const mainAPI = getMainAPI();
+    if (!webview || !mainAPI) return;
+
+    if (!codeViewActive) {
+      // Activating code view — turn off editing mode
+      if (annotateMode) {
+        onAnnotateModeChange(false);
+      }
+      savedUrlRef.current = webview.getURL();
+      setCodeLoading(true);
+      try {
+        const port = await mainAPI.startVSCodeServer(projectPath);
+        vscodePortRef.current = port;
+        onCodeViewChange(true);
+        webview.src = `http://localhost:${port}?folder=${encodeURIComponent(projectPath)}`;
+        // codeLoading is cleared in handleDidStopLoading when VS Code finishes loading
+      } catch (err) {
+        console.error('[Browser] Failed to start VS Code server:', err);
+        setCodeLoading(false);
+      }
+    } else {
+      // Deactivating code view
+      onCodeViewChange(false);
+      vscodePortRef.current = null;
+      const restoreUrl = savedUrlRef.current || url;
+      savedUrlRef.current = null;
+      webview.src = restoreUrl;
+    }
+  }, [codeViewActive, annotateMode, onCodeViewChange, onAnnotateModeChange, projectPath, url]);
 
   const currentWidth = viewport ? viewportSizes[viewport] : null;
 
@@ -386,10 +595,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         canGoForward={canGoForward}
         isLoading={isLoading}
         annotateMode={annotateMode}
+        codeViewActive={codeViewActive}
+        codeLoading={codeLoading}
         onBack={goBack}
         onForward={goForward}
         onReload={reload}
         onToggleAnnotate={toggleAnnotate}
+        onToggleCodeView={toggleCodeView}
         viewport={viewport}
         viewportSizes={viewportSizes}
         onViewportChange={setViewport}

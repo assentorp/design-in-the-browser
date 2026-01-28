@@ -40,6 +40,8 @@ const createSession = (
     activeTerminalTabId: firstTabId,
     terminalTabCounter: 1,
     devServerTabId: null,
+    codeViewActive: false,
+    vscodePort: null,
   };
 };
 
@@ -151,6 +153,10 @@ export default function App() {
     updateSession(activeSessionId, { terminalCollapsed: !enabled });
   }, [activeSessionId, updateSession]);
 
+  const handleCodeViewChange = useCallback((active: boolean) => {
+    updateSession(activeSessionId, { codeViewActive: active, terminalCollapsed: active });
+  }, [activeSessionId, updateSession]);
+
   const toggleTerminal = useCallback(() => {
     if (!activeSession) return;
     updateSession(activeSessionId, {
@@ -260,6 +266,12 @@ export default function App() {
 
   const handleCloseSession = useCallback(
     (sessionId: string) => {
+      // Stop VS Code server if running
+      const session = sessions.find((s) => s.id === sessionId);
+      if (session?.codeViewActive && window.mainAPI?.stopVSCodeServer) {
+        window.mainAPI.stopVSCodeServer();
+      }
+
       // Destroy the terminal for this session
       destroyTerminalSession(sessionId);
 
@@ -278,7 +290,7 @@ export default function App() {
         return filtered;
       });
     },
-    [activeSessionId]
+    [activeSessionId, sessions]
   );
 
   const updateBanner = updateInfo && (
@@ -353,6 +365,9 @@ export default function App() {
             onAnnotateModeChange={handleAnnotateModeChange}
             onPendingEditsChange={handlePendingEditsChange}
             activeTerminalTabId={activeSession.activeTerminalTabId}
+            codeViewActive={activeSession.codeViewActive}
+            onCodeViewChange={handleCodeViewChange}
+            projectPath={activeSession.projectPath}
           />
         </div>
         {!activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}

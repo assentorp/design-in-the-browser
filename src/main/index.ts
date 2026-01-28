@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, nativeImage } from 'electron';
+import { app, BrowserWindow, screen, session, nativeImage } from 'electron';
 import * as path from 'path';
 import { setupIPC } from './ipc';
 import { createMenu } from './menu';
@@ -41,8 +41,8 @@ function createWindow() {
   }
 
   mainWindow = new BrowserWindow({
-    width: 1600,
-    height: 1000,
+    width: Math.round(screen.getPrimaryDisplay().workAreaSize.width * 0.9),
+    height: Math.round(screen.getPrimaryDisplay().workAreaSize.height * 0.9),
     minWidth: 1000,
     minHeight: 600,
     title: 'Design In The Browser',

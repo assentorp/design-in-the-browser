@@ -9,10 +9,13 @@ interface ToolbarProps {
   canGoForward: boolean;
   isLoading: boolean;
   annotateMode: boolean;
+  codeViewActive: boolean;
+  codeLoading: boolean;
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
   onToggleAnnotate: () => void;
+  onToggleCodeView: () => void;
   viewport: ViewportType | null;
   viewportSizes: ViewportSizes;
   onViewportChange: (viewport: ViewportType | null) => void;
@@ -27,10 +30,13 @@ export default function Toolbar({
   canGoForward,
   isLoading,
   annotateMode,
+  codeViewActive,
+  codeLoading,
   onBack,
   onForward,
   onReload,
   onToggleAnnotate,
+  onToggleCodeView,
   viewport,
   viewportSizes,
   onViewportChange,
@@ -202,6 +208,23 @@ export default function Toolbar({
           </div>
         )}
       </div>
+
+      <button
+        className={`toolbar-btn toolbar-code-btn ${codeViewActive ? 'active' : ''}`}
+        onClick={onToggleCodeView}
+        disabled={codeLoading}
+        title={codeViewActive ? 'Switch to Preview' : 'Open VS Code'}
+      >
+        {codeLoading ? (
+          <div className="toolbar-spinner" />
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+        )}
+        <span>{codeLoading ? 'Loading...' : 'Code'}</span>
+      </button>
 
       <button
         className={`toolbar-btn toolbar-annotate-btn ${annotateMode ? 'active' : ''}`}

@@ -51,6 +51,26 @@ const mainAPI: MainAPI = {
   onUpdateAvailable: (callback: (info: { version: string; url: string }) => void) => {
     ipcRenderer.on('app:update-available', (_, info) => callback(info));
   },
+
+  startVSCodeServer: (projectPath: string) => {
+    return ipcRenderer.invoke('vscode:start', { projectPath });
+  },
+
+  stopVSCodeServer: () => {
+    return ipcRenderer.invoke('vscode:stop');
+  },
+
+  openInVSCode: (filePath: string, line?: number, column?: number) => {
+    ipcRenderer.send('vscode:open-file', { filePath, line, column });
+  },
+
+  checkUrl: (url: string): Promise<boolean> => {
+    return ipcRenderer.invoke('url:check', { url });
+  },
+
+  searchAndOpenInVSCode: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ file: string; line: number } | null> => {
+    return ipcRenderer.invoke('vscode:search-element', { projectPath, info });
+  },
 };
 
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);

@@ -331,6 +331,44 @@ body,
   color: var(--text-secondary);
 }
 
+.toolbar-code-btn {
+  height: 32px;
+  padding: 0 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toolbar-code-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.toolbar-code-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.toolbar-code-btn.active:hover {
+  background: var(--accent-hover);
+}
+
+.toolbar-code-btn .toolbar-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: toolbar-spin 0.6s linear infinite;
+}
+
+@keyframes toolbar-spin {
+  to { transform: rotate(360deg); }
+}
+
 .toolbar-annotate-btn {
   height: 32px;
   padding: 0 12px;

@@ -13,6 +13,7 @@ export const annotationScript = `
   let highlightedElement = null;
   let selectedElement = null;
   let popoverElement = null;
+  let codeButtonElement = null;
   let toolbarElement = null;
 
   // Multi-edit state - stores pending annotations with individual notes
@@ -61,6 +62,7 @@ export const annotationScript = `
       .claude-design-popover-textarea {
         width: 100%;
         min-height: 120px;
+        max-height: 400px;
         background: #303030;
         border: 1px solid #4a4a4a;
         border-radius: 24px;
@@ -72,6 +74,7 @@ export const annotationScript = `
         outline: none;
         box-sizing: border-box;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        overflow-y: hidden;
       }
       .claude-design-popover-textarea:focus {
         border-color: #5a5a5a;
@@ -148,7 +151,7 @@ export const annotationScript = `
       .claude-design-popover-add-another svg {
         flex-shrink: 0;
       }
-      .claude-design-crosshair * {
+      .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *) {
         cursor: crosshair !important;
       }
       .claude-design-popover-textarea.dragover {
@@ -205,6 +208,7 @@ export const annotationScript = `
         border-radius: 8px;
         background: transparent;
         border: none;
+        cursor: default !important;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -213,6 +217,50 @@ export const annotationScript = `
       }
       .claude-design-popover-image-btn:hover {
         background: rgba(255, 255, 255, 0.1);
+      }
+      .claude-design-code-btn {
+        position: fixed;
+        z-index: 2147483647;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: #c6613f;
+        border: 1px solid #c6613f;
+        cursor: pointer !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        padding: 0;
+      }
+      .claude-design-code-btn,
+      .claude-design-code-btn * {
+        cursor: default !important;
+      }
+      .claude-design-code-btn:hover {
+        background: #a8522f;
+        border-color: #a8522f;
+      }
+      .claude-design-code-btn svg {
+        width: 14px;
+        height: 14px;
+        color: #fff;
+        transition: color 0.15s ease;
+      }
+      .claude-design-code-btn:hover svg {
+        color: #fff;
+      }
+      .claude-design-code-btn .claude-design-code-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: claude-design-spin 0.6s linear infinite;
+      }
+      @keyframes claude-design-spin {
+        to { transform: rotate(360deg); }
       }
       .claude-design-popover-image-btn svg {
         width: 18px;
@@ -595,6 +643,61 @@ export const annotationScript = `
     cancelAnnotation();
   }
 
+  // Find React source file for an element (via _debugSource)
+  function findReactSource(el) {
+    if (!el) return null;
+
+    var fiberKey = Object.keys(el).find(function(key) {
+      return key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$');
+    });
+    if (!fiberKey) return null;
+
+    var fiber = el[fiberKey];
+    var current = fiber;
+    var maxDepth = 20;
+    while (current && maxDepth-- > 0) {
+      if (current._debugSource) {
+        return {
+          fileName: current._debugSource.fileName,
+          lineNumber: current._debugSource.lineNumber,
+          columnNumber: current._debugSource.columnNumber || 0,
+        };
+      }
+      current = current.return;
+    }
+    return null;
+  }
+
+  // Find React component name from fiber tree
+  function findReactComponentName(el) {
+    if (!el) return null;
+
+    var fiberKey = Object.keys(el).find(function(key) {
+      return key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$');
+    });
+    if (!fiberKey) return null;
+
+    // Skip framework internals and structural wrapper components
+    var skipExact = /^(Fragment|Suspense|Consumer|Context|Memo|ForwardRef|Lazy|SegmentViewNode|InnerLayoutRouter|OuterLayoutRouter|RedirectErrorBoundary|RedirectBoundary|HTTPAccessFallbackErrorBoundary|HTTPAccessFallbackBoundary|RenderFromTemplateContext|ScrollAndFocusHandler|InnerScrollAndFocusHandler|ErrorBoundary|ClientPageRoot|ClientSegmentRoot|HotReload|Router|AppRouter|ServerRoot|RSCComponent|Head|NotFoundBoundary|LoadingBoundary|LayoutRouter|RootLayout|MetadataOutlet|PathnameContextProviderAdapter|SegmentStateProvider|ThemeProvider)$/;
+    // Skip names ending with Provider, Boundary, Layout, Wrapper, Container, and exact "Providers"
+    var skipPattern = /(Provider|Providers|Boundary|Layout|Wrapper|Container|ErrorBound|Guard|Gate)$/;
+
+    var fiber = el[fiberKey];
+    var current = fiber;
+    var maxDepth = 50;
+    var names = [];
+    while (current && maxDepth-- > 0) {
+      if (current.type && typeof current.type === 'function') {
+        var name = current.type.displayName || current.type.name;
+        if (name && name.length > 1 && !skipExact.test(name) && !skipPattern.test(name)) {
+          names.push(name);
+        }
+      }
+      current = current.return;
+    }
+    return names; // closest component first, then ancestors
+  }
+
   // Reference image state
   let referenceImageData = null;
 
@@ -636,6 +739,9 @@ export const annotationScript = `
     }
 
     const placeholder = textSelection ? 'Fix typo...' : 'What do you want to change?';
+
+    // Check for React source (used by floating code button)
+    const reactSource = el ? findReactSource(el) : null;
 
     // Check if element already has a pending note
     const existingAnnotation = el ? findPendingAnnotation(el) : null;
@@ -709,12 +815,89 @@ export const annotationScript = `
 
     document.body.appendChild(popoverElement);
 
+    // Create floating code button at bottom-right of the selected element
+    if (el && !textSelection) {
+      removeCodeButton();
+      codeButtonElement = document.createElement('button');
+      codeButtonElement.className = 'claude-design-code-btn';
+      codeButtonElement.title = reactSource
+        ? 'Open in VS Code (' + (reactSource.fileName || '').split('/').pop() + ':' + (reactSource.lineNumber || '') + ')'
+        : 'Open in VS Code';
+      codeButtonElement.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>' +
+        '</svg>';
+      // Position at bottom-right of the element, offset outside the outline
+      codeButtonElement.style.top = (rect.bottom + 5) + 'px';
+      codeButtonElement.style.left = (rect.right - 28) + 'px';
+      // Clamp to viewport
+      if (rect.right - 28 + 28 > window.innerWidth) {
+        codeButtonElement.style.left = (window.innerWidth - 38) + 'px';
+      }
+      if (rect.bottom + 5 + 28 > window.innerHeight) {
+        codeButtonElement.style.top = (rect.top - 33) + 'px';
+      }
+      codeButtonElement.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Show spinner
+        codeButtonElement.innerHTML = '<div class="claude-design-code-spinner"></div>';
+        if (reactSource) {
+          window.postMessage({
+            type: 'claude-design-open-source',
+            fileName: reactSource.fileName,
+            lineNumber: reactSource.lineNumber,
+            columnNumber: reactSource.columnNumber,
+          }, '*');
+        } else {
+          var componentNames = findReactComponentName(el) || [];
+          var elTextContent = (el.textContent || '').trim().substring(0, 80);
+          var dataAttrs = {};
+          if (el.attributes) {
+            for (var dai = 0; dai < el.attributes.length; dai++) {
+              var dattr = el.attributes[dai];
+              if (dattr.name.startsWith('data-') || dattr.name === 'aria-label' || dattr.name === 'role') {
+                dataAttrs[dattr.name] = dattr.value;
+              }
+            }
+          }
+          window.postMessage({
+            type: 'claude-design-open-source',
+            componentNames: componentNames,
+            searchText: elTextContent,
+            searchDataAttrs: dataAttrs,
+            searchId: el.id || null,
+            pageUrl: window.location.pathname,
+          }, '*');
+        }
+      });
+      document.body.appendChild(codeButtonElement);
+    }
+
     const textarea = popoverElement.querySelector('textarea');
     const fileInput = popoverElement.querySelector('.claude-design-popover-file');
     const imageBtn = popoverElement.querySelector('.claude-design-popover-image-btn');
     const imagePill = popoverElement.querySelector('.claude-design-popover-image-pill');
 
     setTimeout(() => textarea && textarea.focus(), 50);
+
+    // Auto-expand textarea as user types
+    function autoResize() {
+      if (!textarea) return;
+      textarea.style.height = 'auto';
+      var scrollH = textarea.scrollHeight;
+      var minH = 120;
+      var padBottom = 60; // account for padding-bottom in input-row mode
+      textarea.style.height = Math.max(minH, scrollH) + 'px';
+      if (scrollH > 400) {
+        textarea.style.overflowY = 'auto';
+      } else {
+        textarea.style.overflowY = 'hidden';
+      }
+    }
+    if (textarea) {
+      textarea.addEventListener('input', autoResize);
+    }
 
     function handleFile(file) {
       if (!file || !file.type.startsWith('image/')) return;
@@ -843,11 +1026,19 @@ export const annotationScript = `
     });
   }
 
+  function removeCodeButton() {
+    if (codeButtonElement) {
+      codeButtonElement.remove();
+      codeButtonElement = null;
+    }
+  }
+
   function removePopover() {
     if (popoverElement) {
       popoverElement.remove();
       popoverElement = null;
     }
+    removeCodeButton();
   }
 
   function cancelAnnotation() {
@@ -994,7 +1185,8 @@ export const annotationScript = `
     const target = e.target;
     if (target === document.body || target === document.documentElement ||
         (target.closest && target.closest('.claude-design-popover')) ||
-        (target.closest && target.closest('.claude-design-toolbar'))) return;
+        (target.closest && target.closest('.claude-design-toolbar')) ||
+        (target.closest && target.closest('.claude-design-code-btn'))) return;
 
     if (highlightedElement && highlightedElement !== target) {
       highlightedElement.classList.remove('claude-design-highlight');
@@ -1018,6 +1210,7 @@ export const annotationScript = `
     if (!annotateMode) return;
     if (e.target.closest && e.target.closest('.claude-design-popover')) return;
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
+    if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
 
     const selection = window.getSelection();
     const text = selection && selection.toString().trim();
@@ -1049,6 +1242,7 @@ export const annotationScript = `
     if (!annotateMode) return;
     if (e.target.closest && e.target.closest('.claude-design-popover')) return;
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
+    if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
 
     // Check for text selection first - don't intercept if selecting text
     const selection = window.getSelection();

@@ -66,6 +66,8 @@ export interface Session {
   activeTerminalTabId: string;
   terminalTabCounter: number;
   devServerTabId: string | null;
+  codeViewActive: boolean;
+  vscodePort: number | null;
 }
 
 export type CliTool = 'claude' | 'cursor' | 'gemini';
@@ -121,6 +123,19 @@ export interface MainAPI {
   showOpenDialog: () => Promise<string | null>;
   runCommand: (sessionId: string, command: string) => void;
   onUpdateAvailable: (callback: (info: { version: string; url: string }) => void) => void;
+  startVSCodeServer: (projectPath: string) => Promise<number>;
+  stopVSCodeServer: () => Promise<void>;
+  openInVSCode: (filePath: string, line?: number, column?: number) => void;
+  checkUrl: (url: string) => Promise<boolean>;
+  searchAndOpenInVSCode: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
+}
+
+export interface ElementSearchInfo {
+  componentNames: string[];
+  id: string | null;
+  textContent: string;
+  dataAttrs: Record<string, string>;
+  pageUrl: string;
 }
 
 declare global {
