@@ -287,7 +287,39 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
           </button>
         </div>
       </div>
-      <div ref={wrapperRef} className="terminal-content" />
+      <div
+        ref={wrapperRef}
+        className="terminal-content"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.classList.add('drag-over');
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.classList.remove('drag-over');
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.classList.remove('drag-over');
+          const mainAPI = getMainAPI();
+          if (!mainAPI || !e.dataTransfer.files.length) return;
+          const paths: string[] = [];
+          for (let i = 0; i < e.dataTransfer.files.length; i++) {
+            const file = e.dataTransfer.files[i];
+            if ((file as any).path) {
+              paths.push((file as any).path);
+            }
+          }
+          if (paths.length > 0) {
+            // Paste file paths into the terminal, space-separated and shell-escaped
+            const escaped = paths.map(p => p.includes(' ') ? `"${p}"` : p).join(' ');
+            mainAPI.sendTerminalInput(activeTabId, escaped);
+          }
+        }}
+      />
     </div>
   );
 }

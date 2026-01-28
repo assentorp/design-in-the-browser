@@ -685,6 +685,12 @@ body,
   overflow: hidden;
 }
 
+.terminal-content.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: rgba(198, 97, 63, 0.05);
+}
+
 .terminal-content .xterm {
   height: 100%;
 }

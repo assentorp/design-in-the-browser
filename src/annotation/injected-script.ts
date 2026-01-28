@@ -827,15 +827,15 @@ export const annotationScript = `
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>' +
         '</svg>';
-      // Position at bottom-right of the element, offset outside the outline
-      codeButtonElement.style.top = (rect.bottom + 5) + 'px';
-      codeButtonElement.style.left = (rect.right - 28) + 'px';
+      // Position at top-right inside the element
+      codeButtonElement.style.top = (rect.top + 6) + 'px';
+      codeButtonElement.style.left = (rect.right - 28 - 6) + 'px';
       // Clamp to viewport
-      if (rect.right - 28 + 28 > window.innerWidth) {
+      if (rect.right - 34 > window.innerWidth) {
         codeButtonElement.style.left = (window.innerWidth - 38) + 'px';
       }
-      if (rect.bottom + 5 + 28 > window.innerHeight) {
-        codeButtonElement.style.top = (rect.top - 33) + 'px';
+      if (rect.top + 6 < 0) {
+        codeButtonElement.style.top = '6px';
       }
       codeButtonElement.addEventListener('click', function(e) {
         e.preventDefault();
