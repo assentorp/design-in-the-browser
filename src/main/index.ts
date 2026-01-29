@@ -23,6 +23,7 @@ if (process.platform === 'darwin') {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let ipcSetup = false;
 
 const isDev = !app.isPackaged;
 
@@ -114,7 +115,10 @@ function createWindow() {
     mainWindow = null;
   });
 
-  setupIPC(mainWindow);
+  if (!ipcSetup) {
+    setupIPC(mainWindow);
+    ipcSetup = true;
+  }
   createMenu(mainWindow);
   checkForUpdates(mainWindow);
 }
