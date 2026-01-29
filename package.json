@@ -1,6 +1,6 @@
 {
   "name": "designinthebrowser",
-  "version": "1.2.9",
+  "version": "1.2.10",
   "description": "Visual annotation tool for designing in the browser",
   "main": "dist/main/index.js",
   "scripts": {
@@ -54,7 +54,11 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "artifactName": "Design-In-The-Browser-${version}-${arch}-mac.${ext}"
+    },
+    "dmg": {
+      "artifactName": "Design-In-The-Browser-${version}-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.png",
