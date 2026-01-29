@@ -27,9 +27,12 @@ interface TerminalProps {
   children?: React.ReactNode;
   projectPath?: string;
   shell?: ShellType;
+  cliToolTabId?: string | null;
+  cliToolRunning?: boolean;
+  hasTodoItems?: boolean;
 }
 
-export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath, shell }: TerminalProps) {
+export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath, shell, cliToolTabId, cliToolRunning, hasTodoItems }: TerminalProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const projectPathRef = useRef(projectPath);
   const shellRef = useRef(shell);
@@ -249,6 +252,24 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
     }
   }, [activeTabId]);
 
+  // Refit terminal when todo section appears/disappears
+  useEffect(() => {
+    const instance = terminalInstances.get(activeTabId);
+    if (!instance) return;
+    const mainAPI = getMainAPI();
+    const timer = setTimeout(() => {
+      try {
+        if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
+          instance.fitAddon.fit();
+          if (mainAPI) {
+            mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
+          }
+        }
+      } catch { /* ignore */ }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [hasTodoItems, activeTabId]);
+
   // Handle drag and drop for files - use capture phase to intercept before xterm
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -312,7 +333,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
   return (
     <div className="terminal-container">
-      {children && (
+      {hasTodoItems && (
         <div className="todo-section">
           <div className="todo-header">Todo</div>
           {children}
@@ -326,6 +347,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
               className={`terminal-tab ${tab.id === activeTabId ? 'active' : ''}`}
               onClick={() => onTabsChange(tabs, tab.id, tabCounter)}
             >
+              {tab.id === cliToolTabId && cliToolRunning && <span className="cli-spinner" />}
               <span className="terminal-tab-name">{tab.name}</span>
               {tabs.length > 1 && (
                 <button

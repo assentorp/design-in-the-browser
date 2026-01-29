@@ -209,6 +209,29 @@ body,
   );
 }
 
+.browser-loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  z-index: 10;
+  background: var(--accent);
+  animation: loading-progress 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .webview-container {
   height: 100%;
   background: var(--bg-primary);
@@ -465,24 +488,33 @@ body,
 /* Edit Queue Panel */
 .edit-queue-panel {
   background: var(--bg-secondary);
-  padding: 8px 12px 12px 17px;
+  padding: 8px 16px 12px 16px;
 }
 
 .edit-queue-list {
   max-height: 150px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .edit-queue-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 0;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.edit-queue-item:hover {
+  background: var(--bg-tertiary);
 }
 
 .edit-queue-circle {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border: 2px solid #555;
   border-radius: 50%;
   flex-shrink: 0;
@@ -490,49 +522,166 @@ body,
 
 .edit-queue-text {
   font-size: 13px;
-  color: #999;
+  color: var(--text-secondary);
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .edit-queue-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
-  color: #666;
+  color: #555;
   cursor: pointer;
   padding: 0;
-  width: 24px;
-  height: 24px;
-  font-size: 20px;
-  line-height: 24px;
-  text-align: center;
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
   flex-shrink: 0;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
+  opacity: 0;
+}
+
+.edit-queue-item:hover .edit-queue-remove {
+  opacity: 1;
 }
 
 .edit-queue-remove:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
 }
 
 .edit-queue-send {
-  height: 32px;
-  margin-top: 16px;
-  padding: 0 12px;
+  height: 30px;
+  margin-top: 8px;
+  padding: 0 14px;
   background: var(--accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: background 0.15s;
+  transition: all 0.15s ease;
 }
 
 .edit-queue-send:hover {
+  background: var(--accent-hover);
+}
+
+/* Queued Edits Panel */
+.queued-edits-panel {
+  background: var(--bg-secondary);
+  padding: 4px 16px 12px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.queued-edits-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 6px 0 4px 0;
+}
+
+.queued-edits-header svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.queued-edits-list {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queued-edits-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.queued-edits-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.queued-edits-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(198, 97, 63, 0.4);
+}
+
+.queued-edits-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queued-edits-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  opacity: 0;
+}
+
+.queued-edits-item:hover .queued-edits-remove {
+  opacity: 1;
+}
+
+.queued-edits-remove:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.queued-edits-send {
+  height: 30px;
+  margin-top: 8px;
+  padding: 0 14px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.queued-edits-send:hover {
   background: var(--accent-hover);
 }
 
@@ -578,13 +727,26 @@ body,
 }
 
 .todo-header {
-  padding: 12px 12px 0 17px;
+  padding: 10px 16px 0 16px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-secondary);
+  color: var(--accent);
   background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.todo-header::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .terminal-tabs-bar {
@@ -1187,4 +1349,19 @@ body,
 
 .update-banner-action:hover {
   text-decoration: underline;
+}
+
+/* CLI Tool Spinner */
+.cli-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: cli-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cli-spin {
+  to { transform: rotate(360deg); }
 }

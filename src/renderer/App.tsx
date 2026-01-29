@@ -4,9 +4,10 @@ import Terminal, { destroyTerminalSession } from './components/Terminal';
 import Resizer from './components/Resizer';
 import TabBar from './components/TabBar';
 import EditQueuePanel from './components/EditQueuePanel';
+import QueuedEditsPanel, { type QueuedEdit } from './components/QueuedEditsPanel';
 import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
-import type { Session, ProjectPreset, CliTool, ShellType } from '../shared/types';
+import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData, MultiEditData } from '../shared/types';
 
 const CLI_COMMANDS: Record<CliTool, string> = {
   claude: 'claude',
@@ -45,6 +46,8 @@ const createSession = (
     terminalTabCounter: 1,
     devServerTabId: null,
     cliToolTabId: null,
+    cliTool: null,
+    cliToolRunning: false,
     codeViewActive: false,
     vscodePort: null,
     shell: config?.shell || 'default',
@@ -75,8 +78,16 @@ export default function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [projectPresets, setProjectPresets] = useState<ProjectPreset[]>(() => loadPresets());
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [editQueue, setEditQueue] = useState<QueuedEdit[]>([]);
+  const editQueueRef = useRef<QueuedEdit[]>([]);
+  editQueueRef.current = editQueue;
   const browserWidthRef = useRef(60);
   const pendingCommandsRef = useRef<{ sessionId: string; tabId: string; command: string }[]>([]);
+  const sessionsRef = useRef<Session[]>(sessions);
+  sessionsRef.current = sessions;
+  const cliRunningRef = useRef<Set<string>>(new Set());
+  const cliTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const flushEditQueueRef = useRef<(sessionId: string) => void>(() => {});
 
   // Show modal on first launch if no sessions
   useEffect(() => {
@@ -91,6 +102,43 @@ export default function App() {
     if (onSettingsOpen) {
       onSettingsOpen(() => setShowSettingsModal(true));
     }
+  }, []);
+
+  // Detect CLI tool activity from terminal data
+  useEffect(() => {
+    if (!window.mainAPI?.onTerminalData) return;
+
+    window.mainAPI.onTerminalData((tabId: string) => {
+      const session = sessionsRef.current.find((s) => s.cliToolTabId === tabId);
+      if (!session) return;
+
+      const sid = session.id;
+
+      // Clear existing idle timer
+      const existing = cliTimersRef.current.get(sid);
+      if (existing) clearTimeout(existing);
+
+      // Mark as running if not already
+      if (!cliRunningRef.current.has(sid)) {
+        cliRunningRef.current.add(sid);
+        setSessions((prev) =>
+          prev.map((s) => (s.id === sid ? { ...s, cliToolRunning: true } : s))
+        );
+      }
+
+      // Set 3s idle timer
+      cliTimersRef.current.set(
+        sid,
+        setTimeout(() => {
+          cliRunningRef.current.delete(sid);
+          cliTimersRef.current.delete(sid);
+          setSessions((prev) =>
+            prev.map((s) => (s.id === sid ? { ...s, cliToolRunning: false } : s))
+          );
+          flushEditQueueRef.current(sid);
+        }, 3000)
+      );
+    });
   }, []);
 
   // Listen for update notifications
@@ -145,6 +193,73 @@ export default function App() {
       prev.map((s) => (s.id === sessionId ? { ...s, ...updates } : s))
     );
   }, []);
+
+  const getAnnotationLabel = useCallback((data: AnnotationData): string => {
+    // Multi-edit (has annotations array)
+    const multi = data as unknown as MultiEditData;
+    if ('annotations' in multi && Array.isArray(multi.annotations)) {
+      return `${multi.annotations.length} edits`;
+    }
+
+    const request = data.request || '';
+    const truncate = (s: string, max: number) => s.length > max ? s.substring(0, max) + '...' : s;
+
+    // Text selection
+    if (data.selectedText) {
+      const text = truncate(data.selectedText, 20);
+      return truncate(`"${text}": ${request}`, 50);
+    }
+
+    // Multi-select
+    if (data.elements && data.elements.length > 1) {
+      return truncate(`${data.elements.length} elements: ${request}`, 50);
+    }
+
+    // Single element
+    if (data.element) {
+      const tag = `<${data.element.tagName.toLowerCase()}>`;
+      const text = data.element.text ? ` "${truncate(data.element.text, 15)}"` : '';
+      return truncate(`${tag}${text}: ${request}`, 50);
+    }
+
+    return truncate(request, 50) || 'Edit';
+  }, []);
+
+  const handleAnnotation = useCallback((data: AnnotationData) => {
+    // Check the ref directly — it's updated synchronously in the IPC callback,
+    // so it's always current (unlike the React state prop which lags a render)
+    if (cliRunningRef.current.has(activeSessionId)) {
+      const label = getAnnotationLabel(data);
+      setEditQueue((prev) => [...prev, { sessionId: activeSessionId, data, label }]);
+    } else {
+      window.mainAPI?.sendAnnotation(data);
+    }
+  }, [activeSessionId, getAnnotationLabel]);
+
+  const handleRemoveQueuedEdit = useCallback((index: number) => {
+    // Index is relative to the active session's filtered queue
+    setEditQueue((prev) => {
+      let count = 0;
+      return prev.filter((q) => {
+        if (q.sessionId !== activeSessionId) return true;
+        return count++ !== index;
+      });
+    });
+  }, [activeSessionId]);
+
+  const flushEditQueue = useCallback((sessionId: string) => {
+    const queue = editQueueRef.current.filter((q) => q.sessionId === sessionId);
+    if (queue.length === 0) return;
+    for (const item of queue) {
+      window.mainAPI?.sendAnnotation(item.data as AnnotationData);
+    }
+    setEditQueue((prev) => prev.filter((q) => q.sessionId !== sessionId));
+  }, []);
+  flushEditQueueRef.current = flushEditQueue;
+
+  const handleSendQueueNow = useCallback(() => {
+    flushEditQueue(activeSessionId);
+  }, [activeSessionId, flushEditQueue]);
 
   const handleResize = useCallback(
     (delta: number) => {
@@ -228,6 +343,7 @@ export default function App() {
       // Mark dev server tab, CLI tab, and set CLI tab as active
       newSession.devServerTabId = devServerTabId;
       newSession.cliToolTabId = cliTabId;
+      newSession.cliTool = config.cliTool;
       newSession.activeTerminalTabId = cliTabId;
 
       setSessions((prev) => [...prev, newSession]);
@@ -298,6 +414,15 @@ export default function App() {
       if (session?.codeViewActive && window.mainAPI?.stopVSCodeServer) {
         window.mainAPI.stopVSCodeServer();
       }
+
+      // Clean up CLI activity timer
+      const timer = cliTimersRef.current.get(sessionId);
+      if (timer) clearTimeout(timer);
+      cliTimersRef.current.delete(sessionId);
+      cliRunningRef.current.delete(sessionId);
+
+      // Clear queued edits for this session
+      setEditQueue((prev) => prev.filter((q) => q.sessionId !== sessionId));
 
       // Destroy the terminal for this session
       destroyTerminalSession(sessionId);
@@ -413,6 +538,7 @@ export default function App() {
             codeViewActive={activeSession.codeViewActive}
             onCodeViewChange={handleCodeViewChange}
             projectPath={activeSession.projectPath}
+            onAnnotation={handleAnnotation}
           />
         </div>
         {!activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}
@@ -432,9 +558,19 @@ export default function App() {
             onTabsChange={handleTerminalTabsChange}
             projectPath={activeSession.projectPath}
             shell={activeSession.shell}
+            cliToolTabId={activeSession.cliToolTabId}
+            cliToolRunning={activeSession.cliToolRunning}
+            hasTodoItems={pendingEdits.length > 0 || editQueue.some((q) => q.sessionId === activeSessionId)}
           >
             {pendingEdits.length > 0 && (
               <EditQueuePanel edits={pendingEdits} actions={editActions} />
+            )}
+            {editQueue.filter((q) => q.sessionId === activeSessionId).length > 0 && (
+              <QueuedEditsPanel
+                edits={editQueue.filter((q) => q.sessionId === activeSessionId)}
+                onRemove={handleRemoveQueuedEdit}
+                onSendNow={handleSendQueueNow}
+              />
             )}
           </Terminal>
         </div>

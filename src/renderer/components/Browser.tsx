@@ -27,6 +27,7 @@ interface BrowserProps {
   codeViewActive: boolean;
   onCodeViewChange: (active: boolean) => void;
   projectPath: string;
+  onAnnotation?: (data: AnnotationData) => void;
 }
 
 export type ViewportType = 'desktop' | 'tablet' | 'mobile';
@@ -43,7 +44,7 @@ const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
   mobile: 375,
 };
 
-export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, codeViewActive, onCodeViewChange, projectPath }: BrowserProps) {
+export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, codeViewActive, onCodeViewChange, projectPath, onAnnotation }: BrowserProps) {
   const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -59,6 +60,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vscodePortRef = useRef<number | null>(null);
   const pendingFileRef = useRef<{ file: string; line?: number } | null>(null);
+  const onAnnotationRef = useRef(onAnnotation);
+  onAnnotationRef.current = onAnnotation;
 
   // Check for mainAPI (might not be available immediately)
   useEffect(() => {
@@ -406,8 +409,9 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                     }
                   }
 
-                  if (mainAPI) {
-                    // Send as multi-edit data
+                  if (onAnnotationRef.current) {
+                    onAnnotationRef.current(multiData as unknown as AnnotationData);
+                  } else if (mainAPI) {
                     mainAPI.sendAnnotation(multiData as unknown as AnnotationData);
                   } else {
                     console.log('Multi-edit data:', multiData);
@@ -429,7 +433,9 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                     }
                   }
 
-                  if (mainAPI) {
+                  if (onAnnotationRef.current) {
+                    onAnnotationRef.current(singleData);
+                  } else if (mainAPI) {
                     mainAPI.sendAnnotation(singleData);
                   } else {
                     console.log('Annotation data:', singleData);
@@ -608,6 +614,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onViewportSizeChange={setViewportSizes}
       />
       <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
+        {isLoading && <div className="browser-loading-bar" />}
         {hasMainAPI ? (
           <div
             className="webview-container"
