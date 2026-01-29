@@ -419,8 +419,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                   singleData.sessionId = sessionId;
                   singleData.terminalTabId = activeTerminalTabId;
 
-                  // Capture screenshot of the element
-                  if (singleData.bounds && webview) {
+                  // Capture screenshot of the element (skip for text-only selections - faster)
+                  if (singleData.bounds && webview && !singleData.selectedText) {
                     try {
                       const image = await webview.capturePage(singleData.bounds);
                       singleData.screenshot = image.toDataURL();
