@@ -33,9 +33,7 @@ jobs:
       - run: npm run build:main && npx vite build
 
       - name: Build Electron app
-        run: npx electron-builder --mac --${{ matrix.arch }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
 
       - uses: actions/upload-artifact@v4
         with:
@@ -67,9 +65,7 @@ jobs:
       - run: npm run build:main && npx vite build
 
       - name: Build Electron app
-        run: npx electron-builder --win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish never
 
       - uses: actions/upload-artifact@v4
         with:
