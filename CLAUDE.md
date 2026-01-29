@@ -4,6 +4,8 @@
 
 **Releases**: Do NOT automatically create releases. Always ask the user "Should I release this?" and wait for explicit confirmation before bumping version, tagging, and pushing.
 
+⚠️ **NO EXCEPTIONS** - Even for bug fixes, crash fixes, or "urgent" issues, ALWAYS ask first. Never assume a release is okay without explicit user approval.
+
 ---
 
 This file documents the codebase structure and recent changes for future reference.
