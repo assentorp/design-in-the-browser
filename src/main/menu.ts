@@ -81,6 +81,11 @@ export function createMenu(mainWindow: BrowserWindow) {
     {
       label: 'Help',
       submenu: [
+        {
+          label: `Version ${app.getVersion()}`,
+          enabled: false,
+        },
+        { type: 'separator' as const },
         ...(!isMac
           ? [
               {

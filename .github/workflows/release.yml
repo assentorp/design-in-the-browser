@@ -43,6 +43,8 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.yml
+            release/*.blockmap
 
   build-windows:
     runs-on: windows-latest
@@ -74,6 +76,8 @@ jobs:
           name: windows
           path: |
             release/*.exe
+            release/*.yml
+            release/*.blockmap
 
   release:
     needs: [build-mac, build-windows]
@@ -86,7 +90,7 @@ jobs:
       - name: Collect release assets
         run: |
           mkdir -p release-assets
-          find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" \) -exec cp {} release-assets/ \;
+          find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.yml" -o -name "*.blockmap" \) -exec cp {} release-assets/ \;
           ls -la release-assets/
 
       - uses: softprops/action-gh-release@v2
