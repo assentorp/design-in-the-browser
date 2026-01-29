@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
 // Track if update is downloaded and ready
@@ -125,8 +125,16 @@ export function installUpdate() {
   }
 
   console.log('[Updater] Calling autoUpdater.quitAndInstall...');
-  // Let electron-updater handle everything - don't interfere with the process
-  // isSilent: false (show installer UI on Windows)
-  // isForceRunAfter: true (restart app after install)
-  autoUpdater.quitAndInstall(false, true);
+
+  // On macOS, the 'window-all-closed' handler doesn't quit the app
+  // and 'activate' recreates windows — both interfere with quitAndInstall.
+  // Remove them and explicitly close all windows first.
+  app.removeAllListeners('window-all-closed');
+  app.removeAllListeners('activate');
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.removeAllListeners('close');
+    win.close();
+  }
+
+  setImmediate(() => autoUpdater.quitAndInstall(false, true));
 }
