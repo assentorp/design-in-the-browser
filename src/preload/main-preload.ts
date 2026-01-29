@@ -1,12 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AnnotationData, MainAPI } from '../shared/types';
+import type { AnnotationData, MainAPI, ShellType } from '../shared/types';
 
 console.log('[Preload] Script starting...');
 
 const mainAPI: MainAPI = {
-  createTerminal: (sessionId: string, cwd?: string) => {
-    ipcRenderer.send('terminal:create', { sessionId, cwd });
+  createTerminal: (sessionId: string, cwd?: string, shell?: ShellType) => {
+    ipcRenderer.send('terminal:create', { sessionId, cwd, shell });
   },
+
+  getPlatform: () => process.platform,
+
+  checkWslAvailable: () => ipcRenderer.invoke('wsl:check'),
 
   destroyTerminal: (sessionId: string) => {
     ipcRenderer.send('terminal:destroy', { sessionId });

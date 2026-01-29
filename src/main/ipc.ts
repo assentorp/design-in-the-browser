@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { spawn, exec, type ChildProcess } from 'child_process';
-import type { AnnotationData } from '../shared/types';
+import type { AnnotationData, ShellType } from '../shared/types';
 
 interface SessionState {
   ptyProcess: pty.IPty;
@@ -18,23 +18,50 @@ const sessions = new Map<string, SessionState>();
 const vscodeServers = new Map<string, { process: ChildProcess; port: number }>();
 let vscodePortCounter = 4850;
 
+// Convert Windows path to WSL path
+function toWslPath(windowsPath: string): string {
+  // Convert C:\Users\foo to /mnt/c/Users/foo
+  const match = windowsPath.match(/^([a-zA-Z]):\\(.*)$/);
+  if (match) {
+    const drive = match[1].toLowerCase();
+    const rest = match[2].replace(/\\/g, '/');
+    return `/mnt/${drive}/${rest}`;
+  }
+  return windowsPath.replace(/\\/g, '/');
+}
+
 export function setupIPC(mainWindow: BrowserWindow) {
-  const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/zsh';
+  const defaultShell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/zsh';
 
   // Create a new terminal session
-  ipcMain.on('terminal:create', (_, { sessionId, cwd }: { sessionId: string; cwd?: string }) => {
+  ipcMain.on('terminal:create', (_, { sessionId, cwd, shell }: { sessionId: string; cwd?: string; shell?: ShellType }) => {
     if (sessions.has(sessionId)) {
       console.log('[IPC] Session already exists:', sessionId);
       return;
     }
 
-    console.log('[IPC] Creating new session:', sessionId, 'cwd:', cwd);
+    const useWsl = shell === 'wsl' && process.platform === 'win32';
+    const shellToUse = useWsl ? 'wsl.exe' : defaultShell;
+    const cwdToUse = cwd || process.env.HOME || process.cwd();
 
-    const ptyProcess = pty.spawn(shell, [], {
+    console.log('[IPC] Creating new session:', sessionId, 'cwd:', cwdToUse, 'shell:', shellToUse, 'useWsl:', useWsl);
+
+    // For WSL, we need to convert the Windows path and cd into it
+    const shellArgs: string[] = [];
+    let wslCwd = cwdToUse;
+
+    if (useWsl && cwd) {
+      // Convert Windows path to WSL path
+      wslCwd = toWslPath(cwd);
+      // Start WSL with bash and cd to the directory
+      shellArgs.push('-e', 'bash', '-c', `cd "${wslCwd}" && exec bash`);
+    }
+
+    const ptyProcess = pty.spawn(shellToUse, shellArgs, {
       name: 'xterm-256color',
       cols: 80,
       rows: 30,
-      cwd: cwd || process.env.HOME || process.cwd(),
+      cwd: useWsl ? undefined : cwdToUse,
       env: {
         ...process.env,
         TERM: 'xterm-256color',
@@ -529,6 +556,18 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
     console.log('[IPC] Could not find element source');
     return null;
+  });
+
+  // Check if WSL is available on Windows
+  ipcMain.handle('wsl:check', async () => {
+    if (process.platform !== 'win32') {
+      return false;
+    }
+    return new Promise<boolean>((resolve) => {
+      exec('wsl --status', (error) => {
+        resolve(!error);
+      });
+    });
   });
 
   // Handle update download request

@@ -68,9 +68,12 @@ export interface Session {
   devServerTabId: string | null;
   codeViewActive: boolean;
   vscodePort: number | null;
+  shell: ShellType;
 }
 
 export type CliTool = 'claude' | 'cursor' | 'gemini';
+
+export type ShellType = 'default' | 'wsl';
 
 export interface ProjectPreset {
   id: string;
@@ -79,6 +82,7 @@ export interface ProjectPreset {
   startCommand: string;
   url: string;
   cliTool: CliTool;
+  shell?: ShellType;
 }
 
 export interface ElementInfo {
@@ -111,7 +115,9 @@ export interface WebviewAPI {
 }
 
 export interface MainAPI {
-  createTerminal: (sessionId: string, cwd?: string) => void;
+  createTerminal: (sessionId: string, cwd?: string, shell?: ShellType) => void;
+  getPlatform: () => string;
+  checkWslAvailable: () => Promise<boolean>;
   destroyTerminal: (sessionId: string) => void;
   sendTerminalInput: (sessionId: string, data: string) => void;
   resizeTerminal: (sessionId: string, cols: number, rows: number) => void;

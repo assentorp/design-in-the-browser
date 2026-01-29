@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import type { TerminalTab } from '../../shared/types';
+import type { TerminalTab, ShellType } from '../../shared/types';
 
 const getMainAPI = () => (typeof window !== 'undefined' ? window.mainAPI : undefined);
 
@@ -26,12 +26,15 @@ interface TerminalProps {
   onTabsChange: (tabs: TerminalTab[], activeTabId: string, tabCounter: number) => void;
   children?: React.ReactNode;
   projectPath?: string;
+  shell?: ShellType;
 }
 
-export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath }: TerminalProps) {
+export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath, shell }: TerminalProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const projectPathRef = useRef(projectPath);
+  const shellRef = useRef(shell);
   projectPathRef.current = projectPath;
+  shellRef.current = shell;
 
   // Set up global data listener once
   useEffect(() => {
@@ -98,7 +101,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
     if (mainAPI && !createdTabs.has(tabId)) {
       createdTabs.add(tabId);
-      mainAPI.createTerminal(tabId, projectPathRef.current);
+      mainAPI.createTerminal(tabId, projectPathRef.current, shellRef.current);
 
       terminal.onData((data) => {
         mainAPI.sendTerminalInput(tabId, data);

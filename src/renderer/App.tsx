@@ -5,7 +5,7 @@ import Resizer from './components/Resizer';
 import TabBar from './components/TabBar';
 import EditQueuePanel from './components/EditQueuePanel';
 import ProjectConfigModal from './components/ProjectConfigModal';
-import type { Session, ProjectPreset, CliTool } from '../shared/types';
+import type { Session, ProjectPreset, CliTool, ShellType } from '../shared/types';
 
 const CLI_COMMANDS: Record<CliTool, string> = {
   claude: 'claude',
@@ -26,7 +26,7 @@ const PRESETS_STORAGE_KEY = 'claudedesign-project-presets';
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const createSession = (
-  config: { name: string; path: string; startCommand: string } | null,
+  config: { name: string; path: string; startCommand: string; shell?: ShellType } | null,
   index: number
 ): Session => {
   const id = generateId();
@@ -45,6 +45,7 @@ const createSession = (
     devServerTabId: null,
     codeViewActive: false,
     vscodePort: null,
+    shell: config?.shell || 'default',
   };
 };
 
@@ -193,10 +194,10 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(
-    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; saveAsPreset: boolean }) => {
+    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean }) => {
       const newIndex = sessionCounter + 1;
       const newSession = createSession(
-        { name: config.name, path: config.path, startCommand: config.startCommand },
+        { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
         newIndex
       );
       newSession.url = config.url || 'http://localhost:3000';
@@ -231,6 +232,7 @@ export default function App() {
           startCommand: config.startCommand,
           url: config.url,
           cliTool: config.cliTool,
+          shell: config.shell,
         };
         setProjectPresets((prev) => {
           const updated = [...prev, newPreset];
@@ -414,6 +416,7 @@ export default function App() {
             tabCounter={activeSession.terminalTabCounter}
             onTabsChange={handleTerminalTabsChange}
             projectPath={activeSession.projectPath}
+            shell={activeSession.shell}
           >
             {pendingEdits.length > 0 && (
               <EditQueuePanel edits={pendingEdits} actions={editActions} />

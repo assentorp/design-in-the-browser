@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import type { ProjectPreset, CliTool } from '../../shared/types';
+import { useState, useMemo, useEffect } from 'react';
+import type { ProjectPreset, CliTool, ShellType } from '../../shared/types';
 
 interface ProjectConfigModalProps {
   presets: ProjectPreset[];
@@ -11,6 +11,7 @@ interface ProjectConfigModalProps {
     startCommand: string;
     url: string;
     cliTool: CliTool;
+    shell: ShellType;
     saveAsPreset: boolean;
   }) => void;
   onDeletePreset: (presetId: string) => void;
@@ -35,9 +36,23 @@ export default function ProjectConfigModal({
   const [startCommand, setStartCommand] = useState('npm run dev');
   const [url, setUrl] = useState('http://localhost:3000');
   const [cliTool, setCliTool] = useState<CliTool>('claude');
+  const [shell, setShell] = useState<ShellType>('default');
   const [saveAsPreset, setSaveAsPreset] = useState(true);
   const [search, setSearch] = useState('');
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  const [isWindows, setIsWindows] = useState(false);
+  const [wslAvailable, setWslAvailable] = useState(false);
+
+  // Check platform and WSL availability
+  useEffect(() => {
+    const platform = window.mainAPI?.getPlatform?.();
+    const isWin = platform === 'win32';
+    setIsWindows(isWin);
+
+    if (isWin && window.mainAPI?.checkWslAvailable) {
+      window.mainAPI.checkWslAvailable().then(setWslAvailable);
+    }
+  }, []);
 
   const filteredPresets = useMemo(() => {
     if (!search.trim()) return presets;
@@ -54,6 +69,7 @@ export default function ProjectConfigModal({
       startCommand: preset.startCommand,
       url: preset.url || 'http://localhost:3000',
       cliTool: preset.cliTool || 'claude',
+      shell: preset.shell || 'default',
       saveAsPreset: false,
     });
   };
@@ -65,6 +81,7 @@ export default function ProjectConfigModal({
     setStartCommand(preset.startCommand);
     setUrl(preset.url || 'http://localhost:3000');
     setCliTool(preset.cliTool || 'claude');
+    setShell(preset.shell || 'default');
     setSaveAsPreset(true);
     setView('edit');
   };
@@ -76,6 +93,7 @@ export default function ProjectConfigModal({
     setStartCommand('npm run dev');
     setUrl('http://localhost:3000');
     setCliTool('claude');
+    setShell('default');
     setSaveAsPreset(true);
     setView('new');
   };
@@ -113,6 +131,7 @@ export default function ProjectConfigModal({
         startCommand: startCommand.trim(),
         url: url.trim() || 'http://localhost:3000',
         cliTool,
+        shell,
       });
     }
 
@@ -122,6 +141,7 @@ export default function ProjectConfigModal({
       startCommand: startCommand.trim(),
       url: url.trim() || 'http://localhost:3000',
       cliTool,
+      shell,
       saveAsPreset: !editingPresetId && saveAsPreset,
     });
   };
@@ -277,6 +297,19 @@ export default function ProjectConfigModal({
                 <option value="gemini">Gemini</option>
               </select>
             </div>
+            {isWindows && wslAvailable && (
+              <div className="form-group">
+                <label>Shell</label>
+                <select
+                  value={shell}
+                  onChange={(e) => setShell(e.target.value as ShellType)}
+                  className="form-select"
+                >
+                  <option value="default">PowerShell</option>
+                  <option value="wsl">WSL (Linux)</option>
+                </select>
+              </div>
+            )}
             {view === 'edit' && (
               <label className="checkbox-label">
                 <input
