@@ -44,6 +44,7 @@ const createSession = (
     activeTerminalTabId: firstTabId,
     terminalTabCounter: 1,
     devServerTabId: null,
+    cliToolTabId: null,
     codeViewActive: false,
     vscodePort: null,
     shell: config?.shell || 'default',
@@ -224,8 +225,9 @@ export default function App() {
       newSession.terminalTabs.push({ id: cliTabId, name: cliLabel });
       newSession.terminalTabCounter = 2;
 
-      // Mark dev server tab and set CLI tab as active
+      // Mark dev server tab, CLI tab, and set CLI tab as active
       newSession.devServerTabId = devServerTabId;
+      newSession.cliToolTabId = cliTabId;
       newSession.activeTerminalTabId = cliTabId;
 
       setSessions((prev) => [...prev, newSession]);
@@ -407,7 +409,7 @@ export default function App() {
             annotateMode={annotateMode}
             onAnnotateModeChange={handleAnnotateModeChange}
             onPendingEditsChange={handlePendingEditsChange}
-            activeTerminalTabId={activeSession.activeTerminalTabId}
+            activeTerminalTabId={activeSession.cliToolTabId || activeSession.activeTerminalTabId}
             codeViewActive={activeSession.codeViewActive}
             onCodeViewChange={handleCodeViewChange}
             projectPath={activeSession.projectPath}

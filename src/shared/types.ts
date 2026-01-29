@@ -66,6 +66,7 @@ export interface Session {
   activeTerminalTabId: string;
   terminalTabCounter: number;
   devServerTabId: string | null;
+  cliToolTabId: string | null;
   codeViewActive: boolean;
   vscodePort: number | null;
   shell: ShellType;
