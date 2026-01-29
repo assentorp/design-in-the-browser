@@ -46,7 +46,7 @@
     "publish": {
       "provider": "github",
       "owner": "assentorp",
-      "repo": "ditb"
+      "repo": "ditb-releases"
     },
     "files": [
       "dist/**/*",

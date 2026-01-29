@@ -16,7 +16,7 @@ export function checkForUpdates(mainWindow: BrowserWindow) {
     console.log('[Updater] Update available:', info.version);
     mainWindow.webContents.send('app:update-available', {
       version: info.version,
-      url: `https://github.com/assentorp/ditb/releases/tag/v${info.version}`,
+      url: `https://github.com/assentorp/ditb-releases/releases/tag/v${info.version}`,
     });
     isManualCheck = false;
   });
