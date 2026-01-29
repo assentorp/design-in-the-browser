@@ -11,9 +11,6 @@ permissions:
 jobs:
   build-mac:
     runs-on: macos-latest
-    strategy:
-      matrix:
-        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
 
@@ -32,12 +29,12 @@ jobs:
 
       - run: npm run build:main && npx vite build
 
-      - name: Build Electron app
-        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+      - name: Build Electron app (both architectures)
+        run: npx electron-builder --mac --arm64 --x64 --publish never
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mac-${{ matrix.arch }}
+          name: mac
           path: |
             release/*.dmg
             release/*.zip
