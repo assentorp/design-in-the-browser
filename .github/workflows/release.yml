@@ -92,7 +92,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: release-assets/*
-          generate_release_notes: true
           repository: assentorp/ditb-releases
+          body: "See https://github.com/assentorp/ditb for source code and changelog."
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
