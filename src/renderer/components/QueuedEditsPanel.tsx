@@ -17,17 +17,10 @@ export default function QueuedEditsPanel({ edits, onRemove, onSendNow }: QueuedE
 
   return (
     <div className="queued-edits-panel">
-      <div className="queued-edits-header">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="8" cy="8" r="7" />
-          <path d="M8 4.5V8L10.5 9.5" />
-        </svg>
-        Queued — sends when idle
-      </div>
       <div className="queued-edits-list">
         {edits.map((edit, index) => (
           <div key={index} className="queued-edits-item">
-            <span className="queued-edits-dot" />
+            <span className="edit-queue-circle" />
             <span className="queued-edits-label">{edit.label}</span>
             <button
               className="queued-edits-remove"
@@ -44,21 +37,12 @@ export default function QueuedEditsPanel({ edits, onRemove, onSendNow }: QueuedE
           </div>
         ))}
       </div>
-      <button className="queued-edits-send" onClick={onSendNow}>
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M8 12V4M8 4L4 8M8 4L12 8" />
-        </svg>
-        Send now ({edits.length})
-      </button>
+      <div className="queued-edits-footer">
+        <button className="queued-edits-send" onClick={onSendNow}>
+          Send now ({edits.length})
+        </button>
+        <span className="queued-edits-status">Queued — sends when idle</span>
+      </div>
     </div>
   );
 }

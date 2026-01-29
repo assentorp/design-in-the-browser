@@ -28,7 +28,6 @@ export default function TabBar({
             className={`tab ${session.id === activeSessionId ? 'active' : ''}`}
             onClick={() => onSelectSession(session.id)}
           >
-            {session.cliToolRunning && <span className="cli-spinner" />}
             <span className="tab-name">{session.name}</span>
             {sessions.length > 1 && (
               <button

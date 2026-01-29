@@ -64,7 +64,7 @@ function createWindow() {
     height: Math.round(screen.getPrimaryDisplay().workAreaSize.height * 0.9),
     minWidth: 1000,
     minHeight: 600,
-    title: 'Design In The Browser',
+    title: `Design In The Browser v${app.getVersion()}`,
     icon,
     backgroundColor: '#1a1a1a',
     webPreferences: {
@@ -101,6 +101,7 @@ function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[Main] Page loaded successfully');
+    mainWindow!.setTitle(`Design In The Browser — v${app.getVersion()}`);
   });
 
   if (isDev) {

@@ -8,7 +8,7 @@ export function createMenu(mainWindow: BrowserWindow) {
     ...(isMac
       ? [
           {
-            label: app.name,
+            label: `${app.name} v${app.getVersion()}`,
             submenu: [
               { role: 'about' as const },
               {

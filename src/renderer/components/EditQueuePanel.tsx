@@ -36,18 +36,6 @@ export default function EditQueuePanel({ edits, actions }: EditQueuePanelProps) 
         className="edit-queue-send"
         onClick={() => actions?.sendAll()}
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M8 12V4M8 4L4 8M8 4L12 8" />
-        </svg>
         Send {edits.length} edit{edits.length !== 1 ? 's' : ''}
       </button>
     </div>
