@@ -249,6 +249,67 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
     }
   }, [activeTabId]);
 
+  // Handle drag and drop for files - use capture phase to intercept before xterm
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrapper.classList.add('drag-over');
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Only remove class if we're actually leaving the wrapper
+      const rect = wrapper.getBoundingClientRect();
+      if (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      ) {
+        wrapper.classList.remove('drag-over');
+      }
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrapper.classList.remove('drag-over');
+
+      const mainAPI = getMainAPI();
+      if (!mainAPI || !e.dataTransfer?.files.length) return;
+
+      const paths: string[] = [];
+      for (let i = 0; i < e.dataTransfer.files.length; i++) {
+        const file = e.dataTransfer.files[i] as File & { path?: string };
+        if (file.path) {
+          paths.push(file.path);
+        }
+      }
+
+      if (paths.length > 0) {
+        // Paste file paths into the terminal, space-separated and shell-escaped
+        const escaped = paths.map(p => p.includes(' ') ? `"${p}"` : p).join(' ');
+        mainAPI.sendTerminalInput(activeTabId, escaped);
+      }
+    };
+
+    // Use capture phase to intercept events before xterm handles them
+    wrapper.addEventListener('dragover', handleDragOver, true);
+    wrapper.addEventListener('dragleave', handleDragLeave, true);
+    wrapper.addEventListener('drop', handleDrop, true);
+
+    return () => {
+      wrapper.removeEventListener('dragover', handleDragOver, true);
+      wrapper.removeEventListener('dragleave', handleDragLeave, true);
+      wrapper.removeEventListener('drop', handleDrop, true);
+    };
+  }, [activeTabId]);
+
   return (
     <div className="terminal-container">
       {children && (
@@ -293,35 +354,6 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       <div
         ref={wrapperRef}
         className="terminal-content"
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.currentTarget.classList.add('drag-over');
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.currentTarget.classList.remove('drag-over');
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.currentTarget.classList.remove('drag-over');
-          const mainAPI = getMainAPI();
-          if (!mainAPI || !e.dataTransfer.files.length) return;
-          const paths: string[] = [];
-          for (let i = 0; i < e.dataTransfer.files.length; i++) {
-            const file = e.dataTransfer.files[i];
-            if ((file as any).path) {
-              paths.push((file as any).path);
-            }
-          }
-          if (paths.length > 0) {
-            // Paste file paths into the terminal, space-separated and shell-escaped
-            const escaped = paths.map(p => p.includes(' ') ? `"${p}"` : p).join(' ');
-            mainAPI.sendTerminalInput(activeTabId, escaped);
-          }
-        }}
       />
     </div>
   );

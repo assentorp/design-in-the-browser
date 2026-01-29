@@ -13,7 +13,10 @@ export const annotationScript = `
   let highlightedElement = null;
   let selectedElement = null;
   let popoverElement = null;
+  let popoverAnchor = null; // Element or text selection the popover is anchored to
+  let popoverScrollHandler = null; // Scroll handler for repositioning
   let codeButtonElement = null;
+  let codeButtonAnchor = null; // Element the code button is anchored to
   let toolbarElement = null;
 
   // Multi-edit state - stores pending annotations with individual notes
@@ -703,6 +706,67 @@ export const annotationScript = `
   // Reference image state
   let referenceImageData = null;
 
+  // Position popover relative to anchor element or text selection
+  function positionPopover() {
+    if (!popoverElement || !popoverAnchor) return;
+
+    const rect = popoverAnchor.rect
+      ? popoverAnchor.rect  // Text selection with stored rect
+      : (popoverAnchor.element ? popoverAnchor.element.getBoundingClientRect() : null);
+
+    if (!rect) return;
+
+    let top = rect.bottom + 10;
+    let left = rect.left;
+
+    if (top + 300 > window.innerHeight) top = rect.top - 300;
+    if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
+    if (left < 10) left = 10;
+    if (top < 10) top = 10;
+
+    popoverElement.style.top = top + 'px';
+    popoverElement.style.left = left + 'px';
+  }
+
+  // Position code button inside the element's top-right corner
+  function positionCodeButton() {
+    if (!codeButtonElement || !codeButtonAnchor) return;
+
+    const rect = codeButtonAnchor.getBoundingClientRect();
+
+    // Hide if element is out of viewport
+    const isVisible = rect.top < window.innerHeight && rect.bottom > 0 &&
+                      rect.left < window.innerWidth && rect.right > 0;
+
+    if (!isVisible) {
+      codeButtonElement.style.display = 'none';
+      return;
+    }
+
+    codeButtonElement.style.display = 'flex';
+
+    // Position at top-right inside the element
+    let top = rect.top + 6;
+    let left = rect.right - 28 - 6;
+
+    // Clamp to viewport
+    if (left > window.innerWidth - 38) {
+      left = window.innerWidth - 38;
+    }
+    if (left < 6) {
+      left = 6;
+    }
+    if (top < 6) {
+      top = 6;
+    }
+    if (top > window.innerHeight - 34) {
+      top = window.innerHeight - 34;
+    }
+
+    codeButtonElement.style.top = top + 'px';
+    codeButtonElement.style.left = left + 'px';
+  }
+
   // Create popover for element selection
   function createPopover(el, textSelection) {
     removePopover();
@@ -711,6 +775,9 @@ export const annotationScript = `
 
     const rect = textSelection ? textSelection.rect : el.getBoundingClientRect();
     const displaySelector = el ? generateDisplaySelector(el) : null;
+
+    // Store anchor for scroll repositioning
+    popoverAnchor = textSelection ? { rect: textSelection.rect } : { element: el };
 
     popoverElement = document.createElement('div');
     popoverElement.className = 'claude-design-popover';
@@ -725,6 +792,13 @@ export const annotationScript = `
 
     popoverElement.style.top = top + 'px';
     popoverElement.style.left = left + 'px';
+
+    // Add scroll listener to reposition popover and code button
+    popoverScrollHandler = function() {
+      positionPopover();
+      positionCodeButton();
+    };
+    window.addEventListener('scroll', popoverScrollHandler, true);
 
     // Build header based on selection type
     let headerHTML = '';
@@ -817,9 +891,10 @@ export const annotationScript = `
 
     document.body.appendChild(popoverElement);
 
-    // Create floating code button at bottom-right of the selected element
+    // Create floating code button at top-right of the selected element
     if (el && !textSelection) {
       removeCodeButton();
+      codeButtonAnchor = el;
       codeButtonElement = document.createElement('button');
       codeButtonElement.className = 'claude-design-code-btn';
       codeButtonElement.title = reactSource
@@ -829,16 +904,8 @@ export const annotationScript = `
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>' +
         '</svg>';
-      // Position at top-right inside the element
-      codeButtonElement.style.top = (rect.top + 6) + 'px';
-      codeButtonElement.style.left = (rect.right - 28 - 6) + 'px';
-      // Clamp to viewport
-      if (rect.right - 34 > window.innerWidth) {
-        codeButtonElement.style.left = (window.innerWidth - 38) + 'px';
-      }
-      if (rect.top + 6 < 0) {
-        codeButtonElement.style.top = '6px';
-      }
+      // Position using the helper function (handles scroll and viewport clamping)
+      positionCodeButton();
       codeButtonElement.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -1029,6 +1096,7 @@ export const annotationScript = `
   }
 
   function removeCodeButton() {
+    codeButtonAnchor = null;
     if (codeButtonElement) {
       codeButtonElement.remove();
       codeButtonElement = null;
@@ -1036,6 +1104,11 @@ export const annotationScript = `
   }
 
   function removePopover() {
+    if (popoverScrollHandler) {
+      window.removeEventListener('scroll', popoverScrollHandler, true);
+      popoverScrollHandler = null;
+    }
+    popoverAnchor = null;
     if (popoverElement) {
       popoverElement.remove();
       popoverElement = null;

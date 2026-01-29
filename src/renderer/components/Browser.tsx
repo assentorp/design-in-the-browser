@@ -326,7 +326,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       }
     }
 
-    const vscodeUrl = `http://localhost:${port}?folder=${encodeURIComponent(projectPath)}`;
+    const vscodeUrl = `http://localhost:${port}?folder=${encodeURIComponent(projectPath)}&vscode-colorTheme=${encodeURIComponent('Default Dark Modern')}`;
     const currentUrl = webview.getURL();
 
     // If already on VS Code, inject the file-open script directly
@@ -567,7 +567,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         const port = await mainAPI.startVSCodeServer(projectPath);
         vscodePortRef.current = port;
         onCodeViewChange(true);
-        webview.src = `http://localhost:${port}?folder=${encodeURIComponent(projectPath)}`;
+        webview.src = `http://localhost:${port}?folder=${encodeURIComponent(projectPath)}&vscode-colorTheme=${encodeURIComponent('Default Dark Modern')}`;
         // codeLoading is cleared in handleDidStopLoading when VS Code finishes loading
       } catch (err) {
         console.error('[Browser] Failed to start VS Code server:', err);
@@ -619,7 +619,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             <webview
               ref={webviewRef}
               className="webview"
-              allowpopups={true}
+              allowpopups="true"
             />
           </div>
         ) : (

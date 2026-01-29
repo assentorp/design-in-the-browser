@@ -75,14 +75,22 @@ function createWindow() {
     },
   });
 
-  // Allow webview to load any URL
+  // Allow webview to load any URL - remove restrictive CSP headers
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"],
-      },
-    });
+    const headers = { ...details.responseHeaders };
+    // Remove any existing CSP headers (they may be restrictive)
+    delete headers['content-security-policy'];
+    delete headers['Content-Security-Policy'];
+    delete headers['x-content-security-policy'];
+    delete headers['X-Content-Security-Policy'];
+    // Set a permissive CSP
+    headers['Content-Security-Policy'] = [
+      "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+      "img-src * data: blob:; " +
+      "script-src * 'unsafe-inline' 'unsafe-eval' blob:; " +
+      "style-src * 'unsafe-inline';"
+    ];
+    callback({ responseHeaders: headers });
   });
 
   // Log load failures for debugging
