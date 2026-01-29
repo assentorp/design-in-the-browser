@@ -1,5 +1,11 @@
 # Claude Context for Design In The Browser
 
+## IMPORTANT: Instructions for Claude
+
+**Releases**: Do NOT automatically create releases. Always ask the user "Should I release this?" and wait for explicit confirmation before bumping version, tagging, and pushing.
+
+---
+
 This file documents the codebase structure and recent changes for future reference.
 
 ## Project Overview
