@@ -82,7 +82,6 @@ export default function ProjectConfigModal({
     setUrl(preset.url || 'http://localhost:3000');
     setCliTool(preset.cliTool || 'claude');
     setShell(preset.shell || 'default');
-    setSaveAsPreset(true);
     setView('edit');
   };
 
@@ -123,7 +122,7 @@ export default function ProjectConfigModal({
     if (!name.trim() || !path.trim()) return;
 
     // Update existing preset if editing
-    if (editingPresetId && saveAsPreset) {
+    if (editingPresetId) {
       onUpdatePreset({
         id: editingPresetId,
         name: name.trim(),
@@ -309,16 +308,6 @@ export default function ProjectConfigModal({
                   <option value="wsl">WSL (Linux)</option>
                 </select>
               </div>
-            )}
-            {view === 'edit' && (
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={saveAsPreset}
-                  onChange={(e) => setSaveAsPreset(e.target.checked)}
-                />
-                <span>Update saved preset</span>
-              </label>
             )}
             <div className="project-config-actions">
               {canClose && (
