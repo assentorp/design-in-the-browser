@@ -578,6 +578,7 @@ export const annotationScript = `
   function clearPendingAnnotations() {
     pendingAnnotations.forEach(function(ann) {
       ann.element.classList.remove('claude-design-multi-selected');
+      ann.element.classList.remove('claude-design-selected');
       const badge = ann.element.querySelector('.claude-design-multi-badge');
       if (badge) badge.remove();
     });
@@ -602,6 +603,7 @@ export const annotationScript = `
 
     const ann = pendingAnnotations[index];
     ann.element.classList.remove('claude-design-multi-selected');
+    ann.element.classList.remove('claude-design-selected');
     const badge = ann.element.querySelector('.claude-design-multi-badge');
     if (badge) badge.remove();
 
