@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AnnotationData, MainAPI, ShellType } from '../shared/types';
+import type { AnnotationData, MainAPI, ShellType, AppSettings } from '../shared/types';
 
 console.log('[Preload] Script starting...');
 
@@ -91,7 +91,20 @@ const mainAPI: MainAPI = {
   searchAndOpenInVSCode: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ file: string; line: number } | null> => {
     return ipcRenderer.invoke('vscode:search-element', { projectPath, info });
   },
+
+  getSettings: (): Promise<AppSettings> => {
+    return ipcRenderer.invoke('settings:get');
+  },
+
+  saveSettings: (settings: Partial<AppSettings>): Promise<AppSettings> => {
+    return ipcRenderer.invoke('settings:save', settings);
+  },
 };
 
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);
 console.log('[Preload] mainAPI exposed to window');
+
+// Expose settings open listener separately since it needs to work before mainAPI is fully loaded
+contextBridge.exposeInMainWorld('onSettingsOpen', (callback: () => void) => {
+  ipcRenderer.on('open-settings', () => callback());
+});

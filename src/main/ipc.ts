@@ -7,6 +7,7 @@ import * as http from 'http';
 import * as https from 'https';
 import { spawn, exec, type ChildProcess } from 'child_process';
 import type { AnnotationData, ShellType } from '../shared/types';
+import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
 
 interface SessionState {
   ptyProcess: pty.IPty;
@@ -237,6 +238,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       // Clean up images after a delay
       const pathsToClean = screenshotPaths.filter(Boolean);
       if (pathsToClean.length > 0) {
+        const cleanupDelay = getScreenshotCleanupMs();
         setTimeout(() => {
           for (const p of pathsToClean) {
             try {
@@ -246,7 +248,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
               // Ignore cleanup errors
             }
           }
-        }, 60000);
+        }, cleanupDelay);
       }
     } else {
       // Single annotation
@@ -286,6 +288,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       // Clean up images after a delay
       const pathsToClean = [screenshotPath, referenceImagePath].filter(Boolean) as string[];
       if (pathsToClean.length > 0) {
+        const cleanupDelay = getScreenshotCleanupMs();
         setTimeout(() => {
           for (const p of pathsToClean) {
             try {
@@ -295,7 +298,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
               // Ignore cleanup errors
             }
           }
-        }, 60000);
+        }, cleanupDelay);
       }
     }
   });
@@ -556,6 +559,16 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
     console.log('[IPC] Could not find element source');
     return null;
+  });
+
+  // Get app settings
+  ipcMain.handle('settings:get', () => {
+    return getSettings();
+  });
+
+  // Save app settings
+  ipcMain.handle('settings:save', (_, settings: Partial<AppSettings>) => {
+    return saveSettings(settings);
   });
 
   // Check if WSL is available on Windows

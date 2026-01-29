@@ -5,6 +5,7 @@ import Resizer from './components/Resizer';
 import TabBar from './components/TabBar';
 import EditQueuePanel from './components/EditQueuePanel';
 import ProjectConfigModal from './components/ProjectConfigModal';
+import SettingsModal from './components/SettingsModal';
 import type { Session, ProjectPreset, CliTool, ShellType } from '../shared/types';
 
 const CLI_COMMANDS: Record<CliTool, string> = {
@@ -70,6 +71,7 @@ export default function App() {
   const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
   const [editActions, setEditActions] = useState<EditActions | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [projectPresets, setProjectPresets] = useState<ProjectPreset[]>(() => loadPresets());
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const browserWidthRef = useRef(60);
@@ -79,6 +81,14 @@ export default function App() {
   useEffect(() => {
     if (sessions.length === 0) {
       setShowConfigModal(true);
+    }
+  }, []);
+
+  // Listen for settings menu trigger
+  useEffect(() => {
+    const onSettingsOpen = (window as unknown as { onSettingsOpen?: (cb: () => void) => void }).onSettingsOpen;
+    if (onSettingsOpen) {
+      onSettingsOpen(() => setShowSettingsModal(true));
     }
   }, []);
 
@@ -369,6 +379,9 @@ export default function App() {
           onDeletePreset={handleDeletePreset}
           onUpdatePreset={handleUpdatePreset}
         />
+      )}
+      {showSettingsModal && (
+        <SettingsModal onClose={() => setShowSettingsModal(false)} />
       )}
       <TabBar
         sessions={sessions}

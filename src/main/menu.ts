@@ -63,6 +63,14 @@ export function createMenu(mainWindow: BrowserWindow) {
             mainWindow.webContents.send('toggle-annotate');
           },
         },
+        { type: 'separator' },
+        {
+          label: 'Settings...',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          },
+        },
       ],
     },
     {

@@ -967,6 +967,44 @@ body,
   padding: 20px;
 }
 
+/* Settings modal */
+.modal-settings {
+  width: 400px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-description {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.settings-loading {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
 /* Form elements */
 .form-group {
   display: flex;

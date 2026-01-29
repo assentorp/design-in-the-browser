@@ -75,6 +75,10 @@ export type CliTool = 'claude' | 'cursor' | 'gemini';
 
 export type ShellType = 'default' | 'wsl';
 
+export interface AppSettings {
+  screenshotCleanupMinutes: number;
+}
+
 export interface ProjectPreset {
   id: string;
   name: string;
@@ -138,6 +142,8 @@ export interface MainAPI {
   openInVSCode: (filePath: string, line?: number, column?: number) => void;
   checkUrl: (url: string) => Promise<boolean>;
   searchAndOpenInVSCode: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
+  getSettings: () => Promise<AppSettings>;
+  saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
 }
 
 export interface ElementSearchInfo {
