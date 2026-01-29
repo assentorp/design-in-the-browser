@@ -65,6 +65,7 @@ const mainAPI: MainAPI = {
   },
 
   downloadUpdate: () => {
+    console.log('[Preload] downloadUpdate called');
     ipcRenderer.send('app:download-update');
   },
 

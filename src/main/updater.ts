@@ -88,8 +88,19 @@ export function manualCheckForUpdates() {
 }
 
 export function downloadUpdate() {
-  autoUpdater.downloadUpdate().catch((err) => {
+  console.log('[Updater] Starting download...');
+  autoUpdater.downloadUpdate().then(() => {
+    console.log('[Updater] Download started successfully');
+  }).catch((err) => {
     console.error('[Updater] Download failed:', err);
+    if (mainWindowRef) {
+      dialog.showMessageBox(mainWindowRef, {
+        type: 'error',
+        title: 'Download Error',
+        message: `Failed to download update: ${err.message || err}`,
+        buttons: ['OK'],
+      });
+    }
   });
 }
 
