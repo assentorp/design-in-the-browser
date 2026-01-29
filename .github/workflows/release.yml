@@ -94,5 +94,6 @@ jobs:
           files: release-assets/*
           repository: assentorp/ditb-releases
           body: "See https://github.com/assentorp/ditb for source code and changelog."
+          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}

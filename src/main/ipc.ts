@@ -315,15 +315,35 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const port = vscodePortCounter++;
     console.log('[IPC] Starting VS Code server on port:', port, 'path:', projectPath);
 
+    // Find the code command - Electron apps don't inherit full PATH
+    const codePaths = process.platform === 'darwin'
+      ? ['/usr/local/bin/code', '/opt/homebrew/bin/code', '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code']
+      : process.platform === 'win32'
+        ? ['code']
+        : ['/usr/bin/code', '/usr/local/bin/code', 'code'];
+
+    let codeCommand = 'code';
+    for (const p of codePaths) {
+      try {
+        if (require('fs').existsSync(p)) {
+          codeCommand = p;
+          break;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    console.log('[IPC] Using code command:', codeCommand);
+
     return new Promise<number>((resolve, reject) => {
-      const proc = spawn('code', [
+      const proc = spawn(codeCommand, [
         'serve-web',
         '--port', String(port),
         '--without-connection-token',
         '--accept-server-license-terms',
       ], {
         cwd: projectPath || undefined,
-        env: { ...process.env },
+        env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
         shell: true,
       });
 
@@ -393,7 +413,9 @@ export function setupIPC(mainWindow: BrowserWindow) {
       if (column) uri += `:${column}`;
     }
     console.log('[IPC] Opening in VS Code:', uri);
-    exec(`code --goto "${uri}"`);
+    // Use full path on macOS since Electron doesn't inherit PATH
+    const codeCmd = process.platform === 'darwin' ? '/usr/local/bin/code' : 'code';
+    exec(`"${codeCmd}" --goto "${uri}"`, { env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` } });
   });
 
   // Search for element in project and open in VS Code
