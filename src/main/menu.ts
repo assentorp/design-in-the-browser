@@ -1,4 +1,5 @@
 import { BrowserWindow, Menu, MenuItemConstructorOptions, app } from 'electron';
+import { manualCheckForUpdates } from './updater';
 
 export function createMenu(mainWindow: BrowserWindow) {
   const isMac = process.platform === 'darwin';
@@ -10,6 +11,10 @@ export function createMenu(mainWindow: BrowserWindow) {
             label: app.name,
             submenu: [
               { role: 'about' as const },
+              {
+                label: 'Check for Updates...',
+                click: () => manualCheckForUpdates(),
+              },
               { type: 'separator' as const },
               { role: 'services' as const },
               { type: 'separator' as const },
@@ -71,6 +76,27 @@ export function createMenu(mainWindow: BrowserWindow) {
               { role: 'front' as const },
             ]
           : [{ role: 'close' as const }]),
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        ...(!isMac
+          ? [
+              {
+                label: 'Check for Updates...',
+                click: () => manualCheckForUpdates(),
+              },
+              { type: 'separator' as const },
+            ]
+          : []),
+        {
+          label: 'Learn More',
+          click: async () => {
+            const { shell } = await import('electron');
+            shell.openExternal('https://github.com/assentorp/ditb');
+          },
+        },
       ],
     },
   ];

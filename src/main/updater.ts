@@ -1,7 +1,12 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
+let mainWindowRef: BrowserWindow | null = null;
+let isManualCheck = false;
+
 export function checkForUpdates(mainWindow: BrowserWindow) {
+  mainWindowRef = mainWindow;
+
   // Configure auto-updater
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -13,10 +18,20 @@ export function checkForUpdates(mainWindow: BrowserWindow) {
       version: info.version,
       url: `https://github.com/assentorp/ditb/releases/tag/v${info.version}`,
     });
+    isManualCheck = false;
   });
 
   autoUpdater.on('update-not-available', () => {
     console.log('[Updater] Up to date');
+    if (isManualCheck) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'No Updates',
+        message: 'You are running the latest version.',
+        buttons: ['OK'],
+      });
+      isManualCheck = false;
+    }
   });
 
   autoUpdater.on('download-progress', (progress) => {
@@ -37,6 +52,15 @@ export function checkForUpdates(mainWindow: BrowserWindow) {
 
   autoUpdater.on('error', (err) => {
     console.error('[Updater] Error:', err);
+    if (isManualCheck) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Update Error',
+        message: 'Failed to check for updates. Please try again later.',
+        buttons: ['OK'],
+      });
+      isManualCheck = false;
+    }
   });
 
   // Check for updates after a short delay
@@ -45,6 +69,22 @@ export function checkForUpdates(mainWindow: BrowserWindow) {
       console.error('[Updater] Check failed:', err);
     });
   }, 3000);
+}
+
+export function manualCheckForUpdates() {
+  isManualCheck = true;
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('[Updater] Manual check failed:', err);
+    if (mainWindowRef) {
+      dialog.showMessageBox(mainWindowRef, {
+        type: 'error',
+        title: 'Update Error',
+        message: 'Failed to check for updates. Please try again later.',
+        buttons: ['OK'],
+      });
+    }
+    isManualCheck = false;
+  });
 }
 
 export function downloadUpdate() {
