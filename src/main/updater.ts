@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron';
+import { BrowserWindow, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
 // Track if update is downloaded and ready
@@ -124,35 +124,9 @@ export function installUpdate() {
     return;
   }
 
-  try {
-    // Close all windows first to ensure clean quit
-    if (mainWindowRef) {
-      mainWindowRef.removeAllListeners('close');
-      mainWindowRef.close();
-    }
-
-    // Use setImmediate to allow pending operations to complete
-    setImmediate(() => {
-      console.log('[Updater] Calling autoUpdater.quitAndInstall...');
-      // isSilent: false (show installer UI on Windows)
-      // isForceRunAfter: true (restart app after install)
-      autoUpdater.quitAndInstall(false, true);
-
-      // Fallback: force quit if still running after a short delay
-      setTimeout(() => {
-        console.log('[Updater] Force quitting app...');
-        app.exit(0);
-      }, 1000);
-    });
-  } catch (err) {
-    console.error('[Updater] quitAndInstall failed:', err);
-    if (mainWindowRef) {
-      dialog.showMessageBox(mainWindowRef, {
-        type: 'error',
-        title: 'Update Error',
-        message: `Failed to install update: ${err}`,
-        buttons: ['OK'],
-      });
-    }
-  }
+  console.log('[Updater] Calling autoUpdater.quitAndInstall...');
+  // Let electron-updater handle everything - don't interfere with the process
+  // isSilent: false (show installer UI on Windows)
+  // isForceRunAfter: true (restart app after install)
+  autoUpdater.quitAndInstall(false, true);
 }
