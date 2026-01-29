@@ -29,7 +29,17 @@ export function createMenu(mainWindow: BrowserWindow) {
       : []),
     {
       label: 'File',
-      submenu: [isMac ? { role: 'close' } : { role: 'quit' }],
+      submenu: [
+        {
+          label: 'Settings...',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => {
+            mainWindow.webContents.send('open-settings');
+          },
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' },
+      ],
     },
     {
       label: 'Edit',
@@ -61,14 +71,6 @@ export function createMenu(mainWindow: BrowserWindow) {
           accelerator: 'CmdOrCtrl+Shift+A',
           click: () => {
             mainWindow.webContents.send('toggle-annotate');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Settings...',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => {
-            mainWindow.webContents.send('open-settings');
           },
         },
       ],
