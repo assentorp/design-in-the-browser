@@ -580,9 +580,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         setCodeLoading(false);
       }
     } else {
-      // Deactivating code view
+      // Deactivating code view — keep server running for fast re-toggle
       onCodeViewChange(false);
-      vscodePortRef.current = null;
       const restoreUrl = savedUrlRef.current || url;
       savedUrlRef.current = null;
       webview.src = restoreUrl;

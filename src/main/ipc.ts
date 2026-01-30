@@ -16,7 +16,7 @@ interface SessionState {
 }
 
 const sessions = new Map<string, SessionState>();
-const vscodeServers = new Map<string, { process: ChildProcess; port: number }>();
+const vscodeServers = new Map<string, { process: ChildProcess; port: number; projectPath: string }>();
 let vscodePortCounter = 4850;
 
 // Convert Windows path to WSL path
@@ -305,8 +305,14 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
   // Start VS Code serve-web server
   ipcMain.handle('vscode:start', async (_, { projectPath }: { projectPath: string }) => {
-    // Kill any existing server first
+    // Reuse existing server if it's for the same project and still alive
     const existing = vscodeServers.get('current');
+    if (existing && existing.projectPath === projectPath && !existing.process.killed) {
+      console.log('[IPC] Reusing existing VS Code server on port:', existing.port);
+      return existing.port;
+    }
+
+    // Kill existing server if it's for a different project
     if (existing) {
       existing.process.kill();
       vscodeServers.delete('current');
@@ -354,7 +360,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
         console.log('[VSCode Server]', output.trim());
         if (!resolved && (output.includes('Web UI available') || output.includes('available at') || output.includes(`localhost:${port}`))) {
           resolved = true;
-          vscodeServers.set('current', { process: proc, port });
+          vscodeServers.set('current', { process: proc, port, projectPath });
           resolve(port);
         }
       });
@@ -365,7 +371,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
         // VS Code sometimes logs the ready message to stderr
         if (!resolved && (output.includes('Web UI available') || output.includes('available at') || output.includes(`localhost:${port}`))) {
           resolved = true;
-          vscodeServers.set('current', { process: proc, port });
+          vscodeServers.set('current', { process: proc, port, projectPath });
           resolve(port);
         }
       });
@@ -388,7 +394,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
         if (!resolved) {
           resolved = true;
           // Still resolve with the port - server may be ready but didn't log expected message
-          vscodeServers.set('current', { process: proc, port });
+          vscodeServers.set('current', { process: proc, port, projectPath });
           resolve(port);
         }
       }, 15000);
