@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Browser, { type PendingEdit, type EditActions } from './components/Browser';
-import Terminal, { destroyTerminalSession } from './components/Terminal';
+import Terminal, { destroyTerminalSession, scrollTerminalToBottom } from './components/Terminal';
 import Resizer from './components/Resizer';
 import TabBar from './components/TabBar';
 import EditQueuePanel from './components/EditQueuePanel';
@@ -233,6 +233,11 @@ export default function App() {
       setEditQueue((prev) => [...prev, { sessionId: activeSessionId, data, label }]);
     } else {
       window.mainAPI?.sendAnnotation(data);
+      // Scroll terminal to bottom so the user sees the new prompt
+      const session = sessionsRef.current.find((s) => s.id === activeSessionId);
+      if (session?.cliToolTabId) {
+        setTimeout(() => scrollTerminalToBottom(session.cliToolTabId!), 100);
+      }
     }
   }, [activeSessionId, getAnnotationLabel]);
 
@@ -254,6 +259,11 @@ export default function App() {
       window.mainAPI?.sendAnnotation(item.data as AnnotationData);
     }
     setEditQueue((prev) => prev.filter((q) => q.sessionId !== sessionId));
+    // Scroll terminal to bottom so the user sees the flushed prompts
+    const session = sessionsRef.current.find((s) => s.id === sessionId);
+    if (session?.cliToolTabId) {
+      setTimeout(() => scrollTerminalToBottom(session.cliToolTabId!), 100);
+    }
   }, []);
   flushEditQueueRef.current = flushEditQueue;
 

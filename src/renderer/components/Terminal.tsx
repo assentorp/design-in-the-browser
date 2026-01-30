@@ -17,6 +17,13 @@ const terminalInstances = new Map<string, TerminalInstance>();
 const createdTabs = new Set<string>();
 let dataListenerSetup = false;
 
+export function scrollTerminalToBottom(tabId: string) {
+  const instance = terminalInstances.get(tabId);
+  if (instance) {
+    instance.terminal.scrollToBottom();
+  }
+}
+
 interface TerminalProps {
   sessionId: string;
   collapsed?: boolean;
