@@ -55,7 +55,12 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
-      "artifactName": "Design-In-The-Browser-${version}-${arch}-mac.${ext}"
+      "artifactName": "Design-In-The-Browser-${version}-${arch}-mac.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
     },
     "dmg": {
       "artifactName": "Design-In-The-Browser-${version}-${arch}.${ext}"
