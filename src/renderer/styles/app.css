@@ -740,31 +740,34 @@ body,
 .terminal-tabs-bar {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
 }
 
 .terminal-tabs {
   display: flex;
-  align-items: center;
-  gap: 2px;
+  align-items: stretch;
   flex: 1;
+  min-width: 0;
   overflow-x: auto;
 }
 
 .terminal-tab {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 8px 12px;
+  flex: 1;
+  min-width: 0;
   background: transparent;
-  border-radius: 4px;
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  border-right: 1px solid var(--border-color);
 }
 
 .terminal-tab:hover {
@@ -778,7 +781,6 @@ body,
 }
 
 .terminal-tab-name {
-  max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -787,15 +789,16 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 2px;
+  border-radius: 3px;
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
+  flex-shrink: 0;
   transition: all 0.15s ease;
 }
 
@@ -812,16 +815,15 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
+  align-self: stretch;
 }
 
 .terminal-new-tab:hover {

@@ -231,9 +231,6 @@ export default function ProjectConfigModal({
             Back
           </button>
         )}
-        <h3 className="project-config-section-title">
-          {view === 'edit' ? 'Edit Project' : 'New Project'}
-        </h3>
         <form onSubmit={handleSubmit}>
           <div className="project-config-form">
             <div className="form-group">
