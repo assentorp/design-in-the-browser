@@ -73,23 +73,20 @@ const mainAPI: MainAPI = {
     ipcRenderer.send('app:install-update');
   },
 
-  startVSCodeServer: (projectPath: string) => {
-    return ipcRenderer.invoke('vscode:start', { projectPath });
+
+  openInEditor: (filePath: string, line?: number, column?: number) => {
+    ipcRenderer.send('editor:open-file', { filePath, line, column });
   },
 
-  stopVSCodeServer: () => {
-    return ipcRenderer.invoke('vscode:stop');
-  },
-
-  openInVSCode: (filePath: string, line?: number, column?: number) => {
-    ipcRenderer.send('vscode:open-file', { filePath, line, column });
+  detectEditors: () => {
+    return ipcRenderer.invoke('editor:detect');
   },
 
   checkUrl: (url: string): Promise<boolean> => {
     return ipcRenderer.invoke('url:check', { url });
   },
 
-  searchAndOpenInVSCode: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ file: string; line: number } | null> => {
+  searchAndOpenInEditor: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ file: string; line: number } | null> => {
     return ipcRenderer.invoke('vscode:search-element', { projectPath, info });
   },
 

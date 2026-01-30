@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { AppSettings } from '../../shared/types';
+import type { AppSettings, CodeEditor } from '../../shared/types';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -14,15 +14,26 @@ const CLEANUP_OPTIONS = [
   { value: 0, label: 'Never (manual cleanup)' },
 ];
 
+const EDITOR_LABELS: Record<CodeEditor, string> = {
+  vscode: 'VS Code',
+  cursor: 'Cursor',
+  zed: 'Zed',
+  sublime: 'Sublime Text',
+  webstorm: 'WebStorm',
+  nova: 'Nova',
+};
+
 export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [availableEditors, setAvailableEditors] = useState<CodeEditor[]>([]);
 
   useEffect(() => {
     window.mainAPI?.getSettings().then(setSettings);
+    window.mainAPI?.detectEditors().then(setAvailableEditors);
   }, []);
 
-  const handleChange = async (key: keyof AppSettings, value: number) => {
+  const handleChange = async (key: keyof AppSettings, value: number | string) => {
     if (!settings) return;
 
     setSaving(true);
@@ -68,6 +79,26 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
         <div className="modal-body">
           <div className="settings-section">
+            <div className="settings-group">
+              <label className="settings-label">
+                Code Editor
+                <span className="settings-description">
+                  Which editor to open when clicking the Code button
+                </span>
+              </label>
+              <select
+                value={settings.editor || 'vscode'}
+                onChange={(e) => handleChange('editor', e.target.value)}
+                className="form-select"
+                disabled={saving}
+              >
+                {availableEditors.map((editor) => (
+                  <option key={editor} value={editor}>
+                    {EDITOR_LABELS[editor]}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="settings-group">
               <label className="settings-label">
                 Screenshot Cleanup

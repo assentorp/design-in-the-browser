@@ -69,8 +69,6 @@ export interface Session {
   cliToolTabId: string | null;
   cliTool: CliTool | null;
   cliToolRunning: boolean;
-  codeViewActive: boolean;
-  vscodePort: number | null;
   shell: ShellType;
 }
 
@@ -78,8 +76,11 @@ export type CliTool = 'claude' | 'cursor' | 'gemini';
 
 export type ShellType = 'default' | 'wsl';
 
+export type CodeEditor = 'vscode' | 'cursor' | 'zed' | 'sublime' | 'webstorm' | 'nova';
+
 export interface AppSettings {
   screenshotCleanupMinutes: number;
+  editor: CodeEditor;
 }
 
 export interface ProjectPreset {
@@ -140,11 +141,10 @@ export interface MainAPI {
   onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
   downloadUpdate: () => void;
   installUpdate: () => void;
-  startVSCodeServer: (projectPath: string) => Promise<number>;
-  stopVSCodeServer: () => Promise<void>;
-  openInVSCode: (filePath: string, line?: number, column?: number) => void;
+  openInEditor: (filePath: string, line?: number, column?: number) => void;
+  detectEditors: () => Promise<CodeEditor[]>;
   checkUrl: (url: string) => Promise<boolean>;
-  searchAndOpenInVSCode: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
+  searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
 }

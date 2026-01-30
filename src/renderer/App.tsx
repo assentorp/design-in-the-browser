@@ -48,8 +48,6 @@ const createSession = (
     cliToolTabId: null,
     cliTool: null,
     cliToolRunning: false,
-    codeViewActive: false,
-    vscodePort: null,
     shell: config?.shell || 'default',
   };
 };
@@ -303,9 +301,6 @@ export default function App() {
     updateSession(activeSessionId, { terminalCollapsed: !enabled });
   }, [activeSessionId, updateSession]);
 
-  const handleCodeViewChange = useCallback((active: boolean) => {
-    updateSession(activeSessionId, { codeViewActive: active, terminalCollapsed: active });
-  }, [activeSessionId, updateSession]);
 
   const toggleTerminal = useCallback(() => {
     if (!activeSession) return;
@@ -419,12 +414,6 @@ export default function App() {
 
   const handleCloseSession = useCallback(
     (sessionId: string) => {
-      // Stop VS Code server if running
-      const session = sessions.find((s) => s.id === sessionId);
-      if (session?.codeViewActive && window.mainAPI?.stopVSCodeServer) {
-        window.mainAPI.stopVSCodeServer();
-      }
-
       // Clean up CLI activity timer
       const timer = cliTimersRef.current.get(sessionId);
       if (timer) clearTimeout(timer);
@@ -545,8 +534,6 @@ export default function App() {
             onAnnotateModeChange={handleAnnotateModeChange}
             onPendingEditsChange={handlePendingEditsChange}
             activeTerminalTabId={activeSession.cliToolTabId || activeSession.activeTerminalTabId}
-            codeViewActive={activeSession.codeViewActive}
-            onCodeViewChange={handleCodeViewChange}
             projectPath={activeSession.projectPath}
             onAnnotation={handleAnnotation}
           />

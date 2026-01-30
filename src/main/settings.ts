@@ -4,10 +4,12 @@ import * as path from 'path';
 
 export interface AppSettings {
   screenshotCleanupMinutes: number;
+  editor: string;
 }
 
 const defaultSettings: AppSettings = {
   screenshotCleanupMinutes: 5,
+  editor: 'vscode',
 };
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');

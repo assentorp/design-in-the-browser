@@ -898,8 +898,8 @@ export const annotationScript = `
       codeButtonElement = document.createElement('button');
       codeButtonElement.className = 'claude-design-code-btn';
       codeButtonElement.title = reactSource
-        ? 'Open in VS Code (' + (reactSource.fileName || '').split('/').pop() + ':' + (reactSource.lineNumber || '') + ')'
-        : 'Open in VS Code';
+        ? 'Open in editor (' + (reactSource.fileName || '').split('/').pop() + ':' + (reactSource.lineNumber || '') + ')'
+        : 'Open in editor';
       codeButtonElement.innerHTML =
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>' +
@@ -1404,5 +1404,6 @@ export const annotationScript = `
   window.__claudeDesignIsEnabled = function() { return annotateMode; };
   window.__claudeDesignSendAll = sendAllAnnotations;
   window.__claudeDesignRemoveItem = removePendingAnnotation;
+  window.__claudeDesignCancelAnnotation = cancelAnnotation;
 })();
 `;

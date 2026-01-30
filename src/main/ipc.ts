@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { spawn, exec, type ChildProcess } from 'child_process';
-import type { AnnotationData, ShellType } from '../shared/types';
+import type { AnnotationData, ShellType, CodeEditor } from '../shared/types';
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
 
 interface SessionState {
@@ -307,13 +307,26 @@ export function setupIPC(mainWindow: BrowserWindow) {
   ipcMain.handle('vscode:start', async (_, { projectPath }: { projectPath: string }) => {
     // Reuse existing server if it's for the same project and still alive
     const existing = vscodeServers.get('current');
-    if (existing && existing.projectPath === projectPath && !existing.process.killed) {
-      console.log('[IPC] Reusing existing VS Code server on port:', existing.port);
-      return existing.port;
-    }
-
-    // Kill existing server if it's for a different project
-    if (existing) {
+    if (existing && existing.projectPath === projectPath) {
+      // Verify the server is actually responding
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const req = http.get(`http://localhost:${existing.port}`, (res) => {
+            res.resume();
+            resolve();
+          });
+          req.on('error', reject);
+          req.setTimeout(2000, () => { req.destroy(); reject(new Error('timeout')); });
+        });
+        console.log('[IPC] Reusing existing VS Code server on port:', existing.port);
+        return existing.port;
+      } catch {
+        console.log('[IPC] Existing server not responding, starting fresh');
+        existing.process.kill();
+        vscodeServers.delete('current');
+      }
+    } else if (existing) {
+      // Kill existing server if it's for a different project
       existing.process.kill();
       vscodeServers.delete('current');
     }
@@ -386,7 +399,11 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
       proc.on('exit', (code) => {
         console.log('[IPC] VS Code server exited with code:', code);
-        vscodeServers.delete('current');
+        // Only clean up if this is still the current server
+        const current = vscodeServers.get('current');
+        if (current && current.process === proc) {
+          vscodeServers.delete('current');
+        }
       });
 
       // Timeout after 15 seconds
@@ -412,16 +429,108 @@ export function setupIPC(mainWindow: BrowserWindow) {
   });
 
   // Open file in VS Code desktop app
-  ipcMain.on('vscode:open-file', (_, { filePath, line, column }: { filePath: string; line?: number; column?: number }) => {
-    let uri = filePath;
-    if (line) {
-      uri += `:${line}`;
-      if (column) uri += `:${column}`;
+  // Editor configurations: CLI commands and how to format file:line arguments
+  const editorConfigs: Record<CodeEditor, { cmd: string; macPaths?: string[]; buildArgs: (file: string, line?: number, col?: number) => string[] }> = {
+    vscode: {
+      cmd: 'code',
+      macPaths: ['/usr/local/bin/code', '/opt/homebrew/bin/code', '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code'],
+      buildArgs: (file, line, col) => {
+        let uri = file;
+        if (line) { uri += `:${line}`; if (col) uri += `:${col}`; }
+        return ['--goto', uri];
+      },
+    },
+    cursor: {
+      cmd: 'cursor',
+      macPaths: ['/usr/local/bin/cursor', '/opt/homebrew/bin/cursor', '/Applications/Cursor.app/Contents/Resources/app/bin/cursor'],
+      buildArgs: (file, line, col) => {
+        let uri = file;
+        if (line) { uri += `:${line}`; if (col) uri += `:${col}`; }
+        return ['--goto', uri];
+      },
+    },
+    zed: {
+      cmd: 'zed',
+      macPaths: ['/usr/local/bin/zed', '/opt/homebrew/bin/zed'],
+      buildArgs: (file, line) => {
+        let uri = file;
+        if (line) uri += `:${line}`;
+        return [uri];
+      },
+    },
+    sublime: {
+      cmd: 'subl',
+      macPaths: ['/usr/local/bin/subl', '/opt/homebrew/bin/subl', '/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl'],
+      buildArgs: (file, line, col) => {
+        let uri = file;
+        if (line) { uri += `:${line}`; if (col) uri += `:${col}`; }
+        return [uri];
+      },
+    },
+    webstorm: {
+      cmd: 'webstorm',
+      macPaths: ['/usr/local/bin/webstorm', '/opt/homebrew/bin/webstorm'],
+      buildArgs: (file, line) => {
+        const args = ['--line', String(line || 1), file];
+        return args;
+      },
+    },
+    nova: {
+      cmd: 'nova',
+      macPaths: ['/usr/local/bin/nova'],
+      buildArgs: (file, line) => {
+        let uri = file;
+        if (line) uri += `:${line}`;
+        return [uri];
+      },
+    },
+  };
+
+  function resolveEditorCmd(editor: CodeEditor): string {
+    const config = editorConfigs[editor];
+    if (process.platform === 'darwin' && config.macPaths) {
+      for (const p of config.macPaths) {
+        if (fs.existsSync(p)) return p;
+      }
     }
-    console.log('[IPC] Opening in VS Code:', uri);
-    // Use full path on macOS since Electron doesn't inherit PATH
-    const codeCmd = process.platform === 'darwin' ? '/usr/local/bin/code' : 'code';
-    exec(`"${codeCmd}" --goto "${uri}"`, { env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` } });
+    return config.cmd;
+  }
+
+  ipcMain.on('editor:open-file', (_, { filePath, line, column }: { filePath: string; line?: number; column?: number }) => {
+    const settings = getSettings();
+    const editor = (settings.editor || 'vscode') as CodeEditor;
+    const config = editorConfigs[editor];
+    const cmd = resolveEditorCmd(editor);
+    const args = config.buildArgs(filePath, line, column);
+    console.log('[IPC] Opening in editor:', editor, cmd, args.join(' '));
+    spawn(cmd, args, {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
+    }).unref();
+  });
+
+  ipcMain.handle('editor:detect', async () => {
+    const detected: CodeEditor[] = [];
+    const envPath = `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin`;
+    for (const [name, config] of Object.entries(editorConfigs) as [CodeEditor, typeof editorConfigs[CodeEditor]][]) {
+      // Check macOS app paths first
+      if (process.platform === 'darwin' && config.macPaths) {
+        if (config.macPaths.some(p => fs.existsSync(p))) {
+          detected.push(name);
+          continue;
+        }
+      }
+      // Fall back to `which` / `where`
+      try {
+        const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+        await new Promise<void>((resolve, reject) => {
+          exec(`${whichCmd} ${config.cmd}`, { env: { ...process.env, PATH: envPath } }, (err) => err ? reject(err) : resolve());
+        });
+        detected.push(name);
+      } catch { /* not installed */ }
+    }
+    return detected;
   });
 
   // Search for element in project and open in VS Code
@@ -513,16 +622,29 @@ export function setupIPC(mainWindow: BrowserWindow) {
     if (info.textContent) {
       const fullText = info.textContent.trim();
 
+      // Rank results: prefer component/UI files over scripts, configs, etc.
+      const uiPathPattern = /(component|page|section|view|screen|layout|template|app|ui|feature|module|widget)\b/i;
+      const nonUiPathPattern = /(_?scripts?|utils?|helpers?|lib|config|migrations?|seeds?|cli|test|spec|__test__|__spec__|\.config\.|\.setup\.)/i;
+      function rankResults(results: { file: string; line: number }[]): { file: string; line: number }[] {
+        return results.sort((a, b) => {
+          const aIsUi = uiPathPattern.test(a.file) ? 0 : 1;
+          const bIsUi = uiPathPattern.test(b.file) ? 0 : 1;
+          const aIsNon = nonUiPathPattern.test(a.file) ? 1 : 0;
+          const bIsNon = nonUiPathPattern.test(b.file) ? 1 : 0;
+          return (aIsUi + aIsNon) - (bIsUi + bIsNon);
+        });
+      }
+
       // Try the full text first (short texts like "$69/mo")
       if (fullText.length >= 3 && fullText.length <= 60) {
-        const results = await grepAll(esc(fullText), 3);
+        const results = rankResults(await grepAll(esc(fullText), 5));
         if (results.length > 0) return openResult(results[0], `text "${fullText.substring(0, 30)}"`);
       }
 
       // Try first 40 chars (for longer texts)
       if (fullText.length > 10) {
         const sub = fullText.substring(0, 40);
-        const results = await grepAll(esc(sub), 3);
+        const results = rankResults(await grepAll(esc(sub), 5));
         if (results.length > 0) return openResult(results[0], `text "${sub.substring(0, 30)}..."`);
       }
 
@@ -531,14 +653,14 @@ export function setupIPC(mainWindow: BrowserWindow) {
       // Try pairs of consecutive words
       for (let i = 0; i < Math.min(words.length - 1, 5); i++) {
         const phrase = words[i] + '.*' + esc(words[i + 1]);
-        const results = await grepAll(phrase, 3);
+        const results = rankResults(await grepAll(phrase, 5));
         if (results.length > 0) return openResult(results[0], `phrase "${words[i]} ${words[i + 1]}"`);
       }
       // Try individual distinctive words (skip common ones)
       const commonWords = /^(the|and|or|a|an|is|are|was|were|be|to|of|in|for|on|with|at|by|from|this|that|our|your|you|we|all|can|get|has|have|not|but|its|more|out|than|them|then|way|will|about|also|been|come|each|just|like|make|many|most|new|now|only|other|over|some|such|take|time|very|when|who|how|per|into|one|two|Start|Free|Pro|Plan)$/i;
       for (const word of words.slice(0, 8)) {
         if (word.length < 5 || commonWords.test(word)) continue;
-        const results = await grepAll(esc(word), 5);
+        const results = rankResults(await grepAll(esc(word), 5));
         if (results.length === 1) return openResult(results[0], `word "${word}"`);
       }
     }

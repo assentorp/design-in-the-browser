@@ -240,6 +240,28 @@ body,
   }
 }
 
+.browser-loading-placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg-primary);
+}
+
+.browser-loading-spinner {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.browser-loading-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .webview-container {
   height: 100%;
   background: var(--bg-primary);
