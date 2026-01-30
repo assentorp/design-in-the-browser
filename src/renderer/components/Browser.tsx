@@ -304,6 +304,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const mainAPI = getMainAPI();
     if (!webview || !mainAPI) return;
 
+    // Deactivate edit mode when switching to code view
+    if (annotateMode) {
+      onAnnotateModeChange(false);
+    }
+
     // Compute the relative path for Quick Open
     const relativePath = filePath.startsWith(projectPath)
       ? filePath.slice(projectPath.length + 1)
@@ -339,7 +344,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       // Navigate to VS Code — the pending file will be opened via did-stop-loading
       webview.src = vscodeUrl;
     }
-  }, [codeViewActive, onCodeViewChange, projectPath]);
+  }, [annotateMode, codeViewActive, onAnnotateModeChange, onCodeViewChange, projectPath]);
 
   // Poll for messages from the injected script
   useEffect(() => {
@@ -548,7 +553,6 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       const webview = webviewRef.current;
       if (webview) {
         onCodeViewChange(false);
-        vscodePortRef.current = null;
         const restoreUrl = savedUrlRef.current || url;
         savedUrlRef.current = null;
         webview.src = restoreUrl;
