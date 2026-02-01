@@ -810,20 +810,21 @@ interface MultiEditAnnotation {
 }
 
 function formatMultiEditPrompt(annotations: MultiEditAnnotation[], screenshotPaths: string[]): string {
-  const parts: string[] = [];
+  const lines: string[] = ['Make the following changes:'];
+  lines.push('');
 
   for (let i = 0; i < annotations.length; i++) {
     const ann = annotations[i];
     const screenshot = screenshotPaths[i];
 
-    // Format: <tagName> "text": note (see screenshot: path)
-    let line = `<${ann.tagName}>`;
+    // Format as markdown list: - `<tagName>` "text": note (see screenshot: path)
+    let line = `- \`<${ann.tagName}>\``;
     if (ann.text) line += ` "${ann.text}"`;
     line += `: ${ann.note}`;
     if (screenshot) line += ` (see screenshot: ${screenshot})`;
 
-    parts.push(line);
+    lines.push(line);
   }
 
-  return parts.join('\n');
+  return lines.join('\n');
 }
