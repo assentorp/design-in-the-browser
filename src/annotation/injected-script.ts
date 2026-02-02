@@ -408,6 +408,88 @@ export const annotationScript = `
         width: 14px;
         height: 14px;
       }
+      .claude-design-mention-dropdown {
+        position: fixed;
+        z-index: 2147483647;
+        background: #252525;
+        border: 1px solid #4a4a4a;
+        border-radius: 12px;
+        max-height: 300px;
+        overflow-y: auto;
+        width: 320px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        padding: 4px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      .claude-design-mention-dropdown::-webkit-scrollbar {
+        width: 6px;
+      }
+      .claude-design-mention-dropdown::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .claude-design-mention-dropdown::-webkit-scrollbar-thumb {
+        background: #444;
+        border-radius: 3px;
+      }
+      .claude-design-mention-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+      .claude-design-mention-item:hover,
+      .claude-design-mention-item.active {
+        background: #333;
+      }
+      .claude-design-mention-icon {
+        flex-shrink: 0;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        width: 28px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.06);
+      }
+      .claude-design-mention-icon.ts { color: #3b82f6; }
+      .claude-design-mention-icon.tsx { color: #3b82f6; }
+      .claude-design-mention-icon.js { color: #eab308; }
+      .claude-design-mention-icon.jsx { color: #eab308; }
+      .claude-design-mention-icon.json { color: #eab308; }
+      .claude-design-mention-icon.css { color: #ec4899; }
+      .claude-design-mention-icon.html { color: #f97316; }
+      .claude-design-mention-icon.vue { color: #22c55e; }
+      .claude-design-mention-icon.svelte { color: #f97316; }
+      .claude-design-mention-icon.md { color: #888; }
+      .claude-design-mention-icon.other { color: #888; }
+      .claude-design-mention-name {
+        font-size: 13px;
+        color: #e5e5e5;
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-weight: 500;
+      }
+      .claude-design-mention-dir {
+        font-size: 12px;
+        color: #666;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-left: auto;
+        min-width: 0;
+      }
+      .claude-design-mention-empty {
+        padding: 12px 10px;
+        color: #666;
+        font-size: 13px;
+        text-align: center;
+      }
     \`;
     document.head.appendChild(style);
   }
@@ -502,6 +584,21 @@ export const annotationScript = `
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // Expand @filename mentions to full paths using the textarea's mention map
+  function expandMentions(text, textarea) {
+    var map = textarea && textarea.__mentionMap;
+    if (!map) return text;
+    var result = text;
+    var names = Object.keys(map);
+    // Sort longest names first to avoid partial replacements
+    names.sort(function(a, b) { return b.length - a.length; });
+    for (var i = 0; i < names.length; i++) {
+      var name = names[i];
+      result = result.split('@' + name).join(map[name]);
+    }
+    return result;
   }
 
   function removeToolbar() {
@@ -701,6 +798,275 @@ export const annotationScript = `
       current = current.return;
     }
     return names; // closest component first, then ancestors
+  }
+
+  // @-mention autocomplete
+  function getFileIcon(name) {
+    var ext = name.split('.').pop().toLowerCase();
+    var map = {
+      ts: 'TS', tsx: 'TSX', js: 'JS', jsx: 'JSX',
+      json: '{}', css: '#', scss: '#',
+      html: '<>', vue: '<>', svelte: '<>',
+      md: 'MD', yaml: '~', yml: '~',
+      py: 'PY', go: 'GO', rs: 'RS',
+      env: '.E', toml: '~',
+    };
+    return { label: map[ext] || '..', cls: map[ext] ? ext : 'other' };
+  }
+
+  function getIconClass(name) {
+    var ext = name.split('.').pop().toLowerCase();
+    if (ext === 'tsx' || ext === 'ts') return 'ts';
+    if (ext === 'jsx' || ext === 'js') return 'js';
+    if (ext === 'json') return 'json';
+    if (ext === 'css' || ext === 'scss') return 'css';
+    if (ext === 'html') return 'html';
+    if (ext === 'vue') return 'vue';
+    if (ext === 'svelte') return 'svelte';
+    if (ext === 'md') return 'md';
+    return 'other';
+  }
+
+  function setupMentionAutocomplete(textarea) {
+    var mention = { active: false, startIndex: -1 };
+    var dropdown = null;
+    var activeIndex = 0;
+    var filteredFiles = [];
+
+    function getFiles() {
+      return window.__claudeDesignProjectFiles || [];
+    }
+
+    function filterFiles(query) {
+      var q = query.toLowerCase();
+      var files = getFiles();
+      if (!q) return files.slice(0, 50);
+      var results = files.filter(function(f) {
+        var fullPath = (f.dir === '.' ? f.name : f.dir + '/' + f.name).toLowerCase();
+        return fullPath.indexOf(q) !== -1;
+      });
+      // Sort: filename matches first, then directory-only matches
+      results.sort(function(a, b) {
+        var aName = a.name.toLowerCase().indexOf(q) !== -1 ? 0 : 1;
+        var bName = b.name.toLowerCase().indexOf(q) !== -1 ? 0 : 1;
+        return aName - bName;
+      });
+      return results.slice(0, 50);
+    }
+
+    function removeDropdown() {
+      if (dropdown) {
+        dropdown.remove();
+        dropdown = null;
+      }
+      mention.active = false;
+      activeIndex = 0;
+      filteredFiles = [];
+    }
+
+    function positionDropdown() {
+      if (!dropdown || !textarea) return;
+      var rect = textarea.getBoundingClientRect();
+      var dropHeight = dropdown.offsetHeight || 200;
+      var spaceAbove = rect.top - 6;
+      var spaceBelow = window.innerHeight - rect.bottom - 6;
+      var width = Math.min(rect.width, window.innerWidth - 12);
+      var left = rect.left;
+
+      // Clamp left so dropdown stays in viewport
+      if (left + width > window.innerWidth - 6) left = window.innerWidth - 6 - width;
+      if (left < 6) left = 6;
+
+      dropdown.style.width = width + 'px';
+      dropdown.style.left = left + 'px';
+      dropdown.style.maxHeight = Math.max(120, Math.min(300, spaceAbove > spaceBelow ? spaceAbove : spaceBelow)) + 'px';
+
+      if (spaceAbove >= dropHeight || spaceAbove >= spaceBelow) {
+        // Position above
+        dropdown.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+        dropdown.style.top = 'auto';
+      } else {
+        // Position below
+        dropdown.style.top = (rect.bottom + 6) + 'px';
+        dropdown.style.bottom = 'auto';
+      }
+    }
+
+    function renderDropdown(query) {
+      filteredFiles = filterFiles(query);
+      activeIndex = 0;
+
+      var isNew = !dropdown;
+      if (isNew) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'claude-design-mention-dropdown';
+        document.body.appendChild(dropdown);
+      }
+
+      if (filteredFiles.length === 0) {
+        dropdown.innerHTML = '<div class="claude-design-mention-empty">No files found</div>';
+        positionDropdown();
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < filteredFiles.length; i++) {
+        var f = filteredFiles[i];
+        var icon = getFileIcon(f.name);
+        var cls = getIconClass(f.name);
+        var dir = f.dir === '.' ? '' : f.dir;
+        var fullPath = dir ? dir + '/' + f.name : f.name;
+        html += '<div class="claude-design-mention-item' + (i === 0 ? ' active' : '') + '" data-mention-index="' + i + '" title="' + escapeHtml(fullPath) + '">' +
+          '<span class="claude-design-mention-icon ' + cls + '">' + icon.label + '</span>' +
+          '<span class="claude-design-mention-name">' + escapeHtml(f.name) + '</span>' +
+          (dir ? '<span class="claude-design-mention-dir">' + escapeHtml(dir) + '</span>' : '') +
+        '</div>';
+      }
+      dropdown.innerHTML = html;
+      positionDropdown();
+
+      if (isNew) {
+        // Hover handler
+        dropdown.addEventListener('mouseover', function(e) {
+          var item = e.target.closest ? e.target.closest('.claude-design-mention-item') : null;
+          if (!item) return;
+          var idx = parseInt(item.dataset.mentionIndex, 10);
+          if (isNaN(idx)) return;
+          setActive(idx);
+        });
+
+        // Click handler
+        dropdown.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var item = e.target.closest ? e.target.closest('.claude-design-mention-item') : null;
+          if (!item) return;
+          var idx = parseInt(item.dataset.mentionIndex, 10);
+          if (!isNaN(idx)) selectItem(idx);
+        });
+      }
+    }
+
+    function setActive(idx) {
+      if (idx < 0 || idx >= filteredFiles.length) return;
+      activeIndex = idx;
+      if (!dropdown) return;
+      var items = dropdown.querySelectorAll('.claude-design-mention-item');
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle('active', i === idx);
+      }
+      // Scroll into view
+      if (items[idx]) {
+        items[idx].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function selectItem(idx) {
+      if (idx < 0 || idx >= filteredFiles.length) return;
+      var f = filteredFiles[idx];
+      var fullPath = f.dir === '.' ? f.name : f.dir + '/' + f.name;
+
+      // Store mention mapping on the textarea for later expansion
+      if (!textarea.__mentionMap) textarea.__mentionMap = {};
+      textarea.__mentionMap[f.name] = fullPath;
+
+      // Keep the @ and insert just the filename: @page.tsx
+      var value = textarea.value;
+      var after = value.substring(textarea.selectionStart);
+      textarea.value = value.substring(0, mention.startIndex) + f.name + after;
+
+      // Set cursor after inserted name (startIndex is already after the @)
+      var newPos = mention.startIndex + f.name.length;
+      textarea.selectionStart = newPos;
+      textarea.selectionEnd = newPos;
+
+      removeDropdown();
+
+      // Trigger input event to auto-resize
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    textarea.addEventListener('input', function() {
+      var value = textarea.value;
+      var cursorPos = textarea.selectionStart;
+
+      if (mention.active) {
+        // Check if cursor moved before the @
+        if (cursorPos < mention.startIndex) {
+          removeDropdown();
+          return;
+        }
+        // Also verify the @ is still there
+        if (value[mention.startIndex - 1] !== '@') {
+          removeDropdown();
+          return;
+        }
+        var query = value.substring(mention.startIndex, cursorPos);
+        // Close if user typed space or newline in query
+        if (query.indexOf(' ') !== -1 || query.indexOf('\\n') !== -1) {
+          removeDropdown();
+          return;
+        }
+        renderDropdown(query);
+        return;
+      }
+
+      // Check if cursor is right after an @ (handles both typing @ and backspacing to @)
+      if (cursorPos > 0 && value[cursorPos - 1] === '@') {
+        // Only trigger if @ is at start or preceded by whitespace
+        if (cursorPos === 1 || /\\s/.test(value[cursorPos - 2])) {
+          mention.active = true;
+          mention.startIndex = cursorPos; // after the @
+          renderDropdown('');
+        }
+      }
+    });
+
+    textarea.addEventListener('keydown', function(e) {
+      if (!mention.active || !dropdown) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        var next = activeIndex + 1;
+        if (next >= filteredFiles.length) next = 0;
+        setActive(next);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        var prev = activeIndex - 1;
+        if (prev < 0) prev = filteredFiles.length - 1;
+        setActive(prev);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        if (filteredFiles.length > 0) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          selectItem(activeIndex);
+          return;
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        removeDropdown();
+        return;
+      }
+    });
+
+    // Clean up when textarea is removed
+    var observer = new MutationObserver(function() {
+      if (!document.contains(textarea)) {
+        removeDropdown();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return { removeDropdown: removeDropdown };
   }
 
   // Reference image state
@@ -966,6 +1332,7 @@ export const annotationScript = `
     }
     if (textarea) {
       textarea.addEventListener('input', autoResize);
+      setupMentionAutocomplete(textarea);
     }
 
     function handleFile(file) {
@@ -1025,7 +1392,7 @@ export const annotationScript = `
         todoMode = true;
         // Save current note if there's text, then close popover to select another element
         var ta = popoverElement && popoverElement.querySelector('textarea');
-        var currentNote = ta && ta.value.trim();
+        var currentNote = ta && expandMentions(ta.value.trim(), ta);
         if (currentNote && selectedElement) {
           savePendingAnnotation(selectedElement, currentNote);
         }
@@ -1048,7 +1415,7 @@ export const annotationScript = `
         e.preventDefault();
         if (todoMode || pendingAnnotations.length > 0) {
           // Save current note first if there's text, then send all
-          var currentNote = textarea.value.trim();
+          var currentNote = expandMentions(textarea.value.trim(), textarea);
           if (currentNote && selectedElement) {
             savePendingAnnotation(selectedElement, currentNote);
           }
@@ -1061,7 +1428,7 @@ export const annotationScript = `
       // Shift+Enter: Add to list (enter list mode and save)
       if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
-        var note = textarea.value.trim();
+        var note = expandMentions(textarea.value.trim(), textarea);
         if (!note) {
           textarea.focus();
           return;
@@ -1141,7 +1508,7 @@ export const annotationScript = `
     if (!popoverElement) return;
 
     const textarea = popoverElement.querySelector('textarea');
-    const note = textarea && textarea.value.trim();
+    const note = textarea && expandMentions(textarea.value.trim(), textarea);
 
     if (!note) {
       textarea && textarea.focus();
@@ -1165,7 +1532,7 @@ export const annotationScript = `
     if (!popoverElement) return;
 
     const textarea = popoverElement.querySelector('textarea');
-    const request = textarea && textarea.value.trim();
+    const request = textarea && expandMentions(textarea.value.trim(), textarea);
 
     if (!request) {
       textarea && textarea.focus();

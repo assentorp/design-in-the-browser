@@ -738,6 +738,49 @@ export function setupIPC(mainWindow: BrowserWindow) {
     });
   });
 
+  // List project files for @-mention autocomplete
+  ipcMain.handle('project:list-files', async (_, { projectPath }: { projectPath: string }) => {
+    const excludeDirs = new Set([
+      'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.output',
+      'coverage', '.cache', '.turbo', '.vercel', '.svelte-kit', '__pycache__',
+      'venv', '.venv', '.idea', '.vscode', '.DS_Store',
+    ]);
+    const includeExts = new Set([
+      '.ts', '.tsx', '.js', '.jsx', '.json', '.css', '.scss', '.html',
+      '.vue', '.svelte', '.md', '.yaml', '.yml', '.env', '.toml',
+      '.py', '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.java',
+    ]);
+    const maxFiles = 10000;
+    const results: { name: string; dir: string }[] = [];
+
+    function walk(dir: string) {
+      if (results.length >= maxFiles) return;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (results.length >= maxFiles) return;
+        if (entry.isDirectory()) {
+          if (!excludeDirs.has(entry.name)) {
+            walk(path.join(dir, entry.name));
+          }
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (includeExts.has(ext)) {
+            const relDir = path.relative(projectPath, dir);
+            results.push({ name: entry.name, dir: relDir || '.' });
+          }
+        }
+      }
+    }
+
+    walk(projectPath);
+    return results;
+  });
+
   // Handle update download request
   ipcMain.on('app:download-update', () => {
     console.log('[IPC] Download update requested');

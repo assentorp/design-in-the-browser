@@ -124,10 +124,16 @@ export interface WebviewAPI {
   onToggleAnnotate: (callback: (enabled: boolean) => void) => void;
 }
 
+export interface ProjectFile {
+  name: string;
+  dir: string;
+}
+
 export interface MainAPI {
   createTerminal: (sessionId: string, cwd?: string, shell?: ShellType) => void;
   getPlatform: () => string;
   checkWslAvailable: () => Promise<boolean>;
+  listProjectFiles: (projectPath: string) => Promise<ProjectFile[]>;
   destroyTerminal: (sessionId: string) => void;
   sendTerminalInput: (sessionId: string, data: string) => void;
   resizeTerminal: (sessionId: string, cols: number, rows: number) => void;

@@ -99,6 +99,21 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       console.log('[Browser] Injecting main script...');
       // Then inject the main script
       await webview.executeJavaScript(annotationScript + '\ntrue;');
+
+      // Inject project files for @-mention autocomplete
+      const mainAPI = getMainAPI();
+      if (mainAPI && projectPath) {
+        try {
+          const files = await mainAPI.listProjectFiles(projectPath);
+          await webview.executeJavaScript(
+            `window.__claudeDesignProjectFiles = ${JSON.stringify(files)}; true;`
+          );
+          console.log('[Browser] Injected project files:', files.length);
+        } catch (err) {
+          console.error('[Browser] Failed to inject project files:', err);
+        }
+      }
+
       setIsReady(true);
       console.log('[Browser] Injection complete, isReady = true');
     } catch (err) {

@@ -12,6 +12,8 @@ const mainAPI: MainAPI = {
 
   checkWslAvailable: () => ipcRenderer.invoke('wsl:check'),
 
+  listProjectFiles: (projectPath: string) => ipcRenderer.invoke('project:list-files', { projectPath }),
+
   destroyTerminal: (sessionId: string) => {
     ipcRenderer.send('terminal:destroy', { sessionId });
   },
