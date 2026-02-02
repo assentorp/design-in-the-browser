@@ -7,7 +7,7 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.2.26',
-    date: '2025-02-03',
+    date: 'February 3, 2026',
     changes: [
       'Fix file drag-and-drop into terminal',
       'Add "Create your first project" title to first-launch screen',
