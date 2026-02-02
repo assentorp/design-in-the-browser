@@ -96,6 +96,13 @@ export function createMenu(mainWindow: BrowserWindow) {
           enabled: false,
         },
         { type: 'separator' as const },
+        {
+          label: "What's New...",
+          click: () => {
+            mainWindow.webContents.send('open-whats-new');
+          },
+        },
+        { type: 'separator' as const },
         ...(!isMac
           ? [
               {

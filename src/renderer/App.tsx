@@ -7,6 +7,8 @@ import EditQueuePanel from './components/EditQueuePanel';
 import QueuedEditsPanel, { type QueuedEdit } from './components/QueuedEditsPanel';
 import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
+import WhatsNewModal from './components/WhatsNewModal';
+import { changelog } from './changelog';
 import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData, MultiEditData } from '../shared/types';
 
 // Prevent Electron from navigating when files are dragged onto the window
@@ -78,6 +80,8 @@ export default function App() {
   const [editActions, setEditActions] = useState<EditActions | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showWhatsNewModal, setShowWhatsNewModal] = useState(false);
+  const [hasUnseenChanges, setHasUnseenChanges] = useState(false);
   const [projectPresets, setProjectPresets] = useState<ProjectPreset[]>(() => loadPresets());
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [editQueue, setEditQueue] = useState<QueuedEdit[]>([]);
@@ -104,6 +108,24 @@ export default function App() {
     if (onSettingsOpen) {
       onSettingsOpen(() => setShowSettingsModal(true));
     }
+  }, []);
+
+  // Listen for What's New menu trigger
+  useEffect(() => {
+    const onWhatsNewOpen = (window as unknown as { onWhatsNewOpen?: (cb: () => void) => void }).onWhatsNewOpen;
+    if (onWhatsNewOpen) {
+      onWhatsNewOpen(() => handleOpenWhatsNew());
+    }
+  }, []);
+
+  // Check for unseen changelog on mount
+  useEffect(() => {
+    window.mainAPI?.getAppVersion().then((version) => {
+      const lastSeen = localStorage.getItem('ditb-last-seen-version');
+      if (lastSeen !== version) {
+        setHasUnseenChanges(true);
+      }
+    });
   }, []);
 
   // Detect CLI tool activity from terminal data
@@ -324,6 +346,14 @@ export default function App() {
     [activeSessionId, updateSession]
   );
 
+  const handleOpenWhatsNew = useCallback(() => {
+    setShowWhatsNewModal(true);
+    setHasUnseenChanges(false);
+    window.mainAPI?.getAppVersion().then((version) => {
+      localStorage.setItem('ditb-last-seen-version', version);
+    });
+  }, []);
+
   const handleNewSession = useCallback(() => {
     setShowConfigModal(true);
   }, []);
@@ -521,6 +551,9 @@ export default function App() {
       {showSettingsModal && (
         <SettingsModal onClose={() => setShowSettingsModal(false)} />
       )}
+      {showWhatsNewModal && (
+        <WhatsNewModal changelog={changelog} onClose={() => setShowWhatsNewModal(false)} />
+      )}
       <TabBar
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -529,6 +562,9 @@ export default function App() {
         onCloseSession={handleCloseSession}
         terminalCollapsed={activeSession.terminalCollapsed}
         onToggleTerminal={toggleTerminal}
+        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenWhatsNew={handleOpenWhatsNew}
+        hasUnseenChanges={hasUnseenChanges}
       />
       <div className="panes">
         <div

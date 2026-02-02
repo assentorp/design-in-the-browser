@@ -101,6 +101,8 @@ const mainAPI: MainAPI = {
   getPathForFile: (file: File): string => {
     return webUtils.getPathForFile(file);
   },
+
+  getAppVersion: () => ipcRenderer.invoke('app:version'),
 };
 
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);
@@ -109,4 +111,8 @@ console.log('[Preload] mainAPI exposed to window');
 // Expose settings open listener separately since it needs to work before mainAPI is fully loaded
 contextBridge.exposeInMainWorld('onSettingsOpen', (callback: () => void) => {
   ipcRenderer.on('open-settings', () => callback());
+});
+
+contextBridge.exposeInMainWorld('onWhatsNewOpen', (callback: () => void) => {
+  ipcRenderer.on('open-whats-new', () => callback());
 });

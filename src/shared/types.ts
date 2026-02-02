@@ -150,6 +150,7 @@ export interface MainAPI {
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
   getPathForFile: (file: File) => string;
+  getAppVersion: () => Promise<string>;
 }
 
 export interface ElementSearchInfo {

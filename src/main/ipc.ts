@@ -711,6 +711,11 @@ export function setupIPC(mainWindow: BrowserWindow) {
     return null;
   });
 
+  // Get app version
+  ipcMain.handle('app:version', () => {
+    return app.getVersion();
+  });
+
   // Get app settings
   ipcMain.handle('settings:get', () => {
     return getSettings();
