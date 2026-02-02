@@ -915,6 +915,13 @@ body,
   gap: 24px;
 }
 
+.project-config-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
 .project-config-section-title {
   font-size: 13px;
   font-weight: 600;

@@ -245,6 +245,9 @@ export default function ProjectConfigModal({
             Back
           </button>
         )}
+        {!canClose && !hasPresets && (
+          <h2 className="project-config-title">Create your first project</h2>
+        )}
         <form onSubmit={handleSubmit}>
           <div className="project-config-form">
             <div className="form-group">
