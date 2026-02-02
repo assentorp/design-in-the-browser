@@ -118,6 +118,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   </option>
                 ))}
               </select>
+              <span className="settings-hint">
+                Screenshots are stored in your system's temp folder and cleaned up automatically by the OS if the app closes before the timer runs.
+              </span>
             </div>
           </div>
         </div>

@@ -202,7 +202,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       return;
     }
 
-    const tempDir = app.getPath('temp');
+    const screenshotDir = app.getPath('temp');
     const timestamp = Date.now();
 
     // Check if this is multi-edit data
@@ -217,7 +217,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
         const ann = anyData.annotations[i];
         if (ann.screenshot) {
           try {
-            const screenshotPath = path.join(tempDir, `claude-design-screenshot-${timestamp}-${i}.png`);
+            const screenshotPath = path.join(screenshotDir, `claude-design-screenshot-${timestamp}-${i}.png`);
             const base64Data = ann.screenshot.replace(/^data:image\/png;base64,/, '');
             fs.writeFileSync(screenshotPath, base64Data, 'base64');
             screenshotPaths.push(screenshotPath);
@@ -258,7 +258,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       // Save screenshot if present
       if (data.screenshot) {
         try {
-          screenshotPath = path.join(tempDir, `claude-design-screenshot-${timestamp}.png`);
+          screenshotPath = path.join(screenshotDir, `claude-design-screenshot-${timestamp}.png`);
           const base64Data = data.screenshot.replace(/^data:image\/png;base64,/, '');
           fs.writeFileSync(screenshotPath, base64Data, 'base64');
           console.log('[IPC] Screenshot saved:', screenshotPath);
@@ -272,7 +272,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
         try {
           const matches = data.referenceImage.match(/^data:image\/(\w+);base64,/);
           const ext = matches ? matches[1] : 'png';
-          referenceImagePath = path.join(tempDir, `claude-design-reference-${timestamp}.${ext}`);
+          referenceImagePath = path.join(screenshotDir, `claude-design-reference-${timestamp}.${ext}`);
           const base64Data = data.referenceImage.replace(/^data:image\/\w+;base64,/, '');
           fs.writeFileSync(referenceImagePath, base64Data, 'base64');
           console.log('[IPC] Reference image saved:', referenceImagePath);
@@ -774,22 +774,19 @@ function formatAnnotationPrompt(data: AnnotationData, screenshotPath?: string, r
 
   // Handle text selection annotations
   if (selectedText) {
-    // Format: "simpl": Fix typo
-    prompt = `"${selectedText}": ${request}`;
+    prompt = `- "${selectedText}": ${request}`;
   }
   // Handle multi-select annotations
   else if (elements && elements.length > 1) {
-    // Format: <button.nav-link>, <button.nav-link>, <button.nav-link>: Add hover effect
     const displaySelectors = elements.map(e => e.displaySelector || `<${e.tagName}>`).join(', ');
-    prompt = `${displaySelectors}: ${request}`;
+    prompt = `- ${displaySelectors}: ${request}`;
   }
   // Handle single element annotations
   else {
-    // Include text and attributes for faster grepping
     const parts = [`<${element.tagName}>`];
     if (element.text) parts.push(`"${element.text}"`);
     if (element.attributes) parts.push(`[${element.attributes}]`);
-    prompt = `${parts.join(' ')}: ${request}`;
+    prompt = `- ${parts.join(' ')}: ${request}`;
   }
 
   // Add screenshot path for Claude to read
@@ -821,8 +818,7 @@ function formatMultiEditPrompt(annotations: MultiEditAnnotation[], screenshotPat
     const ann = annotations[i];
     const screenshot = screenshotPaths[i];
 
-    // Format: <tagName> "text": note (see screenshot: path)
-    let line = `<${ann.tagName}>`;
+    let line = `- <${ann.tagName}>`;
     if (ann.text) line += ` "${ann.text}"`;
     line += `: ${ann.note}`;
     if (screenshot) line += ` (see screenshot: ${screenshot})`;

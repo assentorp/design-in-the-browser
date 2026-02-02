@@ -1213,6 +1213,13 @@ body,
   color: var(--text-secondary);
 }
 
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  opacity: 0.7;
+}
+
 .settings-loading {
   padding: 20px;
   text-align: center;
