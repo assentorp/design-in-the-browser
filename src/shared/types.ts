@@ -149,6 +149,7 @@ export interface MainAPI {
   searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
+  getPathForFile: (file: File) => string;
 }
 
 export interface ElementSearchInfo {

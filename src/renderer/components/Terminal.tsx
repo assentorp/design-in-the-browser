@@ -313,9 +313,10 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
       const paths: string[] = [];
       for (let i = 0; i < e.dataTransfer.files.length; i++) {
-        const file = e.dataTransfer.files[i] as File & { path?: string };
-        if (file.path) {
-          paths.push(file.path);
+        const file = e.dataTransfer.files[i];
+        const filePath = mainAPI.getPathForFile?.(file);
+        if (filePath) {
+          paths.push(filePath);
         }
       }
 

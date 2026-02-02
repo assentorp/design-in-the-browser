@@ -9,6 +9,10 @@ import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
 import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData, MultiEditData } from '../shared/types';
 
+// Prevent Electron from navigating when files are dragged onto the window
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
+
 const CLI_COMMANDS: Record<CliTool, string> = {
   claude: 'claude',
   cursor: 'cursor',

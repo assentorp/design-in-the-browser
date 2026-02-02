@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { AnnotationData, MainAPI, ShellType, AppSettings } from '../shared/types';
 
 console.log('[Preload] Script starting...');
@@ -96,6 +96,10 @@ const mainAPI: MainAPI = {
 
   saveSettings: (settings: Partial<AppSettings>): Promise<AppSettings> => {
     return ipcRenderer.invoke('settings:save', settings);
+  },
+
+  getPathForFile: (file: File): string => {
+    return webUtils.getPathForFile(file);
   },
 };
 
