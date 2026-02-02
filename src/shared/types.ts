@@ -91,6 +91,8 @@ export interface ProjectPreset {
   url: string;
   cliTool: CliTool;
   shell?: ShellType;
+  claudeModel?: string;
+  dangerouslySkipPermissions?: boolean;
 }
 
 export interface ElementInfo {

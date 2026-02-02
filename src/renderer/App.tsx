@@ -325,7 +325,7 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(
-    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean }) => {
+    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean }) => {
       const newIndex = sessionCounter + 1;
       const newSession = createSession(
         { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
@@ -366,6 +366,8 @@ export default function App() {
           url: config.url,
           cliTool: config.cliTool,
           shell: config.shell,
+          claudeModel: config.claudeModel || undefined,
+          dangerouslySkipPermissions: config.dangerouslySkipPermissions || undefined,
         };
         setProjectPresets((prev) => {
           const updated = [...prev, newPreset];
@@ -385,10 +387,16 @@ export default function App() {
         });
       }
 
+      let cliCommand = CLI_COMMANDS[config.cliTool];
+      if (config.cliTool === 'claude') {
+        if (config.claudeModel) cliCommand += ` --model ${config.claudeModel}`;
+        if (config.dangerouslySkipPermissions) cliCommand += ' --dangerously-skip-permissions';
+      }
+
       commands.push({
         sessionId: newSession.id,
         tabId: cliTabId,
-        command: CLI_COMMANDS[config.cliTool],
+        command: cliCommand,
       });
 
       pendingCommandsRef.current = [...pendingCommandsRef.current, ...commands];

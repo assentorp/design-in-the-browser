@@ -13,6 +13,8 @@ interface ProjectConfigModalProps {
     cliTool: CliTool;
     shell: ShellType;
     saveAsPreset: boolean;
+    claudeModel: string;
+    dangerouslySkipPermissions: boolean;
   }) => void;
   onDeletePreset: (presetId: string) => void;
   onUpdatePreset: (preset: ProjectPreset) => void;
@@ -38,6 +40,8 @@ export default function ProjectConfigModal({
   const [cliTool, setCliTool] = useState<CliTool>('claude');
   const [shell, setShell] = useState<ShellType>('default');
   const [saveAsPreset, setSaveAsPreset] = useState(true);
+  const [claudeModel, setClaudeModel] = useState('');
+  const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
   const [search, setSearch] = useState('');
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [isWindows, setIsWindows] = useState(false);
@@ -71,6 +75,8 @@ export default function ProjectConfigModal({
       cliTool: preset.cliTool || 'claude',
       shell: preset.shell || 'default',
       saveAsPreset: false,
+      claudeModel: preset.claudeModel || '',
+      dangerouslySkipPermissions: preset.dangerouslySkipPermissions || false,
     });
   };
 
@@ -82,6 +88,8 @@ export default function ProjectConfigModal({
     setUrl(preset.url || 'http://localhost:3000');
     setCliTool(preset.cliTool || 'claude');
     setShell(preset.shell || 'default');
+    setClaudeModel(preset.claudeModel || '');
+    setDangerouslySkipPermissions(preset.dangerouslySkipPermissions || false);
     setView('edit');
   };
 
@@ -93,6 +101,8 @@ export default function ProjectConfigModal({
     setUrl('http://localhost:3000');
     setCliTool('claude');
     setShell('default');
+    setClaudeModel('');
+    setDangerouslySkipPermissions(false);
     setSaveAsPreset(true);
     setView('new');
   };
@@ -131,6 +141,8 @@ export default function ProjectConfigModal({
         url: url.trim() || 'http://localhost:3000',
         cliTool,
         shell,
+        claudeModel: cliTool === 'claude' ? claudeModel : undefined,
+        dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : undefined,
       });
     }
 
@@ -142,6 +154,8 @@ export default function ProjectConfigModal({
       cliTool,
       shell,
       saveAsPreset: !editingPresetId && saveAsPreset,
+      claudeModel: cliTool === 'claude' ? claudeModel : '',
+      dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
     });
   };
 
@@ -293,6 +307,38 @@ export default function ProjectConfigModal({
                 <option value="gemini">Gemini</option>
               </select>
             </div>
+            {cliTool === 'claude' && (
+              <div className="form-group">
+                <label>Model</label>
+                <select
+                  value={claudeModel}
+                  onChange={(e) => setClaudeModel(e.target.value)}
+                  className="form-select"
+                >
+                  <option value="">Default</option>
+                  <option value="sonnet">Sonnet</option>
+                  <option value="opus">Opus</option>
+                  <option value="haiku">Haiku</option>
+                </select>
+              </div>
+            )}
+            {cliTool === 'claude' && (
+              <div className="form-group">
+                <label className="form-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={dangerouslySkipPermissions}
+                    onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
+                  />
+                  Bypass permission prompts
+                </label>
+                {dangerouslySkipPermissions && (
+                  <span className="form-hint form-hint-warning">
+                    Skips all permission checks. Only use in trusted projects you fully control.
+                  </span>
+                )}
+              </div>
+            )}
             {isWindows && wslAvailable && (
               <div className="form-group">
                 <label>Shell</label>
