@@ -6,6 +6,21 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.27',
+    date: 'February 4, 2026',
+    changes: [
+      'Double-click terminal tab names to rename them',
+      'Confirmation dialog when closing project or terminal tabs',
+      'Close buttons moved to far right of tabs to prevent accidental clicks',
+      'Fix annotations not auto-submitting to Claude Code',
+      'Session state (todos, edits) now clears when switching or closing projects',
+      'Opening code editor now shows the file explorer sidebar',
+      'Disable Cmd+R app reload to prevent losing session state',
+      'Move Settings to app name menu on macOS',
+      'Screenshot cleanup: 5 minutes marked as recommended, removed "Never" option',
+    ],
+  },
+  {
     version: '1.2.26',
     date: 'February 3, 2026',
     changes: [
