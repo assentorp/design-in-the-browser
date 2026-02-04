@@ -132,13 +132,34 @@ export default function App() {
   useEffect(() => {
     if (!window.mainAPI?.onTerminalData) return;
 
-    window.mainAPI.onTerminalData((tabId: string) => {
+    window.mainAPI.onTerminalData((tabId: string, data: string) => {
       const session = sessionsRef.current.find((s) => s.cliToolTabId === tabId);
       if (!session) return;
 
       const sid = session.id;
 
-      // Clear existing idle timer
+      // Ignore tiny data chunks (cursor blinks, TUI redraws) — these
+      // shouldn't keep the "running" state alive after Claude finishes
+      if (data.length <= 8) {
+        // Still start the idle timer if we're currently marked as running
+        // but don't reset an existing one for small chunks
+        if (cliRunningRef.current.has(sid) && !cliTimersRef.current.has(sid)) {
+          cliTimersRef.current.set(
+            sid,
+            setTimeout(() => {
+              cliRunningRef.current.delete(sid);
+              cliTimersRef.current.delete(sid);
+              setSessions((prev) =>
+                prev.map((s) => (s.id === sid ? { ...s, cliToolRunning: false } : s))
+              );
+              flushEditQueueRef.current(sid);
+            }, 1500)
+          );
+        }
+        return;
+      }
+
+      // Clear existing idle timer for substantial output
       const existing = cliTimersRef.current.get(sid);
       if (existing) clearTimeout(existing);
 
@@ -150,7 +171,7 @@ export default function App() {
         );
       }
 
-      // Set 3s idle timer
+      // Set 1.5s idle timer
       cliTimersRef.current.set(
         sid,
         setTimeout(() => {
@@ -160,7 +181,7 @@ export default function App() {
             prev.map((s) => (s.id === sid ? { ...s, cliToolRunning: false } : s))
           );
           flushEditQueueRef.current(sid);
-        }, 3000)
+        }, 1500)
       );
     });
   }, []);
