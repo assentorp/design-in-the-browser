@@ -13,7 +13,9 @@
     "build:mac": "npm run build:main && vite build && electron-builder --mac",
     "build:win": "npm run build:main && vite build && electron-builder --win",
     "build:linux": "npm run build:main && vite build && electron-builder --linux",
-    "typecheck": "tsc --noEmit -p tsconfig.main.json"
+    "typecheck": "tsc --noEmit -p tsconfig.main.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -35,6 +37,7 @@
     "electron-builder": "^25.1.8",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",
+    "vitest": "^4.0.18",
     "wait-on": "^8.0.1"
   },
   "build": {

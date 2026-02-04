@@ -9,11 +9,14 @@ import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
 import WhatsNewModal from './components/WhatsNewModal';
 import { changelog } from './changelog';
-import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData, MultiEditData } from '../shared/types';
+import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData } from '../shared/types';
+import { createSession, getAnnotationLabel } from '../shared/session';
 
 // Prevent Electron from navigating when files are dragged onto the window
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const CLI_COMMANDS: Record<CliTool, string> = {
   claude: 'claude',
@@ -30,33 +33,6 @@ interface UpdateInfo {
 }
 
 const PRESETS_STORAGE_KEY = 'claudedesign-project-presets';
-
-const generateId = () => Math.random().toString(36).substr(2, 9);
-
-const createSession = (
-  config: { name: string; path: string; startCommand: string; shell?: ShellType } | null,
-  index: number
-): Session => {
-  const id = generateId();
-  const firstTabId = `${id}-1`;
-  return {
-    id,
-    name: config?.name || `Project ${index}`,
-    projectPath: config?.path || '',
-    startCommand: config?.startCommand || '',
-    browserWidth: 60,
-    terminalCollapsed: false,
-    url: 'http://localhost:3000',
-    terminalTabs: [{ id: firstTabId, name: 'Terminal 1' }],
-    activeTerminalTabId: firstTabId,
-    terminalTabCounter: 1,
-    devServerTabId: null,
-    cliToolTabId: null,
-    cliTool: null,
-    cliToolRunning: false,
-    shell: config?.shell || 'default',
-  };
-};
 
 const loadPresets = (): ProjectPreset[] => {
   try {
@@ -239,37 +215,6 @@ export default function App() {
     );
   }, []);
 
-  const getAnnotationLabel = useCallback((data: AnnotationData): string => {
-    // Multi-edit (has annotations array)
-    const multi = data as unknown as MultiEditData;
-    if ('annotations' in multi && Array.isArray(multi.annotations)) {
-      return `${multi.annotations.length} edits`;
-    }
-
-    const request = data.request || '';
-    const truncate = (s: string, max: number) => s.length > max ? s.substring(0, max) + '...' : s;
-
-    // Text selection
-    if (data.selectedText) {
-      const text = truncate(data.selectedText, 20);
-      return truncate(`"${text}": ${request}`, 50);
-    }
-
-    // Multi-select
-    if (data.elements && data.elements.length > 1) {
-      return truncate(`${data.elements.length} elements: ${request}`, 50);
-    }
-
-    // Single element
-    if (data.element) {
-      const tag = `<${data.element.tagName.toLowerCase()}>`;
-      const text = data.element.text ? ` "${truncate(data.element.text, 15)}"` : '';
-      return truncate(`${tag}${text}: ${request}`, 50);
-    }
-
-    return truncate(request, 50) || 'Edit';
-  }, []);
-
   const handleAnnotation = useCallback((data: AnnotationData) => {
     // Check the ref directly — it's updated synchronously in the IPC callback,
     // so it's always current (unlike the React state prop which lags a render)
@@ -284,7 +229,7 @@ export default function App() {
         setTimeout(() => scrollTerminalToBottom(session.cliToolTabId!), 100);
       }
     }
-  }, [activeSessionId, getAnnotationLabel]);
+  }, [activeSessionId]);
 
   const handleRemoveQueuedEdit = useCallback((index: number) => {
     // Index is relative to the active session's filtered queue
