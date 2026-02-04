@@ -220,7 +220,28 @@ export default function App() {
     // so it's always current (unlike the React state prop which lags a render)
     if (cliRunningRef.current.has(activeSessionId)) {
       const label = getAnnotationLabel(data);
-      setEditQueue((prev) => [...prev, { sessionId: activeSessionId, data, label }]);
+      setEditQueue((prev) => {
+        const updated = [...prev, { sessionId: activeSessionId, data, label }];
+        editQueueRef.current = updated;
+        return updated;
+      });
+      // Reset the idle timer so the queue isn't flushed immediately —
+      // gives the user a fresh 1.5s window after annotating
+      const existingTimer = cliTimersRef.current.get(activeSessionId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        cliTimersRef.current.set(
+          activeSessionId,
+          setTimeout(() => {
+            cliRunningRef.current.delete(activeSessionId);
+            cliTimersRef.current.delete(activeSessionId);
+            setSessions((prev) =>
+              prev.map((s) => (s.id === activeSessionId ? { ...s, cliToolRunning: false } : s))
+            );
+            flushEditQueueRef.current(activeSessionId);
+          }, 1500)
+        );
+      }
     } else {
       window.mainAPI?.sendAnnotation(data);
       // Scroll terminal to bottom so the user sees the new prompt
@@ -235,16 +256,20 @@ export default function App() {
     // Index is relative to the active session's filtered queue
     setEditQueue((prev) => {
       let count = 0;
-      return prev.filter((q) => {
+      const updated = prev.filter((q) => {
         if (q.sessionId !== activeSessionId) return true;
         return count++ !== index;
       });
+      editQueueRef.current = updated;
+      return updated;
     });
   }, [activeSessionId]);
 
   const flushEditQueue = useCallback((sessionId: string) => {
     const queue = editQueueRef.current.filter((q) => q.sessionId === sessionId);
     if (queue.length === 0) return;
+    // Clear ref immediately to prevent duplicate sends if called again before render
+    editQueueRef.current = editQueueRef.current.filter((q) => q.sessionId !== sessionId);
     for (const item of queue) {
       window.mainAPI?.sendAnnotation(item.data as AnnotationData);
     }
