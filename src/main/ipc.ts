@@ -232,8 +232,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       }
 
       const prompt = formatMultiEditPrompt(anyData.annotations, screenshotPaths);
-      session.ptyProcess.write(prompt);
-      session.ptyProcess.write('\r');
+      session.ptyProcess.write(prompt + '\r');
 
       // Clean up images after a delay
       const pathsToClean = screenshotPaths.filter(Boolean);
@@ -282,8 +281,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       }
 
       const prompt = formatAnnotationPrompt(data, screenshotPath, referenceImagePath);
-      session.ptyProcess.write(prompt);
-      session.ptyProcess.write('\r');
+      session.ptyProcess.write(prompt + '\r');
 
       // Clean up images after a delay
       const pathsToClean = [screenshotPath, referenceImagePath].filter(Boolean) as string[];

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -43,6 +43,8 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
   const wrapperRef = useRef<HTMLDivElement>(null);
   const projectPathRef = useRef(projectPath);
   const shellRef = useRef(shell);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
   projectPathRef.current = projectPath;
   shellRef.current = shell;
 
@@ -356,12 +358,48 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
               onClick={() => onTabsChange(tabs, tab.id, tabCounter)}
             >
               {tab.id === cliToolTabId && cliToolRunning && <span className="cli-spinner" />}
-              <span className="terminal-tab-name">{tab.name}</span>
+              {editingTabId === tab.id ? (
+                <input
+                  className="terminal-tab-rename-input"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={() => {
+                    const trimmed = editingName.trim();
+                    if (trimmed && trimmed !== tab.name) {
+                      const updatedTabs = tabs.map(t => t.id === tab.id ? { ...t, name: trimmed } : t);
+                      onTabsChange(updatedTabs, activeTabId, tabCounter);
+                    }
+                    setEditingTabId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      (e.target as HTMLInputElement).blur();
+                    } else if (e.key === 'Escape') {
+                      setEditingTabId(null);
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  className="terminal-tab-name"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTabId(tab.id);
+                    setEditingName(tab.name);
+                  }}
+                >
+                  {tab.name}
+                </span>
+              )}
               <button
                 className="terminal-tab-close"
                 onClick={(e) => {
                   e.stopPropagation();
-                  closeTab(tab.id);
+                  if (confirm(`Close "${tab.name}"?`)) {
+                    closeTab(tab.id);
+                  }
                 }}
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

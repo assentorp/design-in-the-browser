@@ -465,6 +465,13 @@ export default function App() {
       // Clear queued edits for this session
       setEditQueue((prev) => prev.filter((q) => q.sessionId !== sessionId));
 
+      // Clear UI state if closing the active session
+      if (sessionId === activeSessionId) {
+        setPendingEdits([]);
+        setEditActions(null);
+        setAnnotateMode(true);
+      }
+
       // Destroy the terminal for this session
       destroyTerminalSession(sessionId);
 
@@ -485,6 +492,14 @@ export default function App() {
     },
     [activeSessionId, sessions]
   );
+
+  const handleSelectSession = useCallback((sessionId: string) => {
+    if (sessionId !== activeSessionId) {
+      setPendingEdits([]);
+      setEditActions(null);
+    }
+    setActiveSessionId(sessionId);
+  }, [activeSessionId]);
 
   const updateBanner = updateInfo && (
     <div className="update-banner">
@@ -557,7 +572,7 @@ export default function App() {
       <TabBar
         sessions={sessions}
         activeSessionId={activeSessionId}
-        onSelectSession={setActiveSessionId}
+        onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
         onCloseSession={handleCloseSession}
         terminalCollapsed={activeSession.terminalCollapsed}

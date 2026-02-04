@@ -39,7 +39,9 @@ export default function TabBar({
               className="tab-close"
               onClick={(e) => {
                 e.stopPropagation();
-                onCloseSession(session.id);
+                if (confirm(`Close "${session.name}"?`)) {
+                  onCloseSession(session.id);
+                }
               }}
               title="Close project"
             >

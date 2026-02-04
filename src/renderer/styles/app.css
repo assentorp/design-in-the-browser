@@ -110,6 +110,7 @@ body,
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
+  margin-left: auto;
   transition: all 0.15s ease;
 }
 
@@ -809,6 +810,7 @@ body,
 }
 
 .terminal-tab {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -840,7 +842,25 @@ body,
   text-overflow: ellipsis;
 }
 
+.terminal-tab-rename-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 0;
+  margin: 0;
+  width: 80px;
+  min-width: 40px;
+}
+
 .terminal-tab-close {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
