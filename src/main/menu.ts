@@ -16,6 +16,14 @@ export function createMenu(mainWindow: BrowserWindow) {
                 click: () => manualCheckForUpdates(),
               },
               { type: 'separator' as const },
+              {
+                label: 'Settings...',
+                accelerator: 'CmdOrCtrl+,',
+                click: () => {
+                  mainWindow.webContents.send('open-settings');
+                },
+              },
+              { type: 'separator' as const },
               { role: 'services' as const },
               { type: 'separator' as const },
               { role: 'hide' as const },
@@ -30,14 +38,18 @@ export function createMenu(mainWindow: BrowserWindow) {
     {
       label: 'File',
       submenu: [
-        {
-          label: 'Settings...',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => {
-            mainWindow.webContents.send('open-settings');
-          },
-        },
-        { type: 'separator' },
+        ...(!isMac
+          ? [
+              {
+                label: 'Settings...',
+                accelerator: 'CmdOrCtrl+,' as const,
+                click: () => {
+                  mainWindow.webContents.send('open-settings');
+                },
+              },
+              { type: 'separator' as const },
+            ]
+          : []),
         isMac ? { role: 'close' } : { role: 'quit' },
       ],
     },

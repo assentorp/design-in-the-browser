@@ -7,11 +7,10 @@ interface SettingsModalProps {
 
 const CLEANUP_OPTIONS = [
   { value: 1, label: '1 minute' },
-  { value: 5, label: '5 minutes' },
+  { value: 5, label: '5 minutes (recommended)' },
   { value: 10, label: '10 minutes' },
   { value: 30, label: '30 minutes' },
   { value: 60, label: '1 hour' },
-  { value: 0, label: 'Never (manual cleanup)' },
 ];
 
 const EDITOR_LABELS: Record<CodeEditor, string> = {
@@ -119,7 +118,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 ))}
               </select>
               <span className="settings-hint">
-                Screenshots are stored in your system's temp folder and cleaned up automatically by the OS if the app closes before the timer runs.
+                Screenshots are stored in your system's temp folder and won't fill up your disk. They're cleaned up automatically by the OS even if the app closes before the timer runs.
               </span>
             </div>
           </div>
