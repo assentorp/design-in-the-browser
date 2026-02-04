@@ -56,8 +56,6 @@ export function createMenu(mainWindow: BrowserWindow) {
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
         { role: 'resetZoom' },

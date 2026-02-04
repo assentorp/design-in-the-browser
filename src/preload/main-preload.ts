@@ -76,8 +76,8 @@ const mainAPI: MainAPI = {
   },
 
 
-  openInEditor: (filePath: string, line?: number, column?: number) => {
-    ipcRenderer.send('editor:open-file', { filePath, line, column });
+  openInEditor: (filePath: string, line?: number, column?: number, projectPath?: string) => {
+    ipcRenderer.send('editor:open-file', { filePath, line, column, projectPath });
   },
 
   detectEditors: () => {

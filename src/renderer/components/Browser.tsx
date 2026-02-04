@@ -259,8 +259,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     if (!mainAPI) return;
     clearSelection();
     const gotoLine = line && line > 1 ? line : undefined;
-    mainAPI.openInEditor(filePath, gotoLine);
-  }, [clearSelection]);
+    mainAPI.openInEditor(filePath, gotoLine, undefined, projectPath);
+  }, [clearSelection, projectPath]);
 
   // Poll for messages from the injected script
   useEffect(() => {
@@ -471,7 +471,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const mainAPI = getMainAPI();
     if (!mainAPI) return;
     clearSelection();
-    mainAPI.openInEditor(projectPath);
+    mainAPI.openInEditor(projectPath, undefined, undefined, projectPath);
   }, [projectPath, clearSelection]);
 
   const currentWidth = viewport ? viewportSizes[viewport] : null;

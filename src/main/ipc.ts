@@ -428,23 +428,39 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
   // Open file in VS Code desktop app
   // Editor configurations: CLI commands and how to format file:line arguments
-  const editorConfigs: Record<CodeEditor, { cmd: string; macPaths?: string[]; buildArgs: (file: string, line?: number, col?: number) => string[] }> = {
+  const editorConfigs: Record<CodeEditor, { cmd: string; macPaths?: string[]; buildArgs: (file: string, line?: number, col?: number, projectPath?: string) => string[] }> = {
     vscode: {
       cmd: 'code',
       macPaths: ['/usr/local/bin/code', '/opt/homebrew/bin/code', '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code'],
-      buildArgs: (file, line, col) => {
-        let uri = file;
-        if (line) { uri += `:${line}`; if (col) uri += `:${col}`; }
-        return ['--goto', uri];
+      buildArgs: (file, line, col, projectPath) => {
+        const args: string[] = [];
+        if (projectPath) args.push(projectPath);
+        if (line) {
+          let uri = file;
+          uri += `:${line}`;
+          if (col) uri += `:${col}`;
+          args.push('--goto', uri);
+        } else if (!projectPath || file !== projectPath) {
+          args.push(file);
+        }
+        return args;
       },
     },
     cursor: {
       cmd: 'cursor',
       macPaths: ['/usr/local/bin/cursor', '/opt/homebrew/bin/cursor', '/Applications/Cursor.app/Contents/Resources/app/bin/cursor'],
-      buildArgs: (file, line, col) => {
-        let uri = file;
-        if (line) { uri += `:${line}`; if (col) uri += `:${col}`; }
-        return ['--goto', uri];
+      buildArgs: (file, line, col, projectPath) => {
+        const args: string[] = [];
+        if (projectPath) args.push(projectPath);
+        if (line) {
+          let uri = file;
+          uri += `:${line}`;
+          if (col) uri += `:${col}`;
+          args.push('--goto', uri);
+        } else if (!projectPath || file !== projectPath) {
+          args.push(file);
+        }
+        return args;
       },
     },
     zed: {
@@ -494,12 +510,12 @@ export function setupIPC(mainWindow: BrowserWindow) {
     return config.cmd;
   }
 
-  ipcMain.on('editor:open-file', (_, { filePath, line, column }: { filePath: string; line?: number; column?: number }) => {
+  ipcMain.on('editor:open-file', (_, { filePath, line, column, projectPath }: { filePath: string; line?: number; column?: number; projectPath?: string }) => {
     const settings = getSettings();
     const editor = (settings.editor || 'vscode') as CodeEditor;
     const config = editorConfigs[editor];
     const cmd = resolveEditorCmd(editor);
-    const args = config.buildArgs(filePath, line, column);
+    const args = config.buildArgs(filePath, line, column, projectPath);
     console.log('[IPC] Opening in editor:', editor, cmd, args.join(' '));
     spawn(cmd, args, {
       detached: true,

@@ -65,10 +65,13 @@ body,
 }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px 28px 6px 12px;
+  min-width: 100px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -98,6 +101,10 @@ body,
 }
 
 .tab-close {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -110,7 +117,6 @@ body,
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
-  margin-left: auto;
   transition: all 0.15s ease;
 }
 

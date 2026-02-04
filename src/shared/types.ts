@@ -149,7 +149,7 @@ export interface MainAPI {
   onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
   downloadUpdate: () => void;
   installUpdate: () => void;
-  openInEditor: (filePath: string, line?: number, column?: number) => void;
+  openInEditor: (filePath: string, line?: number, column?: number, projectPath?: string) => void;
   detectEditors: () => Promise<CodeEditor[]>;
   checkUrl: (url: string) => Promise<boolean>;
   searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
