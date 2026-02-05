@@ -9,6 +9,7 @@ import { spawn, exec, type ChildProcess } from 'child_process';
 import type { AnnotationData, ShellType, CodeEditor } from '../shared/types';
 import { formatAnnotationPrompt, formatMultiEditPrompt, type MultiEditAnnotation } from '../shared/format-prompt';
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
+import { getPresets, savePresets } from './presets';
 
 interface SessionState {
   ptyProcess: pty.IPty;
@@ -741,6 +742,16 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Save app settings
   ipcMain.handle('settings:save', (_, settings: Partial<AppSettings>) => {
     return saveSettings(settings);
+  });
+
+  // Get project presets
+  ipcMain.handle('presets:get', () => {
+    return getPresets();
+  });
+
+  // Save project presets
+  ipcMain.handle('presets:save', (_, presets) => {
+    return savePresets(presets);
   });
 
   // Check if WSL is available on Windows

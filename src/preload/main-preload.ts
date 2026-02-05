@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { AnnotationData, MainAPI, ShellType, AppSettings } from '../shared/types';
+import type { AnnotationData, MainAPI, ShellType, AppSettings, ProjectPreset } from '../shared/types';
 
 console.log('[Preload] Script starting...');
 
@@ -98,6 +98,14 @@ const mainAPI: MainAPI = {
 
   saveSettings: (settings: Partial<AppSettings>): Promise<AppSettings> => {
     return ipcRenderer.invoke('settings:save', settings);
+  },
+
+  getPresets: (): Promise<ProjectPreset[]> => {
+    return ipcRenderer.invoke('presets:get');
+  },
+
+  savePresets: (presets: ProjectPreset[]): Promise<ProjectPreset[]> => {
+    return ipcRenderer.invoke('presets:save', presets);
   },
 
   getPathForFile: (file: File): string => {

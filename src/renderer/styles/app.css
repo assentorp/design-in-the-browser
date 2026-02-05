@@ -582,9 +582,9 @@ body,
 }
 
 .edit-queue-circle {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #555;
+  width: 16px;
+  height: 16px;
+  border: 2px dotted #555;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -682,7 +682,7 @@ body,
 }
 
 .queued-edits-label {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-secondary);
   flex: 1;
   overflow: hidden;
@@ -746,6 +746,26 @@ body,
 
 .queued-edits-send:hover {
   background: var(--accent-hover);
+}
+
+.queued-edits-cancel {
+  height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.queued-edits-cancel:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 /* Resizer */

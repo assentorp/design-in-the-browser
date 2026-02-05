@@ -155,6 +155,8 @@ export interface MainAPI {
   searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
+  getPresets: () => Promise<ProjectPreset[]>;
+  savePresets: (presets: ProjectPreset[]) => Promise<ProjectPreset[]>;
   getPathForFile: (file: File) => string;
   getAppVersion: () => Promise<string>;
 }

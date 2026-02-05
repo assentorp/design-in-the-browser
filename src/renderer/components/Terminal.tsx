@@ -60,6 +60,8 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       const instance = terminalInstances.get(tabId);
       if (instance) {
         instance.terminal.write(data);
+        // Always scroll to bottom to show latest output
+        instance.terminal.scrollToBottom();
       }
     });
   }, []);
@@ -218,6 +220,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       try {
         if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
           instance.fitAddon.fit();
+          instance.terminal.scrollToBottom();
           if (mainAPI) {
             mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
             mainAPI.terminalReady(activeTabId);
@@ -233,6 +236,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       try {
         if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
           instance.fitAddon.fit();
+          instance.terminal.scrollToBottom();
           if (mainAPI) {
             mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
           }
@@ -270,6 +274,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       try {
         if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
           instance.fitAddon.fit();
+          instance.terminal.scrollToBottom();
           if (mainAPI) {
             mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
           }

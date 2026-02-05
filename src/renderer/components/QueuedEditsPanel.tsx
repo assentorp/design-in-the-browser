@@ -8,11 +8,12 @@ interface QueuedEditsPanelProps {
   edits: QueuedEdit[];
   onRemove: (index: number) => void;
   onSendNow: () => void;
+  onCancelAll: () => void;
 }
 
 export type { QueuedEdit };
 
-export default function QueuedEditsPanel({ edits, onRemove, onSendNow }: QueuedEditsPanelProps) {
+export default function QueuedEditsPanel({ edits, onRemove, onSendNow, onCancelAll }: QueuedEditsPanelProps) {
   if (edits.length === 0) return null;
 
   return (
@@ -39,9 +40,11 @@ export default function QueuedEditsPanel({ edits, onRemove, onSendNow }: QueuedE
       </div>
       <div className="queued-edits-footer">
         <button className="queued-edits-send" onClick={onSendNow}>
-          Send now ({edits.length})
+          Send
         </button>
-        <span className="queued-edits-status">Queued — {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}E to send</span>
+        <button className="queued-edits-cancel" onClick={onCancelAll}>
+          Cancel
+        </button>
       </div>
     </div>
   );

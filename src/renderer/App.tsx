@@ -32,21 +32,6 @@ interface UpdateInfo {
   downloaded?: boolean;
 }
 
-const PRESETS_STORAGE_KEY = 'claudedesign-project-presets';
-
-const loadPresets = (): ProjectPreset[] => {
-  try {
-    const stored = localStorage.getItem(PRESETS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-const savePresets = (presets: ProjectPreset[]) => {
-  localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
-};
-
 export default function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
@@ -58,7 +43,8 @@ export default function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showWhatsNewModal, setShowWhatsNewModal] = useState(false);
   const [hasUnseenChanges, setHasUnseenChanges] = useState(false);
-  const [projectPresets, setProjectPresets] = useState<ProjectPreset[]>(() => loadPresets());
+  const [projectPresets, setProjectPresets] = useState<ProjectPreset[]>([]);
+  const [presetsLoaded, setPresetsLoaded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [editQueue, setEditQueue] = useState<QueuedEdit[]>([]);
   const editQueueRef = useRef<QueuedEdit[]>([]);
@@ -70,12 +56,37 @@ export default function App() {
   const cliRunningRef = useRef<Set<string>>(new Set());
   const cliTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  // Show modal on first launch if no sessions
+  // Load presets from disk on mount (with migration from localStorage)
   useEffect(() => {
-    if (sessions.length === 0) {
+    window.mainAPI?.getPresets().then((presets) => {
+      // Migrate from localStorage if we have presets there but not in file
+      const LEGACY_KEY = 'claudedesign-project-presets';
+      const legacyData = localStorage.getItem(LEGACY_KEY);
+      if (legacyData && presets.length === 0) {
+        try {
+          const legacyPresets = JSON.parse(legacyData) as ProjectPreset[];
+          if (legacyPresets.length > 0) {
+            window.mainAPI?.savePresets(legacyPresets);
+            setProjectPresets(legacyPresets);
+            localStorage.removeItem(LEGACY_KEY);
+            console.log('[App] Migrated', legacyPresets.length, 'presets from localStorage');
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      } else {
+        setProjectPresets(presets);
+      }
+      setPresetsLoaded(true);
+    });
+  }, []);
+
+  // Show modal on first launch if no sessions (after presets are loaded)
+  useEffect(() => {
+    if (presetsLoaded && sessions.length === 0) {
       setShowConfigModal(true);
     }
-  }, []);
+  }, [presetsLoaded]);
 
   // Listen for settings menu trigger
   useEffect(() => {
@@ -265,6 +276,14 @@ export default function App() {
     flushEditQueue(activeSessionId);
   }, [activeSessionId, flushEditQueue]);
 
+  const handleCancelAllQueuedEdits = useCallback(() => {
+    setEditQueue((prev) => {
+      const updated = prev.filter((q) => q.sessionId !== activeSessionId);
+      editQueueRef.current = updated;
+      return updated;
+    });
+  }, [activeSessionId]);
+
   // Cmd+E / Ctrl+E to send queued edits (via Electron menu accelerator)
   useEffect(() => {
     const onSendQueuedEdits = (window as unknown as { onSendQueuedEdits?: (cb: () => void) => void }).onSendQueuedEdits;
@@ -305,9 +324,7 @@ export default function App() {
 
   const handleAnnotateModeChange = useCallback((enabled: boolean) => {
     setAnnotateMode(enabled);
-    // Collapse terminal when not editing, expand when editing
-    updateSession(activeSessionId, { terminalCollapsed: !enabled });
-  }, [activeSessionId, updateSession]);
+  }, []);
 
 
   const toggleTerminal = useCallback(() => {
@@ -387,7 +404,7 @@ export default function App() {
         };
         setProjectPresets((prev) => {
           const updated = [...prev, newPreset];
-          savePresets(updated);
+          window.mainAPI?.savePresets(updated);
           return updated;
         });
       }
@@ -423,7 +440,7 @@ export default function App() {
   const handleDeletePreset = useCallback((presetId: string) => {
     setProjectPresets((prev) => {
       const updated = prev.filter((p) => p.id !== presetId);
-      savePresets(updated);
+      window.mainAPI?.savePresets(updated);
       return updated;
     });
   }, []);
@@ -431,7 +448,7 @@ export default function App() {
   const handleUpdatePreset = useCallback((preset: ProjectPreset) => {
     setProjectPresets((prev) => {
       const updated = prev.map((p) => (p.id === preset.id ? preset : p));
-      savePresets(updated);
+      window.mainAPI?.savePresets(updated);
       return updated;
     });
   }, []);
@@ -612,6 +629,7 @@ export default function App() {
                 edits={editQueue.filter((q) => q.sessionId === activeSessionId)}
                 onRemove={handleRemoveQueuedEdit}
                 onSendNow={handleSendQueueNow}
+                onCancelAll={handleCancelAllQueuedEdits}
               />
             )}
           </Terminal>
