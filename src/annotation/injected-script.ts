@@ -1771,6 +1771,7 @@ export const annotationScript = `
   window.__claudeDesignIsEnabled = function() { return annotateMode; };
   window.__claudeDesignSendAll = sendAllAnnotations;
   window.__claudeDesignRemoveItem = removePendingAnnotation;
+  window.__claudeDesignClearAll = clearPendingAnnotations;
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
 })();
 `;

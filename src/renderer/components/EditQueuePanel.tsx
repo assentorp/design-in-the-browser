@@ -32,12 +32,20 @@ export default function EditQueuePanel({ edits, actions }: EditQueuePanelProps) 
           </div>
         ))}
       </div>
-      <button
-        className="edit-queue-send"
-        onClick={() => actions?.sendAll()}
-      >
-        Send {edits.length} edit{edits.length !== 1 ? 's' : ''}
-      </button>
+      <div className="edit-queue-actions">
+        <button
+          className="edit-queue-send"
+          onClick={() => actions?.sendAll()}
+        >
+          Send
+        </button>
+        <button
+          className="edit-queue-cancel"
+          onClick={() => actions?.clearAll()}
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

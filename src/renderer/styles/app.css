@@ -624,9 +624,14 @@ body,
   color: #ef4444;
 }
 
+.edit-queue-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .edit-queue-send {
   height: 32px;
-  margin-top: 8px;
   padding: 0 12px;
   background: var(--accent);
   border: none;
@@ -643,6 +648,26 @@ body,
 
 .edit-queue-send:hover {
   background: var(--accent-hover);
+}
+
+.edit-queue-cancel {
+  height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.edit-queue-cancel:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 /* Queued Edits Panel */

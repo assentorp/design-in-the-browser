@@ -14,6 +14,7 @@ export interface PendingEdit {
 export interface EditActions {
   sendAll: () => void;
   removeItem: (index: number) => void;
+  clearAll: () => void;
 }
 
 interface BrowserProps {
@@ -140,6 +141,16 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       await webview.executeJavaScript(`window.__claudeDesignRemoveItem && window.__claudeDesignRemoveItem(${index}); true;`);
     } catch (err) {
       console.error('Remove edit item error:', err);
+    }
+  }, []);
+
+  const clearAllEdits = useCallback(async () => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+    try {
+      await webview.executeJavaScript('window.__claudeDesignClearAll && window.__claudeDesignClearAll(); true;');
+    } catch (err) {
+      console.error('Clear all edits error:', err);
     }
   }, []);
 
@@ -389,7 +400,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
               } else if (msg.type === 'claude-design-mode-change') {
                 onAnnotateModeChange(msg.enabled);
               } else if (msg.type === 'claude-design-pending-update') {
-                onPendingEditsChange(msg.items || [], { sendAll: sendAllEdits, removeItem: removeEditItem });
+                onPendingEditsChange(msg.items || [], { sendAll: sendAllEdits, removeItem: removeEditItem, clearAll: clearAllEdits });
               }
             }
           }
@@ -400,7 +411,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }, 100);
 
     return () => clearInterval(pollInterval);
-  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, projectPath, openFileInCodeView]);
+  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, projectPath, openFileInCodeView]);
 
   // Toggle annotate mode in webview
   useEffect(() => {
