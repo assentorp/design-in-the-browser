@@ -34,6 +34,13 @@ export default function ProjectConfigModal({
 
   const [view, setView] = useState<View>(hasPresets ? 'list' : 'new');
   const [name, setName] = useState('');
+
+  // Update view when presets become available
+  useEffect(() => {
+    if (hasPresets && view === 'new') {
+      setView('list');
+    }
+  }, [hasPresets]);
   const [path, setPath] = useState('');
   const [startCommand, setStartCommand] = useState('npm run dev');
   const [url, setUrl] = useState('http://localhost:3000');
