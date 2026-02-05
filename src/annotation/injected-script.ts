@@ -1765,6 +1765,49 @@ export const annotationScript = `
     cancelAnnotation();
   }
 
+  // Add annotation to todo list programmatically (used when CLI is busy)
+  function addToTodoList(note, selector, tagName, text, attributes) {
+    // Find element by selector if possible, or create a placeholder
+    var el = null;
+    try {
+      el = document.querySelector(selector);
+    } catch (e) {}
+
+    if (!el) {
+      // Create a placeholder for the annotation
+      el = document.createElement('div');
+      el.style.display = 'none';
+      document.body.appendChild(el);
+    }
+
+    var rect = el.getBoundingClientRect();
+    var bounds = {
+      x: Math.max(0, Math.floor(rect.left - 10)),
+      y: Math.max(0, Math.floor(rect.top - 10)),
+      width: Math.ceil(rect.width + 20),
+      height: Math.ceil(rect.height + 20),
+    };
+
+    pendingAnnotations.push({
+      element: el,
+      note: note,
+      bounds: bounds,
+      selector: selector,
+      tagName: tagName || 'div',
+      text: text || '',
+      attributes: attributes || '',
+    });
+
+    if (el.style.display !== 'none') {
+      el.classList.add('claude-design-multi-selected');
+    }
+    updatePendingBadges();
+    notifyPendingUpdate();
+
+    // Enter todo mode
+    todoMode = true;
+  }
+
   // Expose functions for external control
   window.__claudeDesignEnable = enableAnnotateMode;
   window.__claudeDesignDisable = disableAnnotateMode;
@@ -1773,5 +1816,6 @@ export const annotationScript = `
   window.__claudeDesignRemoveItem = removePendingAnnotation;
   window.__claudeDesignClearAll = clearPendingAnnotations;
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
+  window.__claudeDesignAddToTodo = addToTodoList;
 })();
 `;

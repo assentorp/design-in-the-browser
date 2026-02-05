@@ -527,6 +527,7 @@ export default function App() {
             activeTerminalTabId={activeSession.cliToolTabId || activeSession.activeTerminalTabId}
             projectPath={activeSession.projectPath}
             onAnnotation={handleAnnotation}
+            cliRunning={activeSession.cliToolRunning}
           />
         </div>
         {!activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}

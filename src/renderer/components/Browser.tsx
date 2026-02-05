@@ -27,6 +27,7 @@ interface BrowserProps {
   activeTerminalTabId: string;
   projectPath: string;
   onAnnotation?: (data: AnnotationData) => void;
+  cliRunning?: boolean;
 }
 
 export type ViewportType = 'desktop' | 'tablet' | 'mobile';
@@ -43,7 +44,7 @@ const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
   mobile: 375,
 };
 
-export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation }: BrowserProps) {
+export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning }: BrowserProps) {
   const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -57,6 +58,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onAnnotationRef = useRef(onAnnotation);
   onAnnotationRef.current = onAnnotation;
+  const cliRunningRef = useRef(cliRunning);
+  cliRunningRef.current = cliRunning;
 
   // Check for mainAPI (might not be available immediately)
   useEffect(() => {
@@ -151,6 +154,23 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       await webview.executeJavaScript('window.__claudeDesignClearAll && window.__claudeDesignClearAll(); true;');
     } catch (err) {
       console.error('Clear all edits error:', err);
+    }
+  }, []);
+
+  const addToTodoList = useCallback(async (data: AnnotationData) => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+    try {
+      const note = data.request || '';
+      const selector = data.element?.selector || '';
+      const tagName = data.element?.tagName || 'div';
+      const text = data.element?.text || '';
+      const attributes = data.element?.attributes || '';
+      await webview.executeJavaScript(
+        `window.__claudeDesignAddToTodo && window.__claudeDesignAddToTodo(${JSON.stringify(note)}, ${JSON.stringify(selector)}, ${JSON.stringify(tagName)}, ${JSON.stringify(text)}, ${JSON.stringify(attributes)}); true;`
+      );
+    } catch (err) {
+      console.error('Add to todo list error:', err);
     }
   }, []);
 
@@ -351,26 +371,32 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                 } else {
                   // Handle single annotation
                   const singleData = data as AnnotationData;
-                  console.log('[Browser] Annotation received, has referenceImage:', !!singleData.referenceImage);
+                  console.log('[Browser] Annotation received, has referenceImage:', !!singleData.referenceImage, 'cliRunning:', cliRunningRef.current);
                   singleData.sessionId = sessionId;
                   singleData.terminalTabId = activeTerminalTabId;
 
-                  // Capture screenshot of the element (skip for text-only selections - faster)
-                  if (singleData.bounds && webview && !singleData.selectedText) {
-                    try {
-                      const image = await webview.capturePage(singleData.bounds);
-                      singleData.screenshot = image.toDataURL();
-                    } catch (err) {
-                      console.error('Screenshot capture failed:', err);
-                    }
-                  }
-
-                  if (onAnnotationRef.current) {
-                    onAnnotationRef.current(singleData);
-                  } else if (mainAPI) {
-                    mainAPI.sendAnnotation(singleData);
+                  // If CLI is busy, add to todo list instead of sending
+                  if (cliRunningRef.current) {
+                    console.log('[Browser] CLI is busy, adding to todo list');
+                    addToTodoList(singleData);
                   } else {
-                    console.log('Annotation data:', singleData);
+                    // Capture screenshot of the element (skip for text-only selections - faster)
+                    if (singleData.bounds && webview && !singleData.selectedText) {
+                      try {
+                        const image = await webview.capturePage(singleData.bounds);
+                        singleData.screenshot = image.toDataURL();
+                      } catch (err) {
+                        console.error('Screenshot capture failed:', err);
+                      }
+                    }
+
+                    if (onAnnotationRef.current) {
+                      onAnnotationRef.current(singleData);
+                    } else if (mainAPI) {
+                      mainAPI.sendAnnotation(singleData);
+                    } else {
+                      console.log('Annotation data:', singleData);
+                    }
                   }
                 }
               } else if (msg.type === 'claude-design-open-source') {
@@ -411,7 +437,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }, 100);
 
     return () => clearInterval(pollInterval);
-  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, projectPath, openFileInCodeView]);
+  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, addToTodoList, projectPath, openFileInCodeView]);
 
   // Toggle annotate mode in webview
   useEffect(() => {
