@@ -646,8 +646,14 @@ body,
   transition: all 0.15s ease;
 }
 
-.edit-queue-send:hover {
+.edit-queue-send:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+.edit-queue-send:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: not-allowed;
 }
 
 .edit-queue-cancel {

@@ -4,13 +4,12 @@ import Terminal, { destroyTerminalSession, scrollTerminalToBottom } from './comp
 import Resizer from './components/Resizer';
 import TabBar from './components/TabBar';
 import EditQueuePanel from './components/EditQueuePanel';
-import QueuedEditsPanel, { type QueuedEdit } from './components/QueuedEditsPanel';
 import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
 import WhatsNewModal from './components/WhatsNewModal';
 import { changelog } from './changelog';
 import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData } from '../shared/types';
-import { createSession, getAnnotationLabel } from '../shared/session';
+import { createSession } from '../shared/session';
 
 // Prevent Electron from navigating when files are dragged onto the window
 document.addEventListener('dragover', (e) => e.preventDefault());
@@ -46,9 +45,6 @@ export default function App() {
   const [projectPresets, setProjectPresets] = useState<ProjectPreset[]>([]);
   const [presetsLoaded, setPresetsLoaded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [editQueue, setEditQueue] = useState<QueuedEdit[]>([]);
-  const editQueueRef = useRef<QueuedEdit[]>([]);
-  editQueueRef.current = editQueue;
   const browserWidthRef = useRef(60);
   const pendingCommandsRef = useRef<{ sessionId: string; tabId: string; command: string }[]>([]);
   const sessionsRef = useRef<Session[]>(sessions);
@@ -224,77 +220,13 @@ export default function App() {
   }, []);
 
   const handleAnnotation = useCallback((data: AnnotationData) => {
-    // Check the ref directly — it's updated synchronously in the IPC callback,
-    // so it's always current (unlike the React state prop which lags a render)
-    if (cliRunningRef.current.has(activeSessionId)) {
-      const label = getAnnotationLabel(data);
-      setEditQueue((prev) => {
-        const updated = [...prev, { sessionId: activeSessionId, data, label }];
-        editQueueRef.current = updated;
-        return updated;
-      });
-    } else {
-      window.mainAPI?.sendAnnotation(data);
-      // Scroll terminal to bottom so the user sees the new prompt
-      const session = sessionsRef.current.find((s) => s.id === activeSessionId);
-      if (session?.cliToolTabId) {
-        setTimeout(() => scrollTerminalToBottom(session.cliToolTabId!), 100);
-      }
-    }
-  }, [activeSessionId]);
-
-  const handleRemoveQueuedEdit = useCallback((index: number) => {
-    // Index is relative to the active session's filtered queue
-    setEditQueue((prev) => {
-      let count = 0;
-      const updated = prev.filter((q) => {
-        if (q.sessionId !== activeSessionId) return true;
-        return count++ !== index;
-      });
-      editQueueRef.current = updated;
-      return updated;
-    });
-  }, [activeSessionId]);
-
-  const flushEditQueue = useCallback((sessionId: string) => {
-    const queue = editQueueRef.current.filter((q) => q.sessionId === sessionId);
-    if (queue.length === 0) return;
-    // Clear ref immediately to prevent duplicate sends if called again before render
-    editQueueRef.current = editQueueRef.current.filter((q) => q.sessionId !== sessionId);
-    for (const item of queue) {
-      window.mainAPI?.sendAnnotation(item.data as AnnotationData);
-    }
-    setEditQueue((prev) => prev.filter((q) => q.sessionId !== sessionId));
-    // Scroll terminal to bottom so the user sees the flushed prompts
-    const session = sessionsRef.current.find((s) => s.id === sessionId);
+    window.mainAPI?.sendAnnotation(data);
+    // Scroll terminal to bottom so the user sees the new prompt
+    const session = sessionsRef.current.find((s) => s.id === activeSessionId);
     if (session?.cliToolTabId) {
       setTimeout(() => scrollTerminalToBottom(session.cliToolTabId!), 100);
     }
-  }, []);
-
-  const handleSendQueueNow = useCallback(() => {
-    flushEditQueue(activeSessionId);
-  }, [activeSessionId, flushEditQueue]);
-
-  const handleCancelAllQueuedEdits = useCallback(() => {
-    setEditQueue((prev) => {
-      const updated = prev.filter((q) => q.sessionId !== activeSessionId);
-      editQueueRef.current = updated;
-      return updated;
-    });
   }, [activeSessionId]);
-
-  // Cmd+E / Ctrl+E to send queued edits (via Electron menu accelerator)
-  useEffect(() => {
-    const onSendQueuedEdits = (window as unknown as { onSendQueuedEdits?: (cb: () => void) => void }).onSendQueuedEdits;
-    if (onSendQueuedEdits) {
-      onSendQueuedEdits(() => {
-        if (editQueueRef.current.some((q) => q.sessionId === activeSessionId)) {
-          flushEditQueue(activeSessionId);
-        }
-      });
-    }
-  }, [activeSessionId, flushEditQueue]);
 
   const handleResize = useCallback(
     (delta: number) => {
@@ -461,9 +393,6 @@ export default function App() {
       cliTimersRef.current.delete(sessionId);
       cliRunningRef.current.delete(sessionId);
 
-      // Clear queued edits for this session
-      setEditQueue((prev) => prev.filter((q) => q.sessionId !== sessionId));
-
       // Clear UI state if closing the active session
       if (sessionId === activeSessionId) {
         setPendingEdits([]);
@@ -619,18 +548,10 @@ export default function App() {
             shell={activeSession.shell}
             cliToolTabId={activeSession.cliToolTabId}
             cliToolRunning={activeSession.cliToolRunning}
-            hasTodoItems={pendingEdits.length > 0 || editQueue.some((q) => q.sessionId === activeSessionId)}
+            hasTodoItems={pendingEdits.length > 0}
           >
             {pendingEdits.length > 0 && (
-              <EditQueuePanel edits={pendingEdits} actions={editActions} />
-            )}
-            {editQueue.filter((q) => q.sessionId === activeSessionId).length > 0 && (
-              <QueuedEditsPanel
-                edits={editQueue.filter((q) => q.sessionId === activeSessionId)}
-                onRemove={handleRemoveQueuedEdit}
-                onSendNow={handleSendQueueNow}
-                onCancelAll={handleCancelAllQueuedEdits}
-              />
+              <EditQueuePanel edits={pendingEdits} actions={editActions} cliRunning={activeSession.cliToolRunning} />
             )}
           </Terminal>
         </div>

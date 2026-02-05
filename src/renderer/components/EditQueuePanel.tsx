@@ -3,9 +3,10 @@ import type { PendingEdit, EditActions } from './Browser';
 interface EditQueuePanelProps {
   edits: PendingEdit[];
   actions: EditActions | null;
+  cliRunning?: boolean;
 }
 
-export default function EditQueuePanel({ edits, actions }: EditQueuePanelProps) {
+export default function EditQueuePanel({ edits, actions, cliRunning }: EditQueuePanelProps) {
   if (edits.length === 0) return null;
 
   return (
@@ -36,8 +37,10 @@ export default function EditQueuePanel({ edits, actions }: EditQueuePanelProps) 
         <button
           className="edit-queue-send"
           onClick={() => actions?.sendAll()}
+          disabled={cliRunning}
+          title={cliRunning ? 'Wait for Claude to finish' : undefined}
         >
-          Send
+          {cliRunning ? 'Waiting...' : 'Send'}
         </button>
         <button
           className="edit-queue-cancel"
