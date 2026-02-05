@@ -6,6 +6,18 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.30',
+    date: 'February 5, 2026',
+    changes: [
+      'Projects now persist across app updates',
+      'Fix terminal auto-scroll issue after many exchanges',
+      'Edit mode toggle no longer auto-collapses terminal',
+      'New annotation while Claude is busy adds to todo list instead of queuing',
+      'Todo panel: simplified Send/Cancel buttons, larger text, dotted circles',
+      'Show saved projects on launch instead of new project form',
+    ],
+  },
+  {
     version: '1.2.29',
     date: 'February 5, 2026',
     changes: [
