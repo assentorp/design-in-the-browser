@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.29',
+    date: 'February 5, 2026',
+    changes: [
+      'Edit queue no longer auto-sends when CLI goes idle',
+      'Use Cmd+E (Ctrl+E on Windows/Linux) to send all queued edits',
+      'Fix edit queue flushing immediately after annotation is queued',
+    ],
+  },
+  {
     version: '1.2.28',
     date: 'February 4, 2026',
     changes: [
