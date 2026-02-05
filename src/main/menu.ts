@@ -83,6 +83,13 @@ export function createMenu(mainWindow: BrowserWindow) {
             mainWindow.webContents.send('toggle-annotate');
           },
         },
+        {
+          label: 'Send Queued Edits',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => {
+            mainWindow.webContents.send('send-queued-edits');
+          },
+        },
       ],
     },
     {

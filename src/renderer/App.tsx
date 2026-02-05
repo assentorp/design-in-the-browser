@@ -69,7 +69,6 @@ export default function App() {
   sessionsRef.current = sessions;
   const cliRunningRef = useRef<Set<string>>(new Set());
   const cliTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const flushEditQueueRef = useRef<(sessionId: string) => void>(() => {});
 
   // Show modal on first launch if no sessions
   useEffect(() => {
@@ -128,7 +127,6 @@ export default function App() {
               setSessions((prev) =>
                 prev.map((s) => (s.id === sid ? { ...s, cliToolRunning: false } : s))
               );
-              flushEditQueueRef.current(sid);
             }, 1500)
           );
         }
@@ -147,7 +145,7 @@ export default function App() {
         );
       }
 
-      // Set 1.5s idle timer
+      // Set 1.5s idle timer (spinner only — queue is flushed manually via "Send Now")
       cliTimersRef.current.set(
         sid,
         setTimeout(() => {
@@ -156,7 +154,6 @@ export default function App() {
           setSessions((prev) =>
             prev.map((s) => (s.id === sid ? { ...s, cliToolRunning: false } : s))
           );
-          flushEditQueueRef.current(sid);
         }, 1500)
       );
     });
@@ -225,23 +222,6 @@ export default function App() {
         editQueueRef.current = updated;
         return updated;
       });
-      // Reset the idle timer so the queue isn't flushed immediately —
-      // gives the user a fresh 1.5s window after annotating
-      const existingTimer = cliTimersRef.current.get(activeSessionId);
-      if (existingTimer) {
-        clearTimeout(existingTimer);
-        cliTimersRef.current.set(
-          activeSessionId,
-          setTimeout(() => {
-            cliRunningRef.current.delete(activeSessionId);
-            cliTimersRef.current.delete(activeSessionId);
-            setSessions((prev) =>
-              prev.map((s) => (s.id === activeSessionId ? { ...s, cliToolRunning: false } : s))
-            );
-            flushEditQueueRef.current(activeSessionId);
-          }, 1500)
-        );
-      }
     } else {
       window.mainAPI?.sendAnnotation(data);
       // Scroll terminal to bottom so the user sees the new prompt
@@ -280,10 +260,21 @@ export default function App() {
       setTimeout(() => scrollTerminalToBottom(session.cliToolTabId!), 100);
     }
   }, []);
-  flushEditQueueRef.current = flushEditQueue;
 
   const handleSendQueueNow = useCallback(() => {
     flushEditQueue(activeSessionId);
+  }, [activeSessionId, flushEditQueue]);
+
+  // Cmd+E / Ctrl+E to send queued edits (via Electron menu accelerator)
+  useEffect(() => {
+    const onSendQueuedEdits = (window as unknown as { onSendQueuedEdits?: (cb: () => void) => void }).onSendQueuedEdits;
+    if (onSendQueuedEdits) {
+      onSendQueuedEdits(() => {
+        if (editQueueRef.current.some((q) => q.sessionId === activeSessionId)) {
+          flushEditQueue(activeSessionId);
+        }
+      });
+    }
   }, [activeSessionId, flushEditQueue]);
 
   const handleResize = useCallback(

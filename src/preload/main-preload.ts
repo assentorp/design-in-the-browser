@@ -118,3 +118,7 @@ contextBridge.exposeInMainWorld('onSettingsOpen', (callback: () => void) => {
 contextBridge.exposeInMainWorld('onWhatsNewOpen', (callback: () => void) => {
   ipcRenderer.on('open-whats-new', () => callback());
 });
+
+contextBridge.exposeInMainWorld('onSendQueuedEdits', (callback: () => void) => {
+  ipcRenderer.on('send-queued-edits', () => callback());
+});

@@ -41,7 +41,7 @@ export default function QueuedEditsPanel({ edits, onRemove, onSendNow }: QueuedE
         <button className="queued-edits-send" onClick={onSendNow}>
           Send now ({edits.length})
         </button>
-        <span className="queued-edits-status">Queued — sends when idle</span>
+        <span className="queued-edits-status">Queued — {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}E to send</span>
       </div>
     </div>
   );
