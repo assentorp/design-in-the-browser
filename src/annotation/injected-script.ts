@@ -19,6 +19,13 @@ export const annotationScript = `
   let codeButtonAnchor = null; // Element the code button is anchored to
   let toolbarElement = null;
 
+  // Class inspector state (shown on code button hover or ALT+hover)
+  let classInspectorElement = null;
+  let classInspectorAnchor = null;
+  let classInspectorHideTimeout = null;
+  let altKeyDown = false;
+  let altHoverElement = null;
+
   // Multi-edit state - stores pending annotations with individual notes
   let pendingAnnotations = []; // Array of {element, note, bounds, selector, tagName, text, attributes}
 
@@ -36,6 +43,10 @@ export const annotationScript = `
         outline: 3px solid #c6613f !important;
         outline-offset: 2px !important;
         cursor: crosshair !important;
+      }
+      .claude-design-alt-highlight {
+        outline: 3px solid #3b82f6 !important;
+        outline-offset: 2px !important;
       }
       .claude-design-selected {
         outline: 3px solid #c6613f !important;
@@ -154,7 +165,7 @@ export const annotationScript = `
       .claude-design-popover-add-another svg {
         flex-shrink: 0;
       }
-      .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *) {
+      .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *):not(.claude-design-class-inspector):not(.claude-design-class-inspector *) {
         cursor: crosshair !important;
       }
       .claude-design-popover-textarea.dragover {
@@ -490,6 +501,179 @@ export const annotationScript = `
         font-size: 13px;
         text-align: center;
       }
+      .claude-design-class-inspector {
+        position: fixed;
+        z-index: 2147483647;
+        background: #1f1f1f;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        max-width: 320px;
+        max-height: calc(100vh - 16px);
+        overflow-y: auto;
+        min-width: 140px;
+        cursor: default;
+      }
+      .claude-design-class-inspector-tag {
+        font-size: 13px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        color: #c6613f;
+        margin-bottom: 6px;
+      }
+      .claude-design-class-inspector-id {
+        font-size: 12px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        color: #3b82f6;
+        margin-bottom: 8px;
+      }
+      .claude-design-class-inspector-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .claude-design-class-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        background: #303030;
+        border: 1px solid #444;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        color: #e5e5e5;
+        cursor: pointer !important;
+        transition: all 0.15s;
+      }
+      .claude-design-class-chip:hover {
+        background: #c6613f;
+        border-color: #c6613f;
+        color: white;
+      }
+      .claude-design-class-chip.copied {
+        background: #22c55e;
+        border-color: #22c55e;
+        color: white;
+      }
+      .claude-design-class-inspector-empty {
+        font-size: 12px;
+        color: #666;
+        font-style: italic;
+      }
+      .claude-design-class-inspector-hint {
+        font-size: 10px;
+        color: #555;
+        text-align: center;
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid #333;
+      }
+      .claude-design-copy-all-classes {
+        display: block;
+        width: 100%;
+        margin-top: 8px;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-family: inherit;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 6px;
+        color: #888;
+        cursor: pointer !important;
+        transition: all 0.15s;
+      }
+      .claude-design-copy-all-classes:hover {
+        background: #444;
+        color: #fff;
+        border-color: #555;
+      }
+      .claude-design-copy-all-classes.copied {
+        background: #22c55e;
+        border-color: #22c55e;
+        color: white;
+      }
+      .claude-design-class-inspector-styles {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #333;
+      }
+      .claude-design-class-inspector-style {
+        font-size: 11px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        color: #999;
+        padding: 3px 6px;
+        margin: 2px -6px;
+        border-radius: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer !important;
+        transition: background 0.15s;
+      }
+      .claude-design-class-inspector-style:hover {
+        background: #333;
+      }
+      .claude-design-class-inspector-style.copied {
+        background: #22c55e;
+        color: white;
+      }
+      .claude-design-style-prop {
+        color: #9d7cd8;
+      }
+      .claude-design-style-val {
+        color: #7dcfff;
+        cursor: pointer !important;
+        padding: 2px 4px;
+        margin: -2px;
+        border-radius: 3px;
+        transition: background 0.15s;
+      }
+      .claude-design-style-val:hover {
+        background: rgba(125, 207, 255, 0.2);
+      }
+      .claude-design-style-val.copied {
+        background: #22c55e;
+        color: white;
+      }
+      .claude-design-color-swatch {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        margin-right: 6px;
+        vertical-align: middle;
+        border: 1px solid rgba(255,255,255,0.2);
+        cursor: pointer !important;
+      }
+      .claude-design-color-swatch:hover {
+        border-color: rgba(255,255,255,0.5);
+      }
+      .claude-design-color-val {
+        flex: 1;
+      }
+      .claude-design-color-row {
+        display: flex;
+        align-items: center;
+      }
+      .claude-design-color-toggle {
+        margin-left: auto;
+        padding: 2px 6px;
+        font-size: 9px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        text-transform: uppercase;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 3px;
+        color: #888;
+        cursor: pointer !important;
+        transition: all 0.15s;
+      }
+      .claude-design-color-toggle:hover {
+        background: #444;
+        color: #fff;
+        border-color: #555;
+      }
     \`;
     document.head.appendChild(style);
   }
@@ -586,6 +770,127 @@ export const annotationScript = `
     return div.innerHTML;
   }
 
+  // Color format conversion utilities
+  function parseColor(val) {
+    // Parse rgb/rgba
+    var rgbMatch = val.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/);
+    if (rgbMatch) {
+      return {
+        r: parseInt(rgbMatch[1], 10),
+        g: parseInt(rgbMatch[2], 10),
+        b: parseInt(rgbMatch[3], 10),
+        a: rgbMatch[4] !== undefined ? parseFloat(rgbMatch[4]) : 1
+      };
+    }
+    // Parse hex
+    var hexMatch = val.match(/^#([a-fA-F0-9]{3,8})$/);
+    if (hexMatch) {
+      var hex = hexMatch[1];
+      if (hex.length === 3) {
+        return {
+          r: parseInt(hex[0] + hex[0], 16),
+          g: parseInt(hex[1] + hex[1], 16),
+          b: parseInt(hex[2] + hex[2], 16),
+          a: 1
+        };
+      } else if (hex.length === 6) {
+        return {
+          r: parseInt(hex.slice(0, 2), 16),
+          g: parseInt(hex.slice(2, 4), 16),
+          b: parseInt(hex.slice(4, 6), 16),
+          a: 1
+        };
+      } else if (hex.length === 8) {
+        return {
+          r: parseInt(hex.slice(0, 2), 16),
+          g: parseInt(hex.slice(2, 4), 16),
+          b: parseInt(hex.slice(4, 6), 16),
+          a: parseInt(hex.slice(6, 8), 16) / 255
+        };
+      }
+    }
+    return null;
+  }
+
+  function rgbToHex(r, g, b, a) {
+    var hex = '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    if (a !== undefined && a < 1) {
+      hex += Math.round(a * 255).toString(16).padStart(2, '0');
+    }
+    return hex;
+  }
+
+  function rgbToHsl(r, g, b, a) {
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var h, s, l = (max + min) / 2;
+
+    if (max === min) {
+      h = s = 0;
+    } else {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+
+    h = Math.round(h * 360);
+    s = Math.round(s * 100);
+    l = Math.round(l * 100);
+
+    if (a !== undefined && a < 1) {
+      return 'hsla(' + h + ', ' + s + '%, ' + l + '%, ' + a.toFixed(2) + ')';
+    }
+    return 'hsl(' + h + ', ' + s + '%, ' + l + '%)';
+  }
+
+  function formatColorAs(color, format) {
+    if (!color) return null;
+    switch (format) {
+      case 'hex':
+        return rgbToHex(color.r, color.g, color.b, color.a);
+      case 'rgb':
+        if (color.a < 1) {
+          return 'rgba(' + color.r + ', ' + color.g + ', ' + color.b + ', ' + color.a.toFixed(2) + ')';
+        }
+        return 'rgb(' + color.r + ', ' + color.g + ', ' + color.b + ')';
+      case 'hsl':
+        return rgbToHsl(color.r, color.g, color.b, color.a);
+      default:
+        return null;
+    }
+  }
+
+  function isColorValue(val) {
+    return val && (val.match(/^rgba?\\(/) || val.match(/^#[a-fA-F0-9]{3,8}$/) || val.match(/^hsla?\\(/) || val.match(/^lab\\(/) || val.match(/^lch\\(/) || val.match(/^oklch\\(/) || val.match(/^oklab\\(/));
+  }
+
+  // Convert any CSS color to RGB using canvas
+  function colorToRgb(colorStr) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = colorStr;
+    ctx.fillRect(0, 0, 1, 1);
+    var data = ctx.getImageData(0, 0, 1, 1).data;
+    return {
+      r: data[0],
+      g: data[1],
+      b: data[2],
+      a: data[3] / 255
+    };
+  }
+
+  function getNextColorFormat(current) {
+    var formats = ['hex', 'rgb', 'hsl'];
+    var idx = formats.indexOf(current);
+    return formats[(idx + 1) % formats.length];
+  }
+
   // Expand @filename mentions to full paths using the textarea's mention map
   function expandMentions(text, textarea) {
     var map = textarea && textarea.__mentionMap;
@@ -605,6 +910,332 @@ export const annotationScript = `
     if (toolbarElement) {
       toolbarElement.remove();
       toolbarElement = null;
+    }
+  }
+
+  // Class inspector functions - shown when hovering the code button
+  function showClassInspector(el, anchorRect) {
+    // Clear any pending hide
+    if (classInspectorHideTimeout) {
+      clearTimeout(classInspectorHideTimeout);
+      classInspectorHideTimeout = null;
+    }
+
+    // If already showing for same element, just reposition
+    if (classInspectorElement && classInspectorAnchor === el) {
+      return;
+    }
+
+    removeClassInspectorImmediate();
+    if (!el) return;
+
+    classInspectorAnchor = el;
+    classInspectorElement = document.createElement('div');
+    classInspectorElement.className = 'claude-design-class-inspector';
+
+    const tagName = el.tagName.toLowerCase();
+    const id = el.id;
+    const classes = el.className && typeof el.className === 'string'
+      ? el.className.split(' ').filter(function(c) { return c && !c.startsWith('claude-design-'); })
+      : [];
+
+    // Get computed styles
+    const computed = window.getComputedStyle(el);
+    const styleProps = [
+      'background-color', 'color', 'font-size', 'font-weight', 'line-height',
+      'padding', 'margin', 'border-radius', 'width', 'height',
+      'display', 'gap', 'border', 'opacity', 'letter-spacing'
+    ];
+    const styles = [];
+    styleProps.forEach(function(prop) {
+      const val = computed.getPropertyValue(prop);
+      if (val && val !== 'none' && val !== 'normal' && val !== 'auto' &&
+          val !== '0px' && val !== 'rgba(0, 0, 0, 0)' && val !== 'rgb(0, 0, 0)' &&
+          val !== 'transparent' &&
+          // Filter out common defaults
+          val !== 'block' && val !== 'inline' &&
+          !val.match(/^0px\\s+solid/) && // border: 0px solid ...
+          val !== 'rgb(255, 255, 255)' && // white text (often default)
+          val !== '400' // normal font-weight
+      ) {
+        // Shorten property names for display
+        var shortProp = prop.replace('background-color', 'bg').replace('border-radius', 'radius');
+        styles.push({ prop: shortProp, val: val });
+      }
+    });
+
+    let html = '<div class="claude-design-class-inspector-tag">&lt;' + tagName + '&gt;</div>';
+
+    if (id) {
+      html += '<div class="claude-design-class-inspector-id">#' + escapeHtml(id) + '</div>';
+    }
+
+    if (classes.length > 0) {
+      html += '<div class="claude-design-class-inspector-chips">';
+      classes.forEach(function(cls) {
+        html += '<span class="claude-design-class-chip" data-class="' + escapeHtml(cls) + '">' + escapeHtml(cls) + '</span>';
+      });
+      html += '</div>';
+      html += '<button class="claude-design-copy-all-classes" data-all-classes="' + escapeHtml(classes.join(' ')) + '">Copy all classes</button>';
+    }
+
+    // Show computed styles
+    if (styles.length > 0) {
+      html += '<div class="claude-design-class-inspector-styles">';
+      styles.forEach(function(s) {
+        var isColor = isColorValue(s.val);
+        var parsedColor = isColor ? (parseColor(s.val) || colorToRgb(s.val)) : null;
+        var hexVal = parsedColor ? rgbToHex(parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a) : null;
+
+        if (isColor && parsedColor) {
+          html += '<div class="claude-design-class-inspector-style claude-design-color-row" data-copy="' + escapeHtml(s.prop) + ': ' + escapeHtml(hexVal) + '">' +
+            '<span class="claude-design-style-prop">' + escapeHtml(s.prop) + ':</span> ' +
+            '<span class="claude-design-color-swatch" style="background:' + escapeHtml(s.val) + '"></span>' +
+            '<span class="claude-design-style-val claude-design-color-val" data-copy="' + escapeHtml(hexVal) + '" data-color-r="' + parsedColor.r + '" data-color-g="' + parsedColor.g + '" data-color-b="' + parsedColor.b + '" data-color-a="' + parsedColor.a + '" data-format="hex">' + escapeHtml(hexVal) + '</span>' +
+            '<button class="claude-design-color-toggle" data-color-r="' + parsedColor.r + '" data-color-g="' + parsedColor.g + '" data-color-b="' + parsedColor.b + '" data-color-a="' + parsedColor.a + '" title="Switch format">hex</button>' +
+          '</div>';
+        } else {
+          html += '<div class="claude-design-class-inspector-style" data-copy="' + escapeHtml(s.prop) + ': ' + escapeHtml(s.val) + '">' +
+            '<span class="claude-design-style-prop">' + escapeHtml(s.prop) + ':</span> ' +
+            '<span class="claude-design-style-val" data-copy="' + escapeHtml(s.val) + '">' + escapeHtml(s.val) + '</span>' +
+          '</div>';
+        }
+      });
+      html += '</div>';
+    }
+
+    if (classes.length === 0 && styles.length === 0) {
+      html += '<div class="claude-design-class-inspector-empty">No classes or styles</div>';
+    }
+
+    html += '<div class="claude-design-class-inspector-hint">Click to copy values</div>';
+
+    classInspectorElement.innerHTML = html;
+
+    // Add to DOM first so we can measure actual dimensions
+    classInspectorElement.style.top = '0px';
+    classInspectorElement.style.left = '0px';
+    classInspectorElement.style.visibility = 'hidden';
+    document.body.appendChild(classInspectorElement);
+
+    const inspectorRect = classInspectorElement.getBoundingClientRect();
+    const inspectorW = inspectorRect.width;
+    const inspectorH = inspectorRect.height;
+    const pad = 8;
+
+    // Position below the code button
+    let top = anchorRect.bottom + 6;
+    let left = anchorRect.right - Math.min(inspectorW, 200); // Align right edge roughly with button
+
+    // Adjust if off-screen vertically
+    if (top + inspectorH + pad > window.innerHeight) {
+      top = anchorRect.top - inspectorH - 6;
+    }
+    // Clamp vertically
+    if (top + inspectorH + pad > window.innerHeight) {
+      top = window.innerHeight - inspectorH - pad;
+    }
+    if (top < pad) top = pad;
+
+    // Clamp horizontally
+    if (left + inspectorW + pad > window.innerWidth) {
+      left = window.innerWidth - inspectorW - pad;
+    }
+    if (left < pad) left = pad;
+
+    classInspectorElement.style.top = top + 'px';
+    classInspectorElement.style.left = left + 'px';
+    classInspectorElement.style.visibility = '';
+
+    // Prevent any clicks on the inspector from bubbling up
+    classInspectorElement.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Check for copy all classes button
+      const copyAllBtn = e.target.closest ? e.target.closest('.claude-design-copy-all-classes') : null;
+      if (copyAllBtn) {
+        const allClasses = copyAllBtn.dataset.allClasses;
+        if (!allClasses) return;
+        copyAndShowFeedback(allClasses, copyAllBtn);
+        return;
+      }
+
+      // Check for class chip click
+      const chip = e.target.closest ? e.target.closest('.claude-design-class-chip') : null;
+      if (chip) {
+        const cls = chip.dataset.class;
+        if (!cls) return;
+        copyAndShowFeedback(cls, chip);
+        return;
+      }
+
+      // Check for color toggle button click - cycle format
+      const colorToggle = e.target.closest ? e.target.closest('.claude-design-color-toggle') : null;
+      if (colorToggle) {
+        var row = colorToggle.closest('.claude-design-color-row');
+        var colorValEl = row ? row.querySelector('.claude-design-color-val') : null;
+        if (colorValEl) {
+          var r = parseInt(colorToggle.dataset.colorR, 10);
+          var g = parseInt(colorToggle.dataset.colorG, 10);
+          var b = parseInt(colorToggle.dataset.colorB, 10);
+          var a = parseFloat(colorToggle.dataset.colorA);
+          var currentFormat = colorValEl.dataset.format || 'hex';
+          var nextFormat = getNextColorFormat(currentFormat);
+          var newVal = formatColorAs({ r: r, g: g, b: b, a: a }, nextFormat);
+
+          colorValEl.dataset.format = nextFormat;
+          colorValEl.dataset.copy = newVal;
+          colorValEl.textContent = newVal;
+          colorToggle.textContent = nextFormat;
+          // Update the row's data-copy too
+          var propSpan = row.querySelector('.claude-design-style-prop');
+          var propName = propSpan ? propSpan.textContent.replace(':', '') : '';
+          row.dataset.copy = propName + ': ' + newVal;
+        }
+        return;
+      }
+
+      // Check for color swatch click - copy current color value
+      const swatch = e.target.closest ? e.target.closest('.claude-design-color-swatch') : null;
+      if (swatch) {
+        var siblingVal = swatch.nextElementSibling;
+        if (siblingVal && siblingVal.dataset.copy) {
+          copyAndShowFeedback(siblingVal.dataset.copy, siblingVal);
+        }
+        return;
+      }
+
+      // Check for color value click - copy the value
+      const colorVal = e.target.closest ? e.target.closest('.claude-design-color-val') : null;
+      if (colorVal && colorVal.dataset.copy) {
+        copyAndShowFeedback(colorVal.dataset.copy, colorVal);
+        return;
+      }
+
+      // Check for style value click (just the value, non-color)
+      const styleVal = e.target.closest ? e.target.closest('.claude-design-style-val') : null;
+      if (styleVal && styleVal.dataset.copy) {
+        copyAndShowFeedback(styleVal.dataset.copy, styleVal);
+        return;
+      }
+
+      // Check for full style line click
+      const styleLine = e.target.closest ? e.target.closest('.claude-design-class-inspector-style') : null;
+      if (styleLine && styleLine.dataset.copy) {
+        copyAndShowFeedback(styleLine.dataset.copy, styleLine);
+        return;
+      }
+    }, true);
+
+    function copyAndShowFeedback(text, element) {
+      var originalText = element.textContent;
+      var textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        element.classList.add('copied');
+        element.textContent = 'Copied!';
+        setTimeout(function() {
+          element.classList.remove('copied');
+          element.textContent = originalText;
+        }, 1000);
+      } catch (err) {
+        console.error('[ClaudeDesign] Failed to copy:', err);
+      }
+      document.body.removeChild(textArea);
+    }
+
+    // Also prevent mousedown from bubbling
+    classInspectorElement.addEventListener('mousedown', function(e) {
+      e.stopPropagation();
+    }, true);
+
+    // Cancel hide when mouse enters inspector
+    classInspectorElement.addEventListener('mouseenter', function() {
+      if (classInspectorHideTimeout) {
+        clearTimeout(classInspectorHideTimeout);
+        classInspectorHideTimeout = null;
+      }
+    });
+
+    // Hide inspector when mouse leaves it (with delay)
+    classInspectorElement.addEventListener('mouseleave', function(e) {
+      if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.claude-design-code-btn')) {
+        return;
+      }
+      scheduleHideInspector();
+    });
+  }
+
+  function scheduleHideInspector() {
+    if (classInspectorHideTimeout) {
+      clearTimeout(classInspectorHideTimeout);
+    }
+    classInspectorHideTimeout = setTimeout(function() {
+      removeClassInspectorImmediate();
+    }, 150);
+  }
+
+  function removeClassInspectorImmediate() {
+    if (classInspectorHideTimeout) {
+      clearTimeout(classInspectorHideTimeout);
+      classInspectorHideTimeout = null;
+    }
+    classInspectorAnchor = null;
+    if (classInspectorElement) {
+      classInspectorElement.remove();
+      classInspectorElement = null;
+    }
+  }
+
+  function removeClassInspector() {
+    scheduleHideInspector();
+  }
+
+  // ALT+hover inspection handlers
+  function handleAltKeyDown(e) {
+    if (e.key === 'Alt' && !altKeyDown) {
+      altKeyDown = true;
+    }
+  }
+
+  function handleAltKeyUp(e) {
+    if (e.key === 'Alt' && altKeyDown) {
+      altKeyDown = false;
+      if (altHoverElement) {
+        altHoverElement.classList.remove('claude-design-alt-highlight');
+      }
+      altHoverElement = null;
+      removeClassInspectorImmediate();
+    }
+  }
+
+  function handleMouseMoveForAlt(e) {
+    if (!annotateMode || !altKeyDown) return;
+
+    var target = e.target;
+    if (target === document.body || target === document.documentElement ||
+        (target.closest && target.closest('.claude-design-popover')) ||
+        (target.closest && target.closest('.claude-design-class-inspector')) ||
+        (target.closest && target.closest('.claude-design-code-btn'))) {
+      return;
+    }
+
+    if (altHoverElement !== target) {
+      // Remove highlight from previous element
+      if (altHoverElement) {
+        altHoverElement.classList.remove('claude-design-alt-highlight');
+      }
+      // Add highlight to new element
+      altHoverElement = target;
+      altHoverElement.classList.add('claude-design-alt-highlight');
+      var rect = target.getBoundingClientRect();
+      showClassInspector(target, rect);
     }
   }
 
@@ -1220,6 +1851,7 @@ export const annotationScript = `
 
     // If element already has annotation, just show the list (no input needed)
     let inputAreaHTML = '';
+
     if (existingAnnotation && !textSelection) {
       // No input area - just show the list below
       inputAreaHTML = '';
@@ -1275,6 +1907,8 @@ export const annotationScript = `
       codeButtonElement.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
+        // Hide inspector on click
+        removeClassInspector();
         // Show spinner
         codeButtonElement.innerHTML = '<div class="claude-design-code-spinner"></div>';
         if (reactSource) {
@@ -1306,6 +1940,26 @@ export const annotationScript = `
           }, '*');
         }
       });
+
+      // Show class inspector on hover
+      codeButtonElement.addEventListener('mouseenter', function() {
+        // Cancel any pending hide
+        if (classInspectorHideTimeout) {
+          clearTimeout(classInspectorHideTimeout);
+          classInspectorHideTimeout = null;
+        }
+        var btnRect = codeButtonElement.getBoundingClientRect();
+        showClassInspector(el, btnRect);
+      });
+
+      codeButtonElement.addEventListener('mouseleave', function(e) {
+        // Don't hide if moving to the inspector itself
+        if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.claude-design-class-inspector')) {
+          return;
+        }
+        scheduleHideInspector();
+      });
+
       document.body.appendChild(codeButtonElement);
     }
 
@@ -1464,6 +2118,7 @@ export const annotationScript = `
 
   function removeCodeButton() {
     codeButtonAnchor = null;
+    removeClassInspectorImmediate();
     if (codeButtonElement) {
       codeButtonElement.remove();
       codeButtonElement = null;
@@ -1628,10 +2283,12 @@ export const annotationScript = `
     if (target === document.body || target === document.documentElement ||
         (target.closest && target.closest('.claude-design-popover')) ||
         (target.closest && target.closest('.claude-design-toolbar')) ||
-        (target.closest && target.closest('.claude-design-code-btn'))) return;
+        (target.closest && target.closest('.claude-design-code-btn')) ||
+        (target.closest && target.closest('.claude-design-class-inspector'))) return;
 
     if (highlightedElement && highlightedElement !== target) {
       highlightedElement.classList.remove('claude-design-highlight');
+      removeClassInspector();
     }
 
     target.classList.add('claude-design-highlight');
@@ -1648,55 +2305,19 @@ export const annotationScript = `
   }
 
   // Handle text selection (mouseup)
-  function handleMouseUp(e) {
-    if (!annotateMode) return;
-    if (e.target.closest && e.target.closest('.claude-design-popover')) return;
-    if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
-    if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
-
-    const selection = window.getSelection();
-    const text = selection && selection.toString().trim();
-
-    if (text && text.length > 0) {
-      // Text was selected - create text annotation
-      e.preventDefault();
-      e.stopPropagation();
-
-      // Clear any element selections
-      if (selectedElement) {
-        selectedElement.classList.remove('claude-design-selected');
-        selectedElement = null;
-      }
-      if (highlightedElement) {
-        highlightedElement.classList.remove('claude-design-highlight');
-        highlightedElement = null;
-      }
-
-      selectedText = text;
-      selectedTextRange = selection.getRangeAt(0).cloneRange();
-      const rect = selectedTextRange.getBoundingClientRect();
-
-      createPopover(null, { text: text, rect: rect, range: selectedTextRange });
-    }
-  }
 
   function handleClick(e) {
     if (!annotateMode) return;
     if (e.target.closest && e.target.closest('.claude-design-popover')) return;
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
     if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
-
-    // Check for text selection first - don't intercept if selecting text
-    const selection = window.getSelection();
-    if (selection && selection.toString().trim().length > 0) {
-      return; // Let mouseup handle text selection
-    }
+    if (e.target.closest && e.target.closest('.claude-design-class-inspector')) return;
 
     e.preventDefault();
     e.stopPropagation();
 
     // If popover is open, clicking outside cancels it
-    if ((selectedElement || selectedText) && popoverElement) {
+    if (selectedElement && popoverElement) {
       cancelAnnotation();
       return;
     }
@@ -1738,8 +2359,10 @@ export const annotationScript = `
     document.addEventListener('mouseover', handleMouseOver, true);
     document.addEventListener('mouseout', handleMouseOut, true);
     document.addEventListener('click', handleClick, true);
-    document.addEventListener('mouseup', handleMouseUp, true);
     document.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('keydown', handleAltKeyDown, true);
+    document.addEventListener('keyup', handleAltKeyUp, true);
+    document.addEventListener('mousemove', handleMouseMoveForAlt, true);
   }
 
   function disableAnnotateMode() {
@@ -1751,13 +2374,23 @@ export const annotationScript = `
     document.removeEventListener('mouseover', handleMouseOver, true);
     document.removeEventListener('mouseout', handleMouseOut, true);
     document.removeEventListener('click', handleClick, true);
-    document.removeEventListener('mouseup', handleMouseUp, true);
     document.removeEventListener('keydown', handleKeyDown, true);
+    document.removeEventListener('keydown', handleAltKeyDown, true);
+    document.removeEventListener('keyup', handleAltKeyUp, true);
+    document.removeEventListener('mousemove', handleMouseMoveForAlt, true);
+    if (altHoverElement) {
+      altHoverElement.classList.remove('claude-design-alt-highlight');
+    }
+    altKeyDown = false;
+    altHoverElement = null;
 
     if (highlightedElement) {
       highlightedElement.classList.remove('claude-design-highlight');
       highlightedElement = null;
     }
+
+    // Clear class inspector
+    removeClassInspectorImmediate();
 
     // Clear pending annotations
     clearPendingAnnotations();
@@ -1808,6 +2441,20 @@ export const annotationScript = `
     todoMode = true;
   }
 
+  // Set ALT key state from parent window (for when webview doesn't have focus)
+  function setAltKeyState(down) {
+    if (down && !altKeyDown) {
+      altKeyDown = true;
+    } else if (!down && altKeyDown) {
+      altKeyDown = false;
+      if (altHoverElement) {
+        altHoverElement.classList.remove('claude-design-alt-highlight');
+      }
+      altHoverElement = null;
+      removeClassInspectorImmediate();
+    }
+  }
+
   // Expose functions for external control
   window.__claudeDesignEnable = enableAnnotateMode;
   window.__claudeDesignDisable = disableAnnotateMode;
@@ -1817,5 +2464,6 @@ export const annotationScript = `
   window.__claudeDesignClearAll = clearPendingAnnotations;
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
   window.__claudeDesignAddToTodo = addToTodoList;
+  window.__claudeDesignSetAltKey = setAltKeyState;
 })();
 `;

@@ -231,19 +231,23 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       }
     }, 50);
 
-    // Handle resize
+    // Handle resize (debounced to avoid fitting during CSS transitions)
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const handleResize = () => {
-      try {
-        if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
-          instance.fitAddon.fit();
-          instance.terminal.scrollToBottom();
-          if (mainAPI) {
-            mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        try {
+          if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
+            instance.fitAddon.fit();
+            instance.terminal.scrollToBottom();
+            if (mainAPI) {
+              mainAPI.resizeTerminal(activeTabId, instance.terminal.cols, instance.terminal.rows);
+            }
           }
+        } catch {
+          // Ignore fit errors
         }
-      } catch {
-        // Ignore fit errors
-      }
+      }, 150);
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
@@ -252,6 +256,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
     return () => {
       clearTimeout(initTimeout);
+      if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
     };
@@ -265,12 +270,14 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
     }
   }, [activeTabId]);
 
-  // Refit terminal when todo section appears/disappears
+  // Refit terminal when collapsed state or todo section changes
   useEffect(() => {
+    if (collapsed) return;
     const instance = terminalInstances.get(activeTabId);
     if (!instance) return;
     const mainAPI = getMainAPI();
-    const timer = setTimeout(() => {
+
+    const fitTerminal = () => {
       try {
         if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
           instance.fitAddon.fit();
@@ -280,9 +287,17 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
           }
         }
       } catch { /* ignore */ }
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [hasTodoItems, activeTabId]);
+    };
+
+    // Wait for CSS transition (200ms) to complete, then fit
+    const timer1 = setTimeout(fitTerminal, 250);
+    // Second fit as safety net after everything has settled
+    const timer2 = setTimeout(fitTerminal, 500);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [collapsed, hasTodoItems, activeTabId]);
 
   // Handle drag and drop for files - use capture phase to intercept before xterm
   useEffect(() => {

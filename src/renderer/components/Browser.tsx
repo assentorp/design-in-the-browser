@@ -453,6 +453,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         if (annotateMode) {
           const result = await webview.executeJavaScript('window.__claudeDesignEnable && window.__claudeDesignEnable(); true;');
           console.log('[Browser] Enable result:', result);
+          // Focus the webview so ALT+hover works immediately
+          webview.focus();
         } else {
           await webview.executeJavaScript('window.__claudeDesignDisable && window.__claudeDesignDisable(); true;');
         }
@@ -464,7 +466,45 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     toggle();
   }, [annotateMode, isReady]);
 
-  
+  // Forward ALT key state to webview when in annotate mode
+  // This ensures ALT+hover works even when the webview doesn't have focus
+  useEffect(() => {
+    if (!annotateMode || !isReady) return;
+
+    const webview = webviewRef.current;
+    if (!webview) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') {
+        webview.executeJavaScript('window.__claudeDesignSetAltKey && window.__claudeDesignSetAltKey(true); true;').catch(() => {});
+        // Also focus the webview so mousemove events fire inside it
+        webview.focus();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') {
+        webview.executeJavaScript('window.__claudeDesignSetAltKey && window.__claudeDesignSetAltKey(false); true;').catch(() => {});
+      }
+    };
+
+    // Clear ALT state when window loses focus (e.g. user switches apps while holding ALT)
+    const handleBlur = () => {
+      webview.executeJavaScript('window.__claudeDesignSetAltKey && window.__claudeDesignSetAltKey(false); true;').catch(() => {});
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keyup', handleKeyUp, true);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keyup', handleKeyUp, true);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [annotateMode, isReady]);
+
+
   const navigate = useCallback((targetUrl: string) => {
     const webview = webviewRef.current;
     if (!webview) return;
