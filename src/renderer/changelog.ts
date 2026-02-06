@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.31',
+    date: 'February 6, 2026',
+    changes: [
+      'CSS Inspector: hold ALT to inspect any element — shows classes, computed styles, and colors',
+      'Click to copy class names, style values, or colors from the inspector',
+      'Toggle color formats between hex, rgb, and hsl',
+      'Fix terminal rendering gaps after collapsing and expanding the terminal panel',
+    ],
+  },
+  {
     version: '1.2.30',
     date: 'February 5, 2026',
     changes: [
