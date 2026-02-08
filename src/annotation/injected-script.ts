@@ -34,6 +34,10 @@ export const annotationScript = `
   let rulerLineH = null;
   let rulerLineV = null;
 
+  // Shortcut hints state
+  let shortcutHintsElement = null;
+  let shortcutHintsTimeout = null;
+
   // Multi-edit state - stores pending annotations with individual notes
   let pendingAnnotations = []; // Array of {element, note, bounds, selector, tagName, text, attributes}
 
@@ -721,6 +725,42 @@ export const annotationScript = `
         background: #444;
         color: #fff;
         border-color: #555;
+      }
+      .claude-design-shortcut-hints {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2147483647;
+        background: rgba(31, 31, 31, 0.92);
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 8px 16px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 12px;
+        color: #999;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        white-space: nowrap;
+      }
+      .claude-design-shortcut-hints.visible {
+        opacity: 1;
+      }
+      .claude-design-shortcut-hints kbd {
+        display: inline-block;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        font-size: 11px;
+        color: #e5e5e5;
+        margin-right: 4px;
       }
       .claude-design-ruler-h,
       .claude-design-ruler-v {
@@ -2685,6 +2725,34 @@ export const annotationScript = `
     if (rulerLineV) rulerLineV.style.left = e.clientX + 'px';
   }
 
+  function showShortcutHints() {
+    removeShortcutHints();
+    shortcutHintsElement = document.createElement('div');
+    shortcutHintsElement.className = 'claude-design-shortcut-hints';
+    shortcutHintsElement.innerHTML = '<span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span>';
+    document.body.appendChild(shortcutHintsElement);
+    // Trigger fade-in on next frame
+    requestAnimationFrame(function() {
+      if (shortcutHintsElement) shortcutHintsElement.classList.add('visible');
+    });
+    // Auto-dismiss after 2.5s
+    shortcutHintsTimeout = setTimeout(function() {
+      if (shortcutHintsElement) shortcutHintsElement.classList.remove('visible');
+      setTimeout(removeShortcutHints, 300);
+    }, 2500);
+  }
+
+  function removeShortcutHints() {
+    if (shortcutHintsTimeout) {
+      clearTimeout(shortcutHintsTimeout);
+      shortcutHintsTimeout = null;
+    }
+    if (shortcutHintsElement) {
+      shortcutHintsElement.remove();
+      shortcutHintsElement = null;
+    }
+  }
+
   function enableAnnotateMode() {
     if (annotateMode) return;
     annotateMode = true;
@@ -2700,6 +2768,8 @@ export const annotationScript = `
     document.addEventListener('keydown', handleGKeyDown, true);
     document.addEventListener('keyup', handleGKeyUp, true);
     document.addEventListener('mousemove', handleMouseMoveForRuler, true);
+
+    showShortcutHints();
   }
 
   function disableAnnotateMode() {
@@ -2719,6 +2789,7 @@ export const annotationScript = `
     document.removeEventListener('keyup', handleGKeyUp, true);
     document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
     removeRulerGuides();
+    removeShortcutHints();
     gKeyDown = false;
     if (altHoverElement) {
       altHoverElement.classList.remove('claude-design-alt-highlight');
