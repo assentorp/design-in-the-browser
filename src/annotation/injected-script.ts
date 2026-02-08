@@ -465,10 +465,10 @@ export const annotationScript = `
       }
       .claude-design-mention-icon {
         flex-shrink: 0;
-        font-size: 11px;
+        font-size: 9px;
         font-weight: 700;
         font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-        width: 28px;
+        width: 20px;
         height: 20px;
         display: flex;
         align-items: center;
@@ -491,8 +491,11 @@ export const annotationScript = `
         font-size: 13px;
         color: #e5e5e5;
         white-space: nowrap;
-        flex-shrink: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
         font-weight: 500;
+        min-width: 0;
+        flex: 1;
       }
       .claude-design-mention-dir {
         font-size: 12px;
@@ -517,14 +520,7 @@ export const annotationScript = `
         border: 1px solid rgba(255,255,255,0.15);
       }
       .claude-design-token-value {
-        font-size: 11px;
-        color: #888;
-        margin-left: auto;
-        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 120px;
+        display: none;
       }
       .claude-design-token-applied {
         font-size: 9px;
@@ -533,8 +529,19 @@ export const annotationScript = `
         background: rgba(34,197,94,0.15);
         padding: 1px 5px;
         border-radius: 4px;
-        margin-left: 6px;
         flex-shrink: 0;
+        margin-left: 4px;
+      }
+      .claude-design-token-applied:first-of-type {
+        margin-left: auto;
+      }
+      .claude-design-token-applied.variant-theme {
+        color: #c084fc;
+        background: rgba(192,132,252,0.15);
+      }
+      .claude-design-token-applied.variant-breakpoint {
+        color: #38bdf8;
+        background: rgba(56,189,248,0.15);
       }
       .claude-design-mention-item .claude-design-mention-icon.token-color { color: #c084fc; }
       .claude-design-mention-item .claude-design-mention-icon.token-spacing { color: #38bdf8; }
@@ -1481,7 +1488,16 @@ export const annotationScript = `
     };
 
     console.log('[ClaudeDesign] Sending multi-edit annotations, count:', pendingAnnotations.length);
-    window.__claudeDesignSendAnnotation(data);
+    if (!window.__claudeDesignSendAnnotation) {
+      console.warn('[ClaudeDesign] Send callback not ready, keeping annotations');
+      return;
+    }
+    try {
+      window.__claudeDesignSendAnnotation(data);
+    } catch (err) {
+      console.error('[ClaudeDesign] Failed to send annotations:', err);
+      return;
+    }
     clearPendingAnnotations();
     todoMode = false;
     cancelAnnotation();
@@ -1584,11 +1600,27 @@ export const annotationScript = `
       return window.__claudeDesignTokens || [];
     }
 
-    // Get classes applied to the currently selected element (for "applied" badges)
-    function getAppliedClasses() {
+    // Get classes applied to the currently selected element
+    // Returns a map: baseClassName -> array of variant prefixes (empty string = direct, 'dark' = dark:, 'md' = md:, etc.)
+    function getAppliedClassMap() {
       var el = selectedElement || altHoverElement;
-      if (!el || !el.className || typeof el.className !== 'string') return [];
-      return el.className.split(' ').filter(function(c) { return c && !c.startsWith('claude-design-'); });
+      if (!el || !el.className || typeof el.className !== 'string') return {};
+      var classes = el.className.split(' ').filter(function(c) { return c && !c.startsWith('claude-design-'); });
+      var map = {};
+      for (var i = 0; i < classes.length; i++) {
+        var cls = classes[i];
+        var lastColon = cls.lastIndexOf(':');
+        if (lastColon !== -1) {
+          var variant = cls.substring(0, lastColon);
+          var base = cls.substring(lastColon + 1);
+          if (!map[base]) map[base] = [];
+          map[base].push(variant);
+        } else {
+          if (!map[cls]) map[cls] = [];
+          map[cls].push('');
+        }
+      }
+      return map;
     }
 
     function filterFiles(query) {
@@ -1610,15 +1642,13 @@ export const annotationScript = `
     function filterTokens(query) {
       var q = query.toLowerCase();
       var tokens = getTokens();
-      var applied = getAppliedClasses();
-      var appliedSet = {};
-      for (var k = 0; k < applied.length; k++) appliedSet[applied[k]] = true;
+      var appliedMap = getAppliedClassMap();
 
       var results;
       if (!q) {
         // Show applied tokens first, then popular ones
-        var appliedTokens = tokens.filter(function(t) { return appliedSet[t.name]; });
-        var otherTokens = tokens.filter(function(t) { return !appliedSet[t.name]; });
+        var appliedTokens = tokens.filter(function(t) { return appliedMap[t.name]; });
+        var otherTokens = tokens.filter(function(t) { return !appliedMap[t.name]; });
         results = appliedTokens.concat(otherTokens).slice(0, 50);
       } else {
         results = tokens.filter(function(t) {
@@ -1626,8 +1656,8 @@ export const annotationScript = `
         });
         // Sort: applied first, then name match quality
         results.sort(function(a, b) {
-          var aApplied = appliedSet[a.name] ? 0 : 1;
-          var bApplied = appliedSet[b.name] ? 0 : 1;
+          var aApplied = appliedMap[a.name] ? 0 : 1;
+          var bApplied = appliedMap[b.name] ? 0 : 1;
           if (aApplied !== bApplied) return aApplied - bApplied;
           var aStart = a.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
           var bStart = b.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
@@ -1636,9 +1666,9 @@ export const annotationScript = `
         results = results.slice(0, 50);
       }
 
-      // Tag each result with whether it's applied
+      // Tag each result with applied variants
       for (var j = 0; j < results.length; j++) {
-        results[j] = Object.assign({}, results[j], { _applied: !!appliedSet[results[j].name] });
+        results[j] = Object.assign({}, results[j], { _applied: appliedMap[results[j].name] || false });
       }
       return results;
     }
@@ -1759,8 +1789,17 @@ export const annotationScript = `
           html += '<span class="claude-design-mention-icon ' + catIcon.cls + '">' + catIcon.label + '</span>';
         }
         html += '<span class="claude-design-mention-name">' + escapeHtml(t.name) + '</span>';
-        if (t._applied) {
-          html += '<span class="claude-design-token-applied">applied</span>';
+        if (t._applied && Array.isArray(t._applied)) {
+          for (var vi = 0; vi < t._applied.length; vi++) {
+            var v = t._applied[vi];
+            if (v === '') {
+              html += '<span class="claude-design-token-applied">applied</span>';
+            } else if (v === 'dark' || v === 'light') {
+              html += '<span class="claude-design-token-applied variant-theme">' + escapeHtml(v) + '</span>';
+            } else {
+              html += '<span class="claude-design-token-applied variant-breakpoint">' + escapeHtml(v) + '</span>';
+            }
+          }
         }
         html += '<span class="claude-design-token-value">' + escapeHtml(t.value) + '</span>';
         html += '</div>';
