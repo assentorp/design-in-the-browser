@@ -28,6 +28,7 @@ interface BrowserProps {
   projectPath: string;
   onAnnotation?: (data: AnnotationData) => void;
   cliRunning?: boolean;
+  clearCacheTrigger?: number;
 }
 
 export type ViewportType = 'desktop' | 'tablet' | 'mobile';
@@ -44,7 +45,7 @@ const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
   mobile: 375,
 };
 
-export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning }: BrowserProps) {
+export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning, clearCacheTrigger }: BrowserProps) {
   const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -504,6 +505,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     };
   }, [annotateMode, isReady]);
 
+  // Handle clear cache trigger from menu (Cmd+Shift+R)
+  useEffect(() => {
+    if (clearCacheTrigger && clearCacheTrigger > 0) {
+      clearCacheAndReload();
+    }
+  }, [clearCacheTrigger, clearCacheAndReload]);
+
 
   const navigate = useCallback((targetUrl: string) => {
     const webview = webviewRef.current;
@@ -537,7 +545,15 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   }, []);
 
   const reload = useCallback(() => {
-    webviewRef.current?.reload();
+    webviewRef.current?.reloadIgnoringCache();
+  }, []);
+
+  const clearCacheAndReload = useCallback(async () => {
+    const mainAPI = getMainAPI();
+    if (mainAPI) {
+      await mainAPI.clearWebviewCache();
+    }
+    webviewRef.current?.reloadIgnoringCache();
   }, []);
 
   const toggleAnnotate = useCallback(() => {

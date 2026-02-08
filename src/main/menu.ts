@@ -77,6 +77,14 @@ export function createMenu(mainWindow: BrowserWindow) {
         { role: 'togglefullscreen' },
         { type: 'separator' },
         {
+          label: 'Clear Cache & Reload',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => {
+            mainWindow.webContents.send('clear-cache-reload');
+          },
+        },
+        { type: 'separator' as const },
+        {
           label: 'Toggle Annotate Mode',
           accelerator: 'CmdOrCtrl+Shift+A',
           click: () => {

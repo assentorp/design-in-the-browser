@@ -1354,6 +1354,11 @@ export const annotationScript = `
   function sendAllAnnotations() {
     if (pendingAnnotations.length === 0) return;
 
+    if (typeof window.__claudeDesignSendAnnotation !== 'function') {
+      console.error('[ClaudeDesign] sendAnnotation callback not available, cannot send');
+      return;
+    }
+
     const data = {
       type: 'multi-edit',
       url: window.location.href,
@@ -1370,10 +1375,14 @@ export const annotationScript = `
     };
 
     console.log('[ClaudeDesign] Sending multi-edit annotations, count:', pendingAnnotations.length);
-    window.__claudeDesignSendAnnotation(data);
-    clearPendingAnnotations();
-    todoMode = false;
-    cancelAnnotation();
+    try {
+      window.__claudeDesignSendAnnotation(data);
+      clearPendingAnnotations();
+      todoMode = false;
+      cancelAnnotation();
+    } catch (err) {
+      console.error('[ClaudeDesign] Failed to send annotations:', err);
+    }
   }
 
   // Find React source file for an element (via _debugSource)
@@ -2465,5 +2474,8 @@ export const annotationScript = `
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
   window.__claudeDesignAddToTodo = addToTodoList;
   window.__claudeDesignSetAltKey = setAltKeyState;
+
+  // Sync React with webview's pending state on injection (clears stale items after page reload)
+  notifyPendingUpdate();
 })();
 `;

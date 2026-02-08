@@ -45,12 +45,15 @@ export default function App() {
   const [projectPresets, setProjectPresets] = useState<ProjectPreset[]>([]);
   const [presetsLoaded, setPresetsLoaded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [clearCacheTrigger, setClearCacheTrigger] = useState(0);
   const browserWidthRef = useRef(60);
   const pendingCommandsRef = useRef<{ sessionId: string; tabId: string; command: string }[]>([]);
   const sessionsRef = useRef<Session[]>(sessions);
   sessionsRef.current = sessions;
   const cliRunningRef = useRef<Set<string>>(new Set());
   const cliTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const editActionsRef = useRef<EditActions | null>(null);
+  editActionsRef.current = editActions;
 
   // Load presets from disk on mount (with migration from localStorage)
   useEffect(() => {
@@ -97,6 +100,24 @@ export default function App() {
     const onWhatsNewOpen = (window as unknown as { onWhatsNewOpen?: (cb: () => void) => void }).onWhatsNewOpen;
     if (onWhatsNewOpen) {
       onWhatsNewOpen(() => handleOpenWhatsNew());
+    }
+  }, []);
+
+  // Listen for Clear Cache & Reload menu trigger
+  useEffect(() => {
+    const onClearCacheReload = (window as unknown as { onClearCacheReload?: (cb: () => void) => void }).onClearCacheReload;
+    if (onClearCacheReload) {
+      onClearCacheReload(() => setClearCacheTrigger((prev) => prev + 1));
+    }
+  }, []);
+
+  // Listen for Send Queued Edits menu trigger (Cmd+E)
+  useEffect(() => {
+    const onSendQueuedEdits = (window as unknown as { onSendQueuedEdits?: (cb: () => void) => void }).onSendQueuedEdits;
+    if (onSendQueuedEdits) {
+      onSendQueuedEdits(() => {
+        editActionsRef.current?.sendAll();
+      });
     }
   }, []);
 
@@ -528,6 +549,7 @@ export default function App() {
             projectPath={activeSession.projectPath}
             onAnnotation={handleAnnotation}
             cliRunning={activeSession.cliToolRunning}
+            clearCacheTrigger={clearCacheTrigger}
           />
         </div>
         {!activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}

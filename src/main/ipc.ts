@@ -729,6 +729,13 @@ export function setupIPC(mainWindow: BrowserWindow) {
     return null;
   });
 
+  // Clear webview cache (for hard reload)
+  ipcMain.handle('webview:clear-cache', async () => {
+    const ses = mainWindow.webContents.session;
+    await ses.clearCache();
+    console.log('[IPC] Webview cache cleared');
+  });
+
   // Get app version
   ipcMain.handle('app:version', () => {
     return app.getVersion();

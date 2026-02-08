@@ -159,6 +159,7 @@ export interface MainAPI {
   savePresets: (presets: ProjectPreset[]) => Promise<ProjectPreset[]>;
   getPathForFile: (file: File) => string;
   getAppVersion: () => Promise<string>;
+  clearWebviewCache: () => Promise<void>;
 }
 
 export interface ElementSearchInfo {
