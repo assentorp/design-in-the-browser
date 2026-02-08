@@ -501,6 +501,148 @@ export const annotationScript = `
         font-size: 13px;
         text-align: center;
       }
+      .claude-design-lint-counter {
+        position: fixed;
+        z-index: 2147483646;
+        bottom: 12px;
+        left: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #1f1f1f;
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 12px;
+        color: #ccc;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        cursor: default;
+        user-select: none;
+        animation: claude-design-lint-fadein 0.2s ease-out;
+      }
+      .claude-design-lint-counter-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+      }
+      .claude-design-lint-counter-icon.has-errors {
+        background: #ef4444;
+      }
+      .claude-design-lint-counter-icon.warnings-only {
+        background: #f59e0b;
+      }
+      .claude-design-lint-counter-icon.clean {
+        background: #22c55e;
+      }
+      .claude-design-lint-counter-text {
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      @keyframes claude-design-lint-fadein {
+        0% { opacity: 0; transform: translateY(8px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      .claude-design-lint-section {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid #333;
+      }
+      .claude-design-lint-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: #ef4444;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .claude-design-lint-item {
+        font-size: 12px;
+        color: #ccc;
+        padding: 4px 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        cursor: default;
+      }
+      .claude-design-lint-item.clickable {
+        cursor: pointer;
+        border-radius: 4px;
+        padding: 4px 6px;
+        margin: 0 -6px;
+      }
+      .claude-design-lint-item.clickable:hover {
+        background: rgba(239, 68, 68, 0.1);
+      }
+      .claude-design-lint-icon {
+        flex-shrink: 0;
+        font-size: 12px;
+      }
+      .claude-design-lint-icon.error { color: #ef4444; }
+      .claude-design-lint-icon.warning { color: #f59e0b; }
+      .claude-design-lint-detail {
+        font-size: 11px;
+        color: #888;
+        margin-left: 18px;
+      }
+      .claude-design-mention-token-swatch {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        flex-shrink: 0;
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+      .claude-design-mention-token-icon {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 700;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.06);
+        color: #888;
+      }
+      .claude-design-mention-token-value {
+        font-size: 11px;
+        color: #666;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-left: auto;
+        min-width: 0;
+      }
+      .claude-design-mention-applied {
+        font-size: 10px;
+        color: #22c55e;
+        background: rgba(34, 197, 94, 0.15);
+        padding: 1px 6px;
+        border-radius: 4px;
+        flex-shrink: 0;
+        font-weight: 500;
+      }
+      .claude-design-mention-category {
+        font-size: 10px;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 8px 10px 4px;
+        font-weight: 600;
+      }
+      .claude-design-mention-category:first-child {
+        padding-top: 4px;
+      }
       .claude-design-class-inspector {
         position: fixed;
         z-index: 2147483647;
@@ -891,18 +1033,33 @@ export const annotationScript = `
     return formats[(idx + 1) % formats.length];
   }
 
-  // Expand @filename mentions to full paths using the textarea's mention map
+  // Expand @filename and @@token mentions using the textarea's mention maps
   function expandMentions(text, textarea) {
-    var map = textarea && textarea.__mentionMap;
-    if (!map) return text;
     var result = text;
-    var names = Object.keys(map);
-    // Sort longest names first to avoid partial replacements
-    names.sort(function(a, b) { return b.length - a.length; });
-    for (var i = 0; i < names.length; i++) {
-      var name = names[i];
-      result = result.split('@' + name).join(map[name]);
+
+    // First expand @@token mentions (must be before @ to avoid partial match)
+    var tokenMap = textarea && textarea.__tokenMentionMap;
+    if (tokenMap) {
+      var tNames = Object.keys(tokenMap);
+      tNames.sort(function(a, b) { return b.length - a.length; });
+      for (var t = 0; t < tNames.length; t++) {
+        var tName = tNames[t];
+        result = result.split('@@' + tName).join(tokenMap[tName]);
+      }
     }
+
+    // Then expand @file mentions
+    var map = textarea && textarea.__mentionMap;
+    if (map) {
+      var names = Object.keys(map);
+      // Sort longest names first to avoid partial replacements
+      names.sort(function(a, b) { return b.length - a.length; });
+      for (var i = 0; i < names.length; i++) {
+        var name = names[i];
+        result = result.split('@' + name).join(map[name]);
+      }
+    }
+
     return result;
   }
 
@@ -1006,6 +1163,28 @@ export const annotationScript = `
 
     if (classes.length === 0 && styles.length === 0) {
       html += '<div class="claude-design-class-inspector-empty">No classes or styles</div>';
+    }
+
+    // Lint checks
+    var lintIssues = runLintChecks(el);
+    if (lintIssues.length > 0) {
+      html += '<div class="claude-design-lint-section">';
+      html += '<div class="claude-design-lint-title">Issues (' + lintIssues.length + ')</div>';
+      for (var li = 0; li < lintIssues.length; li++) {
+        var issue = lintIssues[li];
+        var iconCls = issue.severity === 'error' ? 'error' : 'warning';
+        var iconChar = issue.severity === 'error' ? '\\u2716' : '\\u26A0';
+        var hasFixClass = issue.fix ? ' clickable' : '';
+        var fixAttr = issue.fix ? ' data-lint-fix="' + escapeHtml(issue.fix) + '"' : '';
+        html += '<div class="claude-design-lint-item' + hasFixClass + '"' + fixAttr + '>';
+        html += '<span class="claude-design-lint-icon ' + iconCls + '">' + iconChar + '</span>';
+        html += '<span>' + escapeHtml(issue.message) + '</span>';
+        html += '</div>';
+        if (issue.detail) {
+          html += '<div class="claude-design-lint-detail">' + escapeHtml(issue.detail) + '</div>';
+        }
+      }
+      html += '</div>';
     }
 
     html += '<div class="claude-design-class-inspector-hint">Click to copy values</div>';
@@ -1126,6 +1305,27 @@ export const annotationScript = `
         copyAndShowFeedback(styleLine.dataset.copy, styleLine);
         return;
       }
+
+      // Check for lint fix click - opens annotation popover with fix suggestion
+      const lintItem = e.target.closest ? e.target.closest('.claude-design-lint-item[data-lint-fix]') : null;
+      if (lintItem) {
+        var fixText = lintItem.dataset.lintFix;
+        var targetEl = classInspectorAnchor || altHoverElement;
+        if (fixText && targetEl) {
+          removeClassInspectorImmediate();
+          selectedElement = targetEl;
+          selectedElement.classList.add('claude-design-selected');
+          createPopover(selectedElement, null);
+          // Pre-fill the textarea with the fix suggestion
+          var textarea = popoverElement && popoverElement.querySelector('.claude-design-popover-textarea');
+          if (textarea) {
+            textarea.value = fixText;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.focus();
+          }
+        }
+        return;
+      }
     }, true);
 
     function copyAndShowFeedback(text, element) {
@@ -1197,6 +1397,211 @@ export const annotationScript = `
     scheduleHideInspector();
   }
 
+  // ---- Design Lint Checks ----
+  function getLuminance(r, g, b) {
+    var rs = r / 255, gs = g / 255, bs = b / 255;
+    rs = rs <= 0.03928 ? rs / 12.92 : Math.pow((rs + 0.055) / 1.055, 2.4);
+    gs = gs <= 0.03928 ? gs / 12.92 : Math.pow((gs + 0.055) / 1.055, 2.4);
+    bs = bs <= 0.03928 ? bs / 12.92 : Math.pow((bs + 0.055) / 1.055, 2.4);
+    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+  }
+
+  function getContrastRatio(l1, l2) {
+    var lighter = Math.max(l1, l2);
+    var darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function getEffectiveBgColor(el) {
+    var current = el;
+    while (current && current !== document.documentElement) {
+      var bg = window.getComputedStyle(current).backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+        return bg;
+      }
+      current = current.parentElement;
+    }
+    return 'rgb(255, 255, 255)';
+  }
+
+  function parseRgb(str) {
+    var m = str.match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)/);
+    if (m) return { r: parseInt(m[1]), g: parseInt(m[2]), b: parseInt(m[3]) };
+    return null;
+  }
+
+  function runLintChecks(el) {
+    var issues = [];
+    var computed = window.getComputedStyle(el);
+    var tagName = el.tagName.toLowerCase();
+
+    // 1. Color contrast check (WCAG AA 4.5:1 for normal text, 3:1 for large)
+    var textContent = el.textContent || '';
+    if (textContent.trim().length > 0 && el.children.length === 0) {
+      var fgColor = computed.color;
+      var bgColor = getEffectiveBgColor(el);
+      var fg = parseRgb(fgColor);
+      var bg = parseRgb(bgColor);
+      if (fg && bg) {
+        var fgLum = getLuminance(fg.r, fg.g, fg.b);
+        var bgLum = getLuminance(bg.r, bg.g, bg.b);
+        var ratio = getContrastRatio(fgLum, bgLum);
+        var fontSize = parseFloat(computed.fontSize);
+        var fontWeight = parseInt(computed.fontWeight) || 400;
+        var isLarge = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700);
+        var minRatio = isLarge ? 3 : 4.5;
+        if (ratio < minRatio) {
+          issues.push({
+            severity: 'error',
+            message: 'Low contrast: ' + ratio.toFixed(1) + ':1 (needs ' + minRatio + ':1)',
+            detail: 'Text may be hard to read against background',
+            fix: 'Increase the contrast ratio between text color and background to at least ' + minRatio + ':1'
+          });
+        }
+      }
+    }
+
+    // 2. Missing alt text on images
+    if (tagName === 'img') {
+      var alt = el.getAttribute('alt');
+      if (alt === null || alt === undefined) {
+        issues.push({
+          severity: 'error',
+          message: 'Image missing alt text',
+          detail: 'Screen readers cannot describe this image',
+          fix: 'Add an alt attribute describing the image content'
+        });
+      } else if (alt.trim() === '') {
+        // Empty alt is intentional for decorative images - just a warning
+        issues.push({
+          severity: 'warning',
+          message: 'Image has empty alt text',
+          detail: 'OK if decorative, but verify this is intentional',
+          fix: null
+        });
+      }
+    }
+
+    // 3. Touch target size (WCAG 2.5.8: minimum 24x24px)
+    if (tagName === 'button' || tagName === 'a' || el.getAttribute('role') === 'button' ||
+        tagName === 'input' || tagName === 'select' || tagName === 'textarea') {
+      var rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        if (rect.width < 24 || rect.height < 24) {
+          issues.push({
+            severity: 'warning',
+            message: 'Small touch target: ' + Math.round(rect.width) + 'x' + Math.round(rect.height) + 'px',
+            detail: 'Minimum recommended 24x24px for touch accessibility',
+            fix: 'Increase the clickable area to at least 24x24px'
+          });
+        }
+      }
+    }
+
+    // 4. Missing accessible name on interactive elements
+    if (tagName === 'button' || (tagName === 'a' && el.getAttribute('href')) || el.getAttribute('role') === 'button') {
+      var hasText = (el.textContent || '').trim().length > 0;
+      var hasAriaLabel = !!el.getAttribute('aria-label');
+      var hasAriaLabelledBy = !!el.getAttribute('aria-labelledby');
+      var hasTitle = !!el.getAttribute('title');
+      if (!hasText && !hasAriaLabel && !hasAriaLabelledBy && !hasTitle) {
+        issues.push({
+          severity: 'error',
+          message: 'No accessible name',
+          detail: 'Screen readers cannot announce this element',
+          fix: 'Add text content, aria-label, or aria-labelledby to this interactive element'
+        });
+      }
+    }
+
+    // 5. Text truncation detection
+    if (el.scrollWidth > el.clientWidth + 2 && computed.overflow !== 'visible') {
+      var hasEllipsis = computed.textOverflow === 'ellipsis';
+      if (hasEllipsis || computed.overflow === 'hidden') {
+        issues.push({
+          severity: 'warning',
+          message: 'Text appears truncated',
+          detail: 'Content: "' + textContent.trim().substring(0, 40) + '..."',
+          fix: 'Ensure truncated text is accessible via tooltip or expandable area'
+        });
+      }
+    }
+
+    // 6. Form labels
+    if ((tagName === 'input' || tagName === 'select' || tagName === 'textarea') &&
+        el.getAttribute('type') !== 'hidden' && el.getAttribute('type') !== 'submit' && el.getAttribute('type') !== 'button') {
+      var hasLabelFor = el.id && document.querySelector('label[for="' + el.id + '"]');
+      var hasWrappingLabel = el.closest && el.closest('label');
+      var hasAriaLabelAttr = !!el.getAttribute('aria-label');
+      var hasPlaceholder = !!el.getAttribute('placeholder');
+      if (!hasLabelFor && !hasWrappingLabel && !hasAriaLabelAttr) {
+        issues.push({
+          severity: hasPlaceholder ? 'warning' : 'error',
+          message: 'Form input missing label',
+          detail: hasPlaceholder ? 'Has placeholder but no proper label' : 'No associated label element',
+          fix: 'Add a <label> element with a for attribute or wrap the input in a <label>'
+        });
+      }
+    }
+
+    return issues;
+  }
+
+  // Lint counter indicator (shown in annotate mode, like browser console error count)
+  var lintCounterElement = null;
+
+  function updateLintCounter() {
+    var allElements = document.querySelectorAll('img, button, a, input, select, textarea, [role="button"], p, span, h1, h2, h3, h4, h5, h6, li, td, th, label, div');
+    var viewportW = window.innerWidth;
+    var viewportH = window.innerHeight;
+    var checked = 0;
+    var maxCheck = 200;
+    var errorCount = 0;
+    var warningCount = 0;
+
+    for (var i = 0; i < allElements.length && checked < maxCheck; i++) {
+      var el = allElements[i];
+      if (el.closest && (el.closest('.claude-design-popover') || el.closest('.claude-design-class-inspector') || el.closest('.claude-design-lint-counter'))) continue;
+      if (el.className && typeof el.className === 'string' && el.className.indexOf('claude-design-') !== -1) continue;
+
+      var rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (rect.bottom < 0 || rect.top > viewportH || rect.right < 0 || rect.left > viewportW) continue;
+
+      checked++;
+      var issues = runLintChecks(el);
+      for (var j = 0; j < issues.length; j++) {
+        if (issues[j].severity === 'error') errorCount++;
+        else warningCount++;
+      }
+    }
+
+    var total = errorCount + warningCount;
+
+    if (!lintCounterElement) {
+      lintCounterElement = document.createElement('div');
+      lintCounterElement.className = 'claude-design-lint-counter';
+      document.body.appendChild(lintCounterElement);
+    }
+
+    var iconCls = errorCount > 0 ? 'has-errors' : (warningCount > 0 ? 'warnings-only' : 'clean');
+    var iconChar = total > 0 ? '!' : '\\u2713';
+    var text = total === 0
+      ? 'No issues'
+      : errorCount + ' error' + (errorCount !== 1 ? 's' : '') + (warningCount > 0 ? ', ' + warningCount + ' warning' + (warningCount !== 1 ? 's' : '') : '');
+
+    lintCounterElement.innerHTML =
+      '<span class="claude-design-lint-counter-icon ' + iconCls + '">' + iconChar + '</span>' +
+      '<span class="claude-design-lint-counter-text">' + text + '</span>';
+  }
+
+  function removeLintCounter() {
+    if (lintCounterElement && lintCounterElement.parentNode) {
+      lintCounterElement.parentNode.removeChild(lintCounterElement);
+    }
+    lintCounterElement = null;
+  }
+
   // ALT+hover inspection handlers
   function handleAltKeyDown(e) {
     if (e.key === 'Alt' && !altKeyDown) {
@@ -1222,6 +1627,7 @@ export const annotationScript = `
     if (target === document.body || target === document.documentElement ||
         (target.closest && target.closest('.claude-design-popover')) ||
         (target.closest && target.closest('.claude-design-class-inspector')) ||
+        (target.closest && target.closest('.claude-design-lint-counter')) ||
         (target.closest && target.closest('.claude-design-code-btn'))) {
       return;
     }
@@ -2363,6 +2769,9 @@ export const annotationScript = `
     document.addEventListener('keydown', handleAltKeyDown, true);
     document.addEventListener('keyup', handleAltKeyUp, true);
     document.addEventListener('mousemove', handleMouseMoveForAlt, true);
+
+    // Show lint counter when entering annotate mode
+    updateLintCounter();
   }
 
   function disableAnnotateMode() {
@@ -2378,6 +2787,7 @@ export const annotationScript = `
     document.removeEventListener('keydown', handleAltKeyDown, true);
     document.removeEventListener('keyup', handleAltKeyUp, true);
     document.removeEventListener('mousemove', handleMouseMoveForAlt, true);
+    removeLintCounter();
     if (altHoverElement) {
       altHoverElement.classList.remove('claude-design-alt-highlight');
     }
