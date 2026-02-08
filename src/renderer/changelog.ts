@@ -6,7 +6,7 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: '1.2.32',
+    version: '1.3.0',
     date: 'February 8, 2026',
     changes: [
       'Design token autocomplete: type @@ in the annotation textarea to search and insert Tailwind tokens with color swatches and "applied" badges',
