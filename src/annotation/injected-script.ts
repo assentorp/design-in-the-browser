@@ -517,9 +517,13 @@ export const annotationScript = `
         font-size: 12px;
         color: #ccc;
         box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-        cursor: default;
+        cursor: pointer;
         user-select: none;
         animation: claude-design-lint-fadein 0.2s ease-out;
+        transition: border-color 0.15s ease;
+      }
+      .claude-design-lint-counter:hover {
+        border-color: #555;
       }
       .claude-design-lint-counter-icon {
         display: flex;
@@ -549,6 +553,79 @@ export const annotationScript = `
       @keyframes claude-design-lint-fadein {
         0% { opacity: 0; transform: translateY(8px); }
         100% { opacity: 1; transform: translateY(0); }
+      }
+      .claude-design-lint-panel {
+        position: fixed;
+        z-index: 2147483646;
+        bottom: 48px;
+        left: 12px;
+        width: 340px;
+        max-height: 400px;
+        overflow-y: auto;
+        background: #1f1f1f;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 10px 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 12px;
+        color: #ccc;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        animation: claude-design-lint-fadein 0.15s ease-out;
+      }
+      .claude-design-lint-panel-header {
+        padding: 2px 12px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #999;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .claude-design-lint-panel-item {
+        padding: 8px 12px;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        cursor: pointer;
+        border-bottom: 1px solid #2a2a2a;
+        transition: background 0.1s ease;
+      }
+      .claude-design-lint-panel-item:last-child {
+        border-bottom: none;
+      }
+      .claude-design-lint-panel-item:hover {
+        background: rgba(255,255,255,0.04);
+      }
+      .claude-design-lint-panel-item-icon {
+        flex-shrink: 0;
+        font-size: 11px;
+        margin-top: 1px;
+      }
+      .claude-design-lint-panel-item-icon.error { color: #ef4444; }
+      .claude-design-lint-panel-item-icon.warning { color: #f59e0b; }
+      .claude-design-lint-panel-item-content {
+        flex: 1;
+        min-width: 0;
+      }
+      .claude-design-lint-panel-item-msg {
+        font-size: 12px;
+        color: #ddd;
+        line-height: 1.3;
+      }
+      .claude-design-lint-panel-item-el {
+        font-size: 10px;
+        color: #666;
+        margin-top: 2px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .claude-design-lint-panel-empty {
+        padding: 16px 12px;
+        text-align: center;
+        color: #666;
+        font-size: 12px;
       }
       .claude-design-lint-section {
         margin-top: 10px;
@@ -1549,38 +1626,177 @@ export const annotationScript = `
 
   // Lint counter indicator (shown in annotate mode, like browser console error count)
   var lintCounterElement = null;
+  var lintPanelElement = null;
+  var cachedLintResults = [];
 
-  function updateLintCounter() {
+  function collectLintIssues() {
     var allElements = document.querySelectorAll('img, button, a, input, select, textarea, [role="button"], p, span, h1, h2, h3, h4, h5, h6, li, td, th, label, div');
-    var viewportW = window.innerWidth;
-    var viewportH = window.innerHeight;
     var checked = 0;
     var maxCheck = 200;
-    var errorCount = 0;
-    var warningCount = 0;
+    var results = [];
 
     for (var i = 0; i < allElements.length && checked < maxCheck; i++) {
       var el = allElements[i];
-      if (el.closest && (el.closest('.claude-design-popover') || el.closest('.claude-design-class-inspector') || el.closest('.claude-design-lint-counter'))) continue;
+      if (el.closest && (el.closest('.claude-design-popover') || el.closest('.claude-design-class-inspector') || el.closest('.claude-design-lint-counter') || el.closest('.claude-design-lint-panel'))) continue;
       if (el.className && typeof el.className === 'string' && el.className.indexOf('claude-design-') !== -1) continue;
-
-      var rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) continue;
-      if (rect.bottom < 0 || rect.top > viewportH || rect.right < 0 || rect.left > viewportW) continue;
+      if (el.offsetParent === null && window.getComputedStyle(el).position !== 'fixed') continue;
 
       checked++;
       var issues = runLintChecks(el);
       for (var j = 0; j < issues.length; j++) {
-        if (issues[j].severity === 'error') errorCount++;
-        else warningCount++;
+        results.push({ issue: issues[j], element: el });
       }
     }
 
+    return results;
+  }
+
+  function getElementLabel(el) {
+    var tag = el.tagName.toLowerCase();
+    // Prefer text content for identification
+    var text = '';
+    // Get direct text only (not children's text) for short elements
+    if (el.childNodes.length <= 3) {
+      for (var i = 0; i < el.childNodes.length; i++) {
+        if (el.childNodes[i].nodeType === 3) text += el.childNodes[i].textContent;
+      }
+    }
+    text = text.trim();
+    if (!text) text = (el.textContent || '').trim();
+    if (text.length > 30) text = text.substring(0, 30).trim() + '\u2026';
+
+    var id = el.id ? '#' + el.id : '';
+
+    // Build a readable label
+    if (text && id) return '<' + tag + id + '> "' + text + '"';
+    if (text) return '<' + tag + '> "' + text + '"';
+    if (id) return '<' + tag + id + '>';
+
+    // Fall back to meaningful attributes
+    var src = el.getAttribute('src');
+    if (src) {
+      var filename = src.split('/').pop().split('?')[0];
+      if (filename.length > 25) filename = filename.substring(0, 25) + '\u2026';
+      return '<' + tag + '> ' + filename;
+    }
+    var href = el.getAttribute('href');
+    if (href) return '<' + tag + '> href="' + (href.length > 25 ? href.substring(0, 25) + '\u2026' : href) + '"';
+    var role = el.getAttribute('role');
+    if (role) return '<' + tag + ' role="' + role + '">';
+
+    return '<' + tag + id + '>';
+  }
+
+  function toggleLintPanel() {
+    if (lintPanelElement) {
+      removeLintPanel();
+      return;
+    }
+
+    // Use cached results from the counter so counts always match
+    var results = cachedLintResults;
+
+    lintPanelElement = document.createElement('div');
+    lintPanelElement.className = 'claude-design-lint-panel';
+
+    var errorCount = 0;
+    var warningCount = 0;
+    for (var i = 0; i < results.length; i++) {
+      if (results[i].issue.severity === 'error') errorCount++;
+      else warningCount++;
+    }
+
+    var headerParts = [];
+    if (errorCount > 0) headerParts.push(errorCount + ' error' + (errorCount !== 1 ? 's' : ''));
+    if (warningCount > 0) headerParts.push(warningCount + ' warning' + (warningCount !== 1 ? 's' : ''));
+    var html = '<div class="claude-design-lint-panel-header">' +
+      (headerParts.length > 0 ? headerParts.join(', ') : 'No issues') +
+      '</div>';
+
+    if (results.length === 0) {
+      html += '<div class="claude-design-lint-panel-empty">No issues found on this page</div>';
+    } else {
+      // Show errors first, then warnings
+      var sorted = results.slice().sort(function(a, b) {
+        if (a.issue.severity === 'error' && b.issue.severity !== 'error') return -1;
+        if (a.issue.severity !== 'error' && b.issue.severity === 'error') return 1;
+        return 0;
+      });
+      for (var i = 0; i < sorted.length; i++) {
+        var r = sorted[i];
+        var iconCls = r.issue.severity === 'error' ? 'error' : 'warning';
+        var iconChar = r.issue.severity === 'error' ? '\u2716' : '\u26A0';
+        // Store original index for click handler
+        var origIdx = results.indexOf(r);
+        html += '<div class="claude-design-lint-panel-item" data-lint-idx="' + origIdx + '">';
+        html += '<span class="claude-design-lint-panel-item-icon ' + iconCls + '">' + iconChar + '</span>';
+        html += '<div class="claude-design-lint-panel-item-content">';
+        html += '<div class="claude-design-lint-panel-item-msg">' + escapeHtml(r.issue.message) + '</div>';
+        html += '<div class="claude-design-lint-panel-item-el">' + escapeHtml(getElementLabel(r.element)) + '</div>';
+        html += '</div></div>';
+      }
+    }
+
+    lintPanelElement.innerHTML = html;
+    document.body.appendChild(lintPanelElement);
+
+    // Click handler for panel items — select the element and open annotation
+    lintPanelElement.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var item = e.target.closest ? e.target.closest('.claude-design-lint-panel-item') : null;
+      if (!item) return;
+      var idx = parseInt(item.getAttribute('data-lint-idx'));
+      if (isNaN(idx) || idx < 0 || idx >= results.length) return;
+      var targetEl = results[idx].element;
+      var fix = results[idx].issue.fix;
+
+      removeLintPanel();
+
+      // Scroll element into view
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Clear previous selection
+      if (highlightedElement) {
+        highlightedElement.classList.remove('claude-design-highlight');
+        highlightedElement = null;
+      }
+      if (selectedElement && !findPendingAnnotation(selectedElement)) {
+        selectedElement.classList.remove('claude-design-selected');
+      }
+
+      // Select the element and open annotation with pre-filled fix
+      selectedElement = targetEl;
+      selectedElement.classList.add('claude-design-selected');
+      createPopover(targetEl, fix);
+    });
+  }
+
+  function removeLintPanel() {
+    if (lintPanelElement && lintPanelElement.parentNode) {
+      lintPanelElement.parentNode.removeChild(lintPanelElement);
+    }
+    lintPanelElement = null;
+  }
+
+  function updateLintCounter() {
+    cachedLintResults = collectLintIssues();
+    var errorCount = 0;
+    var warningCount = 0;
+    for (var i = 0; i < cachedLintResults.length; i++) {
+      if (cachedLintResults[i].issue.severity === 'error') errorCount++;
+      else warningCount++;
+    }
     var total = errorCount + warningCount;
 
     if (!lintCounterElement) {
       lintCounterElement = document.createElement('div');
       lintCounterElement.className = 'claude-design-lint-counter';
+      lintCounterElement.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleLintPanel();
+      });
       document.body.appendChild(lintCounterElement);
     }
 
@@ -1596,6 +1812,7 @@ export const annotationScript = `
   }
 
   function removeLintCounter() {
+    removeLintPanel();
     if (lintCounterElement && lintCounterElement.parentNode) {
       lintCounterElement.parentNode.removeChild(lintCounterElement);
     }
@@ -1628,6 +1845,7 @@ export const annotationScript = `
         (target.closest && target.closest('.claude-design-popover')) ||
         (target.closest && target.closest('.claude-design-class-inspector')) ||
         (target.closest && target.closest('.claude-design-lint-counter')) ||
+        (target.closest && target.closest('.claude-design-lint-panel')) ||
         (target.closest && target.closest('.claude-design-code-btn'))) {
       return;
     }
@@ -2690,7 +2908,9 @@ export const annotationScript = `
         (target.closest && target.closest('.claude-design-popover')) ||
         (target.closest && target.closest('.claude-design-toolbar')) ||
         (target.closest && target.closest('.claude-design-code-btn')) ||
-        (target.closest && target.closest('.claude-design-class-inspector'))) return;
+        (target.closest && target.closest('.claude-design-class-inspector')) ||
+        (target.closest && target.closest('.claude-design-lint-counter')) ||
+        (target.closest && target.closest('.claude-design-lint-panel'))) return;
 
     if (highlightedElement && highlightedElement !== target) {
       highlightedElement.classList.remove('claude-design-highlight');
@@ -2718,9 +2938,14 @@ export const annotationScript = `
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
     if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
     if (e.target.closest && e.target.closest('.claude-design-class-inspector')) return;
+    if (e.target.closest && e.target.closest('.claude-design-lint-counter')) return;
+    if (e.target.closest && e.target.closest('.claude-design-lint-panel')) return;
 
     e.preventDefault();
     e.stopPropagation();
+
+    // Close lint panel when clicking elsewhere on page
+    removeLintPanel();
 
     // If popover is open, clicking outside cancels it
     if (selectedElement && popoverElement) {
