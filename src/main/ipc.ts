@@ -10,6 +10,7 @@ import type { AnnotationData, ShellType, CodeEditor } from '../shared/types';
 import { formatAnnotationPrompt, formatMultiEditPrompt, type MultiEditAnnotation } from '../shared/format-prompt';
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
 import { getPresets, savePresets } from './presets';
+import { getDesignTokens } from './tailwind-tokens';
 
 interface SessionState {
   ptyProcess: pty.IPty;
@@ -807,6 +808,16 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
     walk(projectPath);
     return results;
+  });
+
+  // List design tokens for @@-mention autocomplete
+  ipcMain.handle('project:list-tokens', async (_, { projectPath }: { projectPath: string }) => {
+    try {
+      return getDesignTokens(projectPath);
+    } catch (err) {
+      console.error('[IPC] Failed to get design tokens:', err);
+      return [];
+    }
   });
 
   // Handle update download request

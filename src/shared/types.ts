@@ -129,11 +129,19 @@ export interface ProjectFile {
   dir: string;
 }
 
+export interface DesignToken {
+  name: string;
+  value: string;
+  category: string;
+  source: 'tailwind' | 'css-var';
+}
+
 export interface MainAPI {
   createTerminal: (sessionId: string, cwd?: string, shell?: ShellType) => void;
   getPlatform: () => string;
   checkWslAvailable: () => Promise<boolean>;
   listProjectFiles: (projectPath: string) => Promise<ProjectFile[]>;
+  listDesignTokens: (projectPath: string) => Promise<DesignToken[]>;
   destroyTerminal: (sessionId: string) => void;
   sendTerminalInput: (sessionId: string, data: string) => void;
   resizeTerminal: (sessionId: string, cols: number, rows: number) => void;

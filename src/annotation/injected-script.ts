@@ -25,6 +25,9 @@ export const annotationScript = `
   let classInspectorHideTimeout = null;
   let altKeyDown = false;
   let altHoverElement = null;
+  let altInspectorSwitchTimeout = null;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
 
   // Multi-edit state - stores pending annotations with individual notes
   let pendingAnnotations = []; // Array of {element, note, bounds, selector, tagName, text, attributes}
@@ -501,6 +504,39 @@ export const annotationScript = `
         font-size: 13px;
         text-align: center;
       }
+      .claude-design-token-swatch {
+        flex-shrink: 0;
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+      .claude-design-token-value {
+        font-size: 11px;
+        color: #888;
+        margin-left: auto;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+      }
+      .claude-design-token-applied {
+        font-size: 9px;
+        font-weight: 600;
+        color: #22c55e;
+        background: rgba(34,197,94,0.15);
+        padding: 1px 5px;
+        border-radius: 4px;
+        margin-left: 6px;
+        flex-shrink: 0;
+      }
+      .claude-design-mention-item .claude-design-mention-icon.token-color { color: #c084fc; }
+      .claude-design-mention-item .claude-design-mention-icon.token-spacing { color: #38bdf8; }
+      .claude-design-mention-item .claude-design-mention-icon.token-typography { color: #fb923c; }
+      .claude-design-mention-item .claude-design-mention-icon.token-border { color: #a3e635; }
+      .claude-design-mention-item .claude-design-mention-icon.token-effect { color: #e879f9; }
+      .claude-design-mention-item .claude-design-mention-icon.token-other { color: #888; }
       .claude-design-class-inspector {
         position: fixed;
         z-index: 2147483647;
@@ -891,17 +927,30 @@ export const annotationScript = `
     return formats[(idx + 1) % formats.length];
   }
 
-  // Expand @filename mentions to full paths using the textarea's mention map
+  // Expand @filename and @@token mentions using the textarea's mention maps
   function expandMentions(text, textarea) {
-    var map = textarea && textarea.__mentionMap;
-    if (!map) return text;
     var result = text;
-    var names = Object.keys(map);
-    // Sort longest names first to avoid partial replacements
-    names.sort(function(a, b) { return b.length - a.length; });
-    for (var i = 0; i < names.length; i++) {
-      var name = names[i];
-      result = result.split('@' + name).join(map[name]);
+
+    // First expand @@token mentions (must be before @ to avoid partial match)
+    var tokenMap = textarea && textarea.__tokenMentionMap;
+    if (tokenMap) {
+      var tokenNames = Object.keys(tokenMap);
+      tokenNames.sort(function(a, b) { return b.length - a.length; });
+      for (var i = 0; i < tokenNames.length; i++) {
+        var tName = tokenNames[i];
+        result = result.split('@@' + tName).join(tokenMap[tName]);
+      }
+    }
+
+    // Then expand @file mentions
+    var map = textarea && textarea.__mentionMap;
+    if (map) {
+      var names = Object.keys(map);
+      names.sort(function(a, b) { return b.length - a.length; });
+      for (var j = 0; j < names.length; j++) {
+        var name = names[j];
+        result = result.split('@' + name).join(map[name]);
+      }
     }
     return result;
   }
@@ -914,7 +963,7 @@ export const annotationScript = `
   }
 
   // Class inspector functions - shown when hovering the code button
-  function showClassInspector(el, anchorRect) {
+  function showClassInspector(el, anchorRect, mouseX, mouseY) {
     // Clear any pending hide
     if (classInspectorHideTimeout) {
       clearTimeout(classInspectorHideTimeout);
@@ -1023,13 +1072,19 @@ export const annotationScript = `
     const inspectorH = inspectorRect.height;
     const pad = 8;
 
-    // Position below the code button
-    let top = anchorRect.bottom + 6;
-    let left = anchorRect.right - Math.min(inspectorW, 200); // Align right edge roughly with button
+    // Position near cursor if mouse coords provided, otherwise below anchor element
+    let top, left;
+    if (mouseX != null && mouseY != null) {
+      top = mouseY + 16;
+      left = mouseX + 12;
+    } else {
+      top = anchorRect.bottom + 6;
+      left = anchorRect.right - Math.min(inspectorW, 200);
+    }
 
     // Adjust if off-screen vertically
     if (top + inspectorH + pad > window.innerHeight) {
-      top = anchorRect.top - inspectorH - 6;
+      top = (anchorRect ? anchorRect.top : mouseY) - inspectorH - 6;
     }
     // Clamp vertically
     if (top + inspectorH + pad > window.innerHeight) {
@@ -1155,11 +1210,15 @@ export const annotationScript = `
       e.stopPropagation();
     }, true);
 
-    // Cancel hide when mouse enters inspector
+    // Cancel hide and element-switch when mouse enters inspector
     classInspectorElement.addEventListener('mouseenter', function() {
       if (classInspectorHideTimeout) {
         clearTimeout(classInspectorHideTimeout);
         classInspectorHideTimeout = null;
+      }
+      if (altInspectorSwitchTimeout) {
+        clearTimeout(altInspectorSwitchTimeout);
+        altInspectorSwitchTimeout = null;
       }
     });
 
@@ -1186,6 +1245,10 @@ export const annotationScript = `
       clearTimeout(classInspectorHideTimeout);
       classInspectorHideTimeout = null;
     }
+    if (altInspectorSwitchTimeout) {
+      clearTimeout(altInspectorSwitchTimeout);
+      altInspectorSwitchTimeout = null;
+    }
     classInspectorAnchor = null;
     if (classInspectorElement) {
       classInspectorElement.remove();
@@ -1201,6 +1264,17 @@ export const annotationScript = `
   function handleAltKeyDown(e) {
     if (e.key === 'Alt' && !altKeyDown) {
       altKeyDown = true;
+      if (!annotateMode) return;
+      // Immediately inspect the element under the cursor
+      var target = document.elementFromPoint(lastMouseX, lastMouseY);
+      if (target && target !== document.body && target !== document.documentElement &&
+          !(target.closest && target.closest('.claude-design-popover')) &&
+          !(target.closest && target.closest('.claude-design-class-inspector')) &&
+          !(target.closest && target.closest('.claude-design-code-btn'))) {
+        altHoverElement = target;
+        altHoverElement.classList.add('claude-design-alt-highlight');
+        showClassInspector(target, null, lastMouseX, lastMouseY);
+      }
     }
   }
 
@@ -1216,6 +1290,8 @@ export const annotationScript = `
   }
 
   function handleMouseMoveForAlt(e) {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
     if (!annotateMode || !altKeyDown) return;
 
     var target = e.target;
@@ -1234,8 +1310,20 @@ export const annotationScript = `
       // Add highlight to new element
       altHoverElement = target;
       altHoverElement.classList.add('claude-design-alt-highlight');
-      var rect = target.getBoundingClientRect();
-      showClassInspector(target, rect);
+
+      // If inspector is already visible, delay switching so the user
+      // has time to move their mouse into it without it jumping away
+      if (classInspectorElement) {
+        if (altInspectorSwitchTimeout) clearTimeout(altInspectorSwitchTimeout);
+        var switchTarget = target;
+        var sx = e.clientX, sy = e.clientY;
+        altInspectorSwitchTimeout = setTimeout(function() {
+          altInspectorSwitchTimeout = null;
+          showClassInspector(switchTarget, null, sx, sy);
+        }, 300);
+      } else {
+        showClassInspector(target, null, e.clientX, e.clientY);
+      }
     }
   }
 
@@ -1459,13 +1547,25 @@ export const annotationScript = `
   }
 
   function setupMentionAutocomplete(textarea) {
-    var mention = { active: false, startIndex: -1 };
+    // mode: 'file' for @files, 'token' for @@tokens
+    var mention = { active: false, startIndex: -1, mode: 'file' };
     var dropdown = null;
     var activeIndex = 0;
-    var filteredFiles = [];
+    var filteredItems = [];
 
     function getFiles() {
       return window.__claudeDesignProjectFiles || [];
+    }
+
+    function getTokens() {
+      return window.__claudeDesignTokens || [];
+    }
+
+    // Get classes applied to the currently selected element (for "applied" badges)
+    function getAppliedClasses() {
+      var el = selectedElement || altHoverElement;
+      if (!el || !el.className || typeof el.className !== 'string') return [];
+      return el.className.split(' ').filter(function(c) { return c && !c.startsWith('claude-design-'); });
     }
 
     function filterFiles(query) {
@@ -1476,7 +1576,6 @@ export const annotationScript = `
         var fullPath = (f.dir === '.' ? f.name : f.dir + '/' + f.name).toLowerCase();
         return fullPath.indexOf(q) !== -1;
       });
-      // Sort: filename matches first, then directory-only matches
       results.sort(function(a, b) {
         var aName = a.name.toLowerCase().indexOf(q) !== -1 ? 0 : 1;
         var bName = b.name.toLowerCase().indexOf(q) !== -1 ? 0 : 1;
@@ -1485,14 +1584,51 @@ export const annotationScript = `
       return results.slice(0, 50);
     }
 
+    function filterTokens(query) {
+      var q = query.toLowerCase();
+      var tokens = getTokens();
+      var applied = getAppliedClasses();
+      var appliedSet = {};
+      for (var k = 0; k < applied.length; k++) appliedSet[applied[k]] = true;
+
+      var results;
+      if (!q) {
+        // Show applied tokens first, then popular ones
+        var appliedTokens = tokens.filter(function(t) { return appliedSet[t.name]; });
+        var otherTokens = tokens.filter(function(t) { return !appliedSet[t.name]; });
+        results = appliedTokens.concat(otherTokens).slice(0, 50);
+      } else {
+        results = tokens.filter(function(t) {
+          return t.name.toLowerCase().indexOf(q) !== -1 || t.value.toLowerCase().indexOf(q) !== -1;
+        });
+        // Sort: applied first, then name match quality
+        results.sort(function(a, b) {
+          var aApplied = appliedSet[a.name] ? 0 : 1;
+          var bApplied = appliedSet[b.name] ? 0 : 1;
+          if (aApplied !== bApplied) return aApplied - bApplied;
+          var aStart = a.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+          var bStart = b.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+          return aStart - bStart;
+        });
+        results = results.slice(0, 50);
+      }
+
+      // Tag each result with whether it's applied
+      for (var j = 0; j < results.length; j++) {
+        results[j] = Object.assign({}, results[j], { _applied: !!appliedSet[results[j].name] });
+      }
+      return results;
+    }
+
     function removeDropdown() {
       if (dropdown) {
         dropdown.remove();
         dropdown = null;
       }
       mention.active = false;
+      mention.mode = 'file';
       activeIndex = 0;
-      filteredFiles = [];
+      filteredItems = [];
     }
 
     function positionDropdown() {
@@ -1504,7 +1640,6 @@ export const annotationScript = `
       var width = Math.min(rect.width, window.innerWidth - 12);
       var left = rect.left;
 
-      // Clamp left so dropdown stays in viewport
       if (left + width > window.innerWidth - 6) left = window.innerWidth - 6 - width;
       if (left < 6) left = 6;
 
@@ -1513,18 +1648,29 @@ export const annotationScript = `
       dropdown.style.maxHeight = Math.max(120, Math.min(300, spaceAbove > spaceBelow ? spaceAbove : spaceBelow)) + 'px';
 
       if (spaceAbove >= dropHeight || spaceAbove >= spaceBelow) {
-        // Position above
         dropdown.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
         dropdown.style.top = 'auto';
       } else {
-        // Position below
         dropdown.style.top = (rect.bottom + 6) + 'px';
         dropdown.style.bottom = 'auto';
       }
     }
 
-    function renderDropdown(query) {
-      filteredFiles = filterFiles(query);
+    function getTokenCategoryIcon(category) {
+      if (category === 'color') return { label: 'CLR', cls: 'token-color' };
+      if (category === 'spacing') return { label: 'SPC', cls: 'token-spacing' };
+      if (category === 'typography') return { label: 'TYP', cls: 'token-typography' };
+      if (category === 'border') return { label: 'BDR', cls: 'token-border' };
+      if (category === 'effect') return { label: 'FX', cls: 'token-effect' };
+      return { label: 'TOK', cls: 'token-other' };
+    }
+
+    function isColorValue(value) {
+      return /^#|^rgb|^hsl|^oklch/.test(value) && value !== 'transparent';
+    }
+
+    function renderFileDropdown(query) {
+      filteredItems = filterFiles(query);
       activeIndex = 0;
 
       var isNew = !dropdown;
@@ -1534,15 +1680,15 @@ export const annotationScript = `
         document.body.appendChild(dropdown);
       }
 
-      if (filteredFiles.length === 0) {
+      if (filteredItems.length === 0) {
         dropdown.innerHTML = '<div class="claude-design-mention-empty">No files found</div>';
         positionDropdown();
         return;
       }
 
       var html = '';
-      for (var i = 0; i < filteredFiles.length; i++) {
-        var f = filteredFiles[i];
+      for (var i = 0; i < filteredItems.length; i++) {
+        var f = filteredItems[i];
         var icon = getFileIcon(f.name);
         var cls = getIconClass(f.name);
         var dir = f.dir === '.' ? '' : f.dir;
@@ -1557,63 +1703,128 @@ export const annotationScript = `
       positionDropdown();
 
       if (isNew) {
-        // Hover handler
-        dropdown.addEventListener('mouseover', function(e) {
-          var item = e.target.closest ? e.target.closest('.claude-design-mention-item') : null;
-          if (!item) return;
-          var idx = parseInt(item.dataset.mentionIndex, 10);
-          if (isNaN(idx)) return;
-          setActive(idx);
-        });
+        attachDropdownHandlers();
+      }
+    }
 
-        // Click handler
-        dropdown.addEventListener('mousedown', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          var item = e.target.closest ? e.target.closest('.claude-design-mention-item') : null;
-          if (!item) return;
-          var idx = parseInt(item.dataset.mentionIndex, 10);
-          if (!isNaN(idx)) selectItem(idx);
-        });
+    function renderTokenDropdown(query) {
+      filteredItems = filterTokens(query);
+      activeIndex = 0;
+
+      var isNew = !dropdown;
+      if (isNew) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'claude-design-mention-dropdown';
+        document.body.appendChild(dropdown);
+      }
+
+      if (filteredItems.length === 0) {
+        dropdown.innerHTML = '<div class="claude-design-mention-empty">No tokens found</div>';
+        positionDropdown();
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < filteredItems.length; i++) {
+        var t = filteredItems[i];
+        var catIcon = getTokenCategoryIcon(t.category);
+        var showSwatch = t.category === 'color' && isColorValue(t.value);
+        html += '<div class="claude-design-mention-item' + (i === 0 ? ' active' : '') + '" data-mention-index="' + i + '" title="' + escapeHtml(t.name + ': ' + t.value) + '">';
+        if (showSwatch) {
+          html += '<span class="claude-design-token-swatch" style="background:' + escapeHtml(t.value) + '"></span>';
+        } else {
+          html += '<span class="claude-design-mention-icon ' + catIcon.cls + '">' + catIcon.label + '</span>';
+        }
+        html += '<span class="claude-design-mention-name">' + escapeHtml(t.name) + '</span>';
+        if (t._applied) {
+          html += '<span class="claude-design-token-applied">applied</span>';
+        }
+        html += '<span class="claude-design-token-value">' + escapeHtml(t.value) + '</span>';
+        html += '</div>';
+      }
+      dropdown.innerHTML = html;
+      positionDropdown();
+
+      if (isNew) {
+        attachDropdownHandlers();
+      }
+    }
+
+    function attachDropdownHandlers() {
+      dropdown.addEventListener('mouseover', function(e) {
+        var item = e.target.closest ? e.target.closest('.claude-design-mention-item') : null;
+        if (!item) return;
+        var idx = parseInt(item.dataset.mentionIndex, 10);
+        if (isNaN(idx)) return;
+        setActive(idx);
+      });
+
+      dropdown.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var item = e.target.closest ? e.target.closest('.claude-design-mention-item') : null;
+        if (!item) return;
+        var idx = parseInt(item.dataset.mentionIndex, 10);
+        if (!isNaN(idx)) selectItem(idx);
+      });
+    }
+
+    function renderDropdown(query) {
+      if (mention.mode === 'token') {
+        renderTokenDropdown(query);
+      } else {
+        renderFileDropdown(query);
       }
     }
 
     function setActive(idx) {
-      if (idx < 0 || idx >= filteredFiles.length) return;
+      if (idx < 0 || idx >= filteredItems.length) return;
       activeIndex = idx;
       if (!dropdown) return;
       var items = dropdown.querySelectorAll('.claude-design-mention-item');
       for (var i = 0; i < items.length; i++) {
         items[i].classList.toggle('active', i === idx);
       }
-      // Scroll into view
       if (items[idx]) {
         items[idx].scrollIntoView({ block: 'nearest' });
       }
     }
 
     function selectItem(idx) {
-      if (idx < 0 || idx >= filteredFiles.length) return;
-      var f = filteredFiles[idx];
-      var fullPath = f.dir === '.' ? f.name : f.dir + '/' + f.name;
+      if (idx < 0 || idx >= filteredItems.length) return;
+      var item = filteredItems[idx];
 
-      // Store mention mapping on the textarea for later expansion
-      if (!textarea.__mentionMap) textarea.__mentionMap = {};
-      textarea.__mentionMap[f.name] = fullPath;
+      if (mention.mode === 'token') {
+        // Token: store in tokenMentionMap, display as @@tokenName
+        if (!textarea.__tokenMentionMap) textarea.__tokenMentionMap = {};
+        var displayName = item.name;
+        var resolvedValue = item.name + ' (' + item.value + ', ' + item.source + ')';
+        textarea.__tokenMentionMap[displayName] = resolvedValue;
 
-      // Keep the @ and insert just the filename: @page.tsx
-      var value = textarea.value;
-      var after = value.substring(textarea.selectionStart);
-      textarea.value = value.substring(0, mention.startIndex) + f.name + after;
+        var value = textarea.value;
+        var after = value.substring(textarea.selectionStart);
+        textarea.value = value.substring(0, mention.startIndex) + displayName + after;
 
-      // Set cursor after inserted name (startIndex is already after the @)
-      var newPos = mention.startIndex + f.name.length;
-      textarea.selectionStart = newPos;
-      textarea.selectionEnd = newPos;
+        var newPos = mention.startIndex + displayName.length;
+        textarea.selectionStart = newPos;
+        textarea.selectionEnd = newPos;
+      } else {
+        // File: store in mentionMap, display as @filename
+        if (!textarea.__mentionMap) textarea.__mentionMap = {};
+        var f = item;
+        var fullPath = f.dir === '.' ? f.name : f.dir + '/' + f.name;
+        textarea.__mentionMap[f.name] = fullPath;
+
+        var value = textarea.value;
+        var after = value.substring(textarea.selectionStart);
+        textarea.value = value.substring(0, mention.startIndex) + f.name + after;
+
+        var newPos = mention.startIndex + f.name.length;
+        textarea.selectionStart = newPos;
+        textarea.selectionEnd = newPos;
+      }
 
       removeDropdown();
-
-      // Trigger input event to auto-resize
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
@@ -1622,18 +1833,38 @@ export const annotationScript = `
       var cursorPos = textarea.selectionStart;
 
       if (mention.active) {
-        // Check if cursor moved before the @
         if (cursorPos < mention.startIndex) {
           removeDropdown();
           return;
         }
-        // Also verify the @ is still there
-        if (value[mention.startIndex - 1] !== '@') {
-          removeDropdown();
-          return;
+
+        // Check for mode switch: if we're in file mode and user just typed second @
+        if (mention.mode === 'file') {
+          var query = value.substring(mention.startIndex, cursorPos);
+          if (query === '@') {
+            // Switch to token mode: startIndex moves past the second @
+            mention.mode = 'token';
+            mention.startIndex = cursorPos; // after the @@
+            renderDropdown('');
+            return;
+          }
         }
+
+        // Verify the trigger is still there
+        if (mention.mode === 'token') {
+          // For @@, check that @@ precedes startIndex
+          if (mention.startIndex < 2 || value[mention.startIndex - 1] !== '@' || value[mention.startIndex - 2] !== '@') {
+            removeDropdown();
+            return;
+          }
+        } else {
+          if (value[mention.startIndex - 1] !== '@') {
+            removeDropdown();
+            return;
+          }
+        }
+
         var query = value.substring(mention.startIndex, cursorPos);
-        // Close if user typed space or newline in query
         if (query.indexOf(' ') !== -1 || query.indexOf('\\n') !== -1) {
           removeDropdown();
           return;
@@ -1644,9 +1875,22 @@ export const annotationScript = `
 
       // Check if cursor is right after an @ (handles both typing @ and backspacing to @)
       if (cursorPos > 0 && value[cursorPos - 1] === '@') {
-        // Only trigger if @ is at start or preceded by whitespace
+        // Check for @@ (token mode) — if preceded by another @
+        if (cursorPos > 1 && value[cursorPos - 2] === '@') {
+          // Only trigger if @@ is at start or preceded by whitespace
+          if (cursorPos === 2 || /\\s/.test(value[cursorPos - 3])) {
+            mention.active = true;
+            mention.mode = 'token';
+            mention.startIndex = cursorPos; // after the @@
+            renderDropdown('');
+            return;
+          }
+        }
+
+        // Single @ (file mode)
         if (cursorPos === 1 || /\\s/.test(value[cursorPos - 2])) {
           mention.active = true;
+          mention.mode = 'file';
           mention.startIndex = cursorPos; // after the @
           renderDropdown('');
         }
@@ -1660,7 +1904,7 @@ export const annotationScript = `
         e.preventDefault();
         e.stopImmediatePropagation();
         var next = activeIndex + 1;
-        if (next >= filteredFiles.length) next = 0;
+        if (next >= filteredItems.length) next = 0;
         setActive(next);
         return;
       }
@@ -1668,12 +1912,12 @@ export const annotationScript = `
         e.preventDefault();
         e.stopImmediatePropagation();
         var prev = activeIndex - 1;
-        if (prev < 0) prev = filteredFiles.length - 1;
+        if (prev < 0) prev = filteredItems.length - 1;
         setActive(prev);
         return;
       }
       if (e.key === 'Enter' || e.key === 'Tab') {
-        if (filteredFiles.length > 0) {
+        if (filteredItems.length > 0) {
           e.preventDefault();
           e.stopImmediatePropagation();
           selectItem(activeIndex);
@@ -1939,25 +2183,6 @@ export const annotationScript = `
             pageUrl: window.location.pathname,
           }, '*');
         }
-      });
-
-      // Show class inspector on hover
-      codeButtonElement.addEventListener('mouseenter', function() {
-        // Cancel any pending hide
-        if (classInspectorHideTimeout) {
-          clearTimeout(classInspectorHideTimeout);
-          classInspectorHideTimeout = null;
-        }
-        var btnRect = codeButtonElement.getBoundingClientRect();
-        showClassInspector(el, btnRect);
-      });
-
-      codeButtonElement.addEventListener('mouseleave', function(e) {
-        // Don't hide if moving to the inspector itself
-        if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.claude-design-class-inspector')) {
-          return;
-        }
-        scheduleHideInspector();
       });
 
       document.body.appendChild(codeButtonElement);
