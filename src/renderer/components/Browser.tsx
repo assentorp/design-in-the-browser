@@ -116,6 +116,17 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         } catch (err) {
           console.error('[Browser] Failed to inject project files:', err);
         }
+
+        // Inject design tokens for @@-mention autocomplete
+        try {
+          const tokens = await mainAPI.listDesignTokens(projectPath);
+          await webview.executeJavaScript(
+            `window.__claudeDesignTokens = ${JSON.stringify(tokens)}; true;`
+          );
+          console.log('[Browser] Injected design tokens:', tokens.length);
+        } catch (err) {
+          console.error('[Browser] Failed to inject design tokens:', err);
+        }
       }
 
       setIsReady(true);

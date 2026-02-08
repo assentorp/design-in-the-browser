@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { AnnotationData, MainAPI, ShellType, AppSettings, ProjectPreset } from '../shared/types';
+import type { AnnotationData, MainAPI, ShellType, AppSettings, ProjectPreset, DesignToken } from '../shared/types';
 
 console.log('[Preload] Script starting...');
 
@@ -13,6 +13,8 @@ const mainAPI: MainAPI = {
   checkWslAvailable: () => ipcRenderer.invoke('wsl:check'),
 
   listProjectFiles: (projectPath: string) => ipcRenderer.invoke('project:list-files', { projectPath }),
+
+  listDesignTokens: (projectPath: string) => ipcRenderer.invoke('project:list-tokens', { projectPath }),
 
   destroyTerminal: (sessionId: string) => {
     ipcRenderer.send('terminal:destroy', { sessionId });
