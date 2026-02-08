@@ -1792,14 +1792,16 @@ export const annotationScript = `
         if (t._applied && Array.isArray(t._applied)) {
           for (var vi = 0; vi < t._applied.length; vi++) {
             var v = t._applied[vi];
-            if (v === '') {
-              html += '<span class="claude-design-token-applied">applied</span>';
-            } else if (v === 'dark' || v === 'light') {
-              html += '<span class="claude-design-token-applied variant-theme">' + escapeHtml(v) + '</span>';
+            if (v === '') continue;
+            if (v === 'dark') {
+              html += '<span class="claude-design-token-applied variant-theme">dark mode</span>';
+            } else if (v === 'light') {
+              html += '<span class="claude-design-token-applied variant-theme">light mode</span>';
             } else {
               html += '<span class="claude-design-token-applied variant-breakpoint">' + escapeHtml(v) + '</span>';
             }
           }
+          html += '<span class="claude-design-token-applied">applied</span>';
         }
         html += '<span class="claude-design-token-value">' + escapeHtml(t.value) + '</span>';
         html += '</div>';
