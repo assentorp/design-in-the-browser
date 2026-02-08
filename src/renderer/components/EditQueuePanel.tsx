@@ -40,6 +40,7 @@ export default function EditQueuePanel({ edits, actions, cliRunning }: EditQueue
           title={cliRunning ? 'Claude is busy — click to send anyway' : undefined}
         >
           {cliRunning ? 'Waiting...' : 'Send'}
+          <kbd className="edit-queue-kbd">{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}E</kbd>
         </button>
         <button
           className="edit-queue-cancel"

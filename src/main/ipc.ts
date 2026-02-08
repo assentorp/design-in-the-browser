@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, app, dialog } from 'electron';
+import { BrowserWindow, ipcMain, app, dialog, session } from 'electron';
 import { downloadUpdate, installUpdate } from './updater';
 import * as pty from 'node-pty';
 import * as path from 'path';
@@ -818,6 +818,11 @@ export function setupIPC(mainWindow: BrowserWindow) {
       console.error('[IPC] Failed to get design tokens:', err);
       return [];
     }
+  });
+
+  // Clear webview session cache
+  ipcMain.handle('webview:clear-cache', async () => {
+    await session.defaultSession.clearCache();
   });
 
   // Handle update download request

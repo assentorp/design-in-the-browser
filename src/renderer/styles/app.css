@@ -678,12 +678,21 @@ body,
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   transition: all 0.15s ease;
 }
 
 .edit-queue-cancel:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+.edit-queue-kbd {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.5;
+  margin-left: 4px;
 }
 
 /* Queued Edits Panel */

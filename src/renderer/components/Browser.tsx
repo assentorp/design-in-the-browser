@@ -325,6 +325,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
               }
             });
           }
+          // Sync pending state with React (clears stale items after page reload)
+          if (window.__claudeDesignNotifyPending) window.__claudeDesignNotifyPending();
           true;
         `);
       } catch {
@@ -387,9 +389,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                   singleData.terminalTabId = activeTerminalTabId;
 
                   // If CLI is busy, add to todo list instead of sending
+                  // (fallback — the webview normally handles this directly via __claudeDesignCliRunning)
                   if (cliRunningRef.current) {
                     console.log('[Browser] CLI is busy, adding to todo list');
-                    addToTodoList(singleData);
+                    await addToTodoList(singleData);
                   } else {
                     // Capture screenshot of the element (skip for text-only selections - faster)
                     if (singleData.bounds && webview && !singleData.selectedText) {
@@ -449,6 +452,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
     return () => clearInterval(pollInterval);
   }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, addToTodoList, projectPath, openFileInCodeView]);
+
+  // Sync CLI running state to webview so it can auto-queue annotations
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview || !isReady) return;
+    webview.executeJavaScript(`window.__claudeDesignCliRunning = ${!!cliRunning}; true;`).catch(() => {});
+  }, [cliRunning, isReady]);
 
   // Toggle annotate mode in webview
   useEffect(() => {
@@ -548,7 +558,21 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   }, []);
 
   const reload = useCallback(() => {
-    webviewRef.current?.reload();
+    webviewRef.current?.reloadIgnoringCache();
+  }, []);
+
+  // Listen for clear cache and reload from menu
+  useEffect(() => {
+    const onClearCacheReload = (window as unknown as { onClearCacheReload?: (cb: () => void) => void }).onClearCacheReload;
+    if (onClearCacheReload) {
+      onClearCacheReload(async () => {
+        const mainAPI = getMainAPI();
+        if (mainAPI) {
+          try { await mainAPI.clearWebviewCache(); } catch (err) { console.error('[Browser] Clear cache error:', err); }
+        }
+        webviewRef.current?.reloadIgnoringCache();
+      });
+    }
   }, []);
 
   const toggleAnnotate = useCallback(() => {

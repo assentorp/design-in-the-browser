@@ -6,6 +6,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.32',
+    date: 'February 8, 2026',
+    changes: [
+      'Design token autocomplete: type @@ in the annotation textarea to search and insert Tailwind tokens with color swatches and "applied" badges',
+      'Ruler guides: hold G in annotate mode to show crosshair lines that follow your cursor for checking alignment',
+      'CSS Inspector now follows your cursor and delays switching when hovering between elements',
+      'Clear Cache & Reload (Cmd+Shift+R) clears webview cache and hard-reloads the page',
+      'Send All shortcut (Cmd+E) now shown as keyboard hint on the Send button',
+      'App no longer restores previous sessions on launch — always starts fresh with project picker',
+      'Reload button now ignores cache for faster iteration',
+    ],
+  },
+  {
     version: '1.2.31',
     date: 'February 6, 2026',
     changes: [

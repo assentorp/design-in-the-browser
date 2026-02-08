@@ -29,6 +29,11 @@ export const annotationScript = `
   let lastMouseX = 0;
   let lastMouseY = 0;
 
+  // Ruler guide state (G key)
+  let gKeyDown = false;
+  let rulerLineH = null;
+  let rulerLineV = null;
+
   // Multi-edit state - stores pending annotations with individual notes
   let pendingAnnotations = []; // Array of {element, note, bounds, selector, tagName, text, attributes}
 
@@ -709,6 +714,24 @@ export const annotationScript = `
         background: #444;
         color: #fff;
         border-color: #555;
+      }
+      .claude-design-ruler-h,
+      .claude-design-ruler-v {
+        position: fixed;
+        pointer-events: none;
+        z-index: 2147483640;
+      }
+      .claude-design-ruler-h {
+        left: 0;
+        width: 100vw;
+        height: 0;
+        border-top: 1px dashed rgba(198, 97, 63, 0.5);
+      }
+      .claude-design-ruler-v {
+        top: 0;
+        height: 100vh;
+        width: 0;
+        border-left: 1px dashed rgba(198, 97, 63, 0.5);
       }
     \`;
     document.head.appendChild(style);
@@ -2502,7 +2525,7 @@ export const annotationScript = `
   }
 
   function handleMouseOver(e) {
-    if (!annotateMode || selectedElement) return;
+    if (!annotateMode || selectedElement || gKeyDown) return;
 
     const target = e.target;
     if (target === document.body || target === document.documentElement ||
@@ -2576,6 +2599,51 @@ export const annotationScript = `
     }
   }
 
+  // Ruler crosshair guides (G key)
+  function showRulerGuides() {
+    if (!rulerLineH) {
+      rulerLineH = document.createElement('div');
+      rulerLineH.className = 'claude-design-ruler-h';
+      document.body.appendChild(rulerLineH);
+    }
+    if (!rulerLineV) {
+      rulerLineV = document.createElement('div');
+      rulerLineV.className = 'claude-design-ruler-v';
+      document.body.appendChild(rulerLineV);
+    }
+    rulerLineH.style.top = lastMouseY + 'px';
+    rulerLineV.style.left = lastMouseX + 'px';
+  }
+
+  function removeRulerGuides() {
+    if (rulerLineH) { rulerLineH.remove(); rulerLineH = null; }
+    if (rulerLineV) { rulerLineV.remove(); rulerLineV = null; }
+  }
+
+  function handleGKeyDown(e) {
+    if ((e.key === 'g' || e.key === 'G') && !gKeyDown && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      gKeyDown = true;
+      if (highlightedElement) {
+        highlightedElement.classList.remove('claude-design-highlight');
+        highlightedElement = null;
+      }
+      showRulerGuides();
+    }
+  }
+
+  function handleGKeyUp(e) {
+    if ((e.key === 'g' || e.key === 'G') && gKeyDown) {
+      gKeyDown = false;
+      removeRulerGuides();
+    }
+  }
+
+  function handleMouseMoveForRuler(e) {
+    if (!gKeyDown) return;
+    if (rulerLineH) rulerLineH.style.top = e.clientY + 'px';
+    if (rulerLineV) rulerLineV.style.left = e.clientX + 'px';
+  }
+
   function enableAnnotateMode() {
     if (annotateMode) return;
     annotateMode = true;
@@ -2588,6 +2656,9 @@ export const annotationScript = `
     document.addEventListener('keydown', handleAltKeyDown, true);
     document.addEventListener('keyup', handleAltKeyUp, true);
     document.addEventListener('mousemove', handleMouseMoveForAlt, true);
+    document.addEventListener('keydown', handleGKeyDown, true);
+    document.addEventListener('keyup', handleGKeyUp, true);
+    document.addEventListener('mousemove', handleMouseMoveForRuler, true);
   }
 
   function disableAnnotateMode() {
@@ -2603,6 +2674,11 @@ export const annotationScript = `
     document.removeEventListener('keydown', handleAltKeyDown, true);
     document.removeEventListener('keyup', handleAltKeyUp, true);
     document.removeEventListener('mousemove', handleMouseMoveForAlt, true);
+    document.removeEventListener('keydown', handleGKeyDown, true);
+    document.removeEventListener('keyup', handleGKeyUp, true);
+    document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
+    removeRulerGuides();
+    gKeyDown = false;
     if (altHoverElement) {
       altHoverElement.classList.remove('claude-design-alt-highlight');
     }

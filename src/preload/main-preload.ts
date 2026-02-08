@@ -115,6 +115,8 @@ const mainAPI: MainAPI = {
   },
 
   getAppVersion: () => ipcRenderer.invoke('app:version'),
+
+  clearWebviewCache: () => ipcRenderer.invoke('webview:clear-cache'),
 };
 
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);
@@ -131,4 +133,8 @@ contextBridge.exposeInMainWorld('onWhatsNewOpen', (callback: () => void) => {
 
 contextBridge.exposeInMainWorld('onSendQueuedEdits', (callback: () => void) => {
   ipcRenderer.on('send-queued-edits', () => callback());
+});
+
+contextBridge.exposeInMainWorld('onClearCacheReload', (callback: () => void) => {
+  ipcRenderer.on('clear-cache-and-reload', () => callback());
 });

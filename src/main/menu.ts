@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, MenuItemConstructorOptions, app } from 'electron';
+import { BrowserWindow, Menu, MenuItemConstructorOptions, app, session } from 'electron';
 import { manualCheckForUpdates } from './updater';
 
 export function createMenu(mainWindow: BrowserWindow) {
@@ -88,6 +88,14 @@ export function createMenu(mainWindow: BrowserWindow) {
           accelerator: 'CmdOrCtrl+E',
           click: () => {
             mainWindow.webContents.send('send-queued-edits');
+          },
+        },
+        {
+          label: 'Clear Cache & Reload',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: async () => {
+            await session.defaultSession.clearCache();
+            mainWindow.webContents.send('clear-cache-and-reload');
           },
         },
       ],
