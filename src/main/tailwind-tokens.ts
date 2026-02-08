@@ -91,9 +91,10 @@ function generateColorTokens(colors: Record<string, Record<string, string>>): De
 
   for (const [colorName, shades] of Object.entries(colors)) {
     for (const [shade, value] of Object.entries(shades)) {
+      const suffix = shade === 'DEFAULT' ? '' : `-${shade}`;
       for (const prefix of colorPrefixes) {
         tokens.push({
-          name: `${prefix}-${colorName}-${shade}`,
+          name: `${prefix}-${colorName}${suffix}`,
           value,
           category: 'color',
           source: 'tailwind',
@@ -179,33 +180,155 @@ function getDefaultTailwindTokens(): DesignToken[] {
   ];
 }
 
-function parseCustomColors(configContent: string): Record<string, Record<string, string>> {
-  const customColors: Record<string, Record<string, string>> = {};
-  const colorsMatch = configContent.match(/colors\s*:\s*\{([\s\S]*?)\n\s{2,4}\}/);
-  if (!colorsMatch) return customColors;
+// Extract the content of a braced block starting at the `{` at position `start`
+function extractBracedBlock(content: string, start: number): string | null {
+  if (content[start] !== '{') return null;
+  let depth = 0;
+  for (let i = start; i < content.length; i++) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') { depth--; if (depth === 0) return content.slice(start + 1, i); }
+  }
+  return null;
+}
 
-  const colorsBlock = colorsMatch[1];
-  const groupRegex = /['"]?(\w[\w-]*)['"]?\s*:\s*\{([^}]+)\}/g;
+// Find the braced block for a given key (e.g. "colors", "spacing") in config text
+function findKeyBlock(content: string, key: string): string | null {
+  const regex = new RegExp(`['"]?${key}['"]?\\s*:\\s*\\{`, 'g');
   let match;
-  while ((match = groupRegex.exec(colorsBlock)) !== null) {
-    const colorName = match[1];
-    const shadeBlock = match[2];
-    customColors[colorName] = {};
-    const shadeRegex = /['"]?(\w+)['"]?\s*:\s*['"]([^'"]+)['"]/g;
-    let shadeMatch;
-    while ((shadeMatch = shadeRegex.exec(shadeBlock)) !== null) {
-      customColors[colorName][shadeMatch[1]] = shadeMatch[2];
+  while ((match = regex.exec(content)) !== null) {
+    const braceStart = content.indexOf('{', match.index + key.length);
+    if (braceStart !== -1) {
+      const block = extractBracedBlock(content, braceStart);
+      if (block) return block;
+    }
+  }
+  return null;
+}
+
+// Build a lookup table for resolving JS variable references in tailwind configs.
+// Handles: defaultColors.slate[900], transloaditColors.grayDarkest, 'literal', etc.
+function buildResolutionContext(configContent: string): Record<string, string> {
+  const ctx: Record<string, string> = {};
+
+  // Find what name(s) tailwindcss/colors was imported as
+  const colorImportNames = new Set<string>();
+  const esmImport = configContent.match(/import\s+(\w+)\s+from\s+['"]tailwindcss\/colors['"]/);
+  if (esmImport) colorImportNames.add(esmImport[1]);
+  const cjsRequire = configContent.match(/(?:const|let|var)\s+(\w+)\s*=\s*require\(\s*['"]tailwindcss\/colors['"]\s*\)/);
+  if (cjsRequire) colorImportNames.add(cjsRequire[1]);
+
+  // Map varName.colorFamily[shade] and varName.colorFamily.shade to hex values
+  for (const importName of Array.from(colorImportNames)) {
+    for (const [colorName, shades] of Object.entries(TAILWIND_COLORS)) {
+      for (const [shade, value] of Object.entries(shades)) {
+        ctx[`${importName}.${colorName}[${shade}]`] = value;
+        ctx[`${importName}.${colorName}['${shade}']`] = value;
+        ctx[`${importName}.${colorName}["${shade}"]`] = value;
+      }
+    }
+    for (const [name, value] of Object.entries(TAILWIND_STANDALONE_COLORS)) {
+      ctx[`${importName}.${name}`] = value;
     }
   }
 
-  const singleRegex = /['"]?(\w[\w-]*)['"]?\s*:\s*['"]([#\w][\w(),./ ]*)['"]/g;
-  while ((match = singleRegex.exec(colorsBlock)) !== null) {
-    if (!customColors[match[1]]) {
-      customColors[match[1]] = { DEFAULT: match[2] };
+  // Parse const/let/var object declarations (e.g. const myColors = { ... })
+  const constRegex = /(?:const|let|var)\s+(\w+)\s*=\s*\{/g;
+  let constMatch;
+  while ((constMatch = constRegex.exec(configContent)) !== null) {
+    const varName = constMatch[1];
+    const braceStart = configContent.indexOf('{', constMatch.index);
+    const block = extractBracedBlock(configContent, braceStart);
+    if (!block) continue;
+
+    // Parse entries: key: 'value' or key: expr
+    const entryRegex = /(\w[\w]*)\s*:\s*(?:['"]([^'"]+)['"]|([^,\n}]+))/g;
+    let entryMatch;
+    while ((entryMatch = entryRegex.exec(block)) !== null) {
+      const key = entryMatch[1];
+      const quotedVal = entryMatch[2];
+      const exprVal = entryMatch[3]?.trim().replace(/\/\/.*$/, '').trim();
+
+      if (quotedVal) {
+        ctx[`${varName}.${key}`] = quotedVal;
+      } else if (exprVal && ctx[exprVal]) {
+        ctx[`${varName}.${key}`] = ctx[exprVal];
+      }
     }
   }
 
-  return customColors;
+  return ctx;
+}
+
+// Resolve a raw value expression to an actual string value
+function resolveValue(raw: string, ctx: Record<string, string>): string {
+  raw = raw.trim().replace(/\/\/.*$/, '').replace(/,\s*$/, '').trim();
+  // Quoted string literal
+  const strMatch = raw.match(/^['"`](.+?)['"`]$/);
+  if (strMatch) return strMatch[1];
+  // Context lookup (variable references like transloaditColors.grayDarkest)
+  if (ctx[raw]) return ctx[raw];
+  // Unresolvable — return the expression itself as a hint
+  return raw;
+}
+
+// Parse key-value pairs from a config block, resolving JS expressions via context.
+// Returns { colorName: { shade: value } } for nested objects and { colorName: { DEFAULT: value } } for flat entries.
+function parseConfigBlock(block: string, ctx: Record<string, string>): Record<string, Record<string, string>> {
+  const result: Record<string, Record<string, string>> = {};
+
+  // First pass: find nested objects (key: { ... })
+  const nestedRegex = /['"]?([\w][\w-]*)['"]?\s*:\s*\{/g;
+  let match;
+  while ((match = nestedRegex.exec(block)) !== null) {
+    const name = match[1];
+    const braceStart = block.indexOf('{', match.index + name.length);
+    const inner = extractBracedBlock(block, braceStart);
+    if (!inner) continue;
+    result[name] = {};
+    // Parse entries inside the nested object
+    const pairRegex = /['"]?([\w][\w-]*)['"]?\s*:\s*([^,}\n]+)/g;
+    let pairMatch;
+    while ((pairMatch = pairRegex.exec(inner)) !== null) {
+      const val = resolveValue(pairMatch[2], ctx);
+      if (val) result[name][pairMatch[1]] = val;
+    }
+  }
+
+  // Second pass: find flat entries (key: value) — skip keys already parsed as nested
+  const flatRegex = /['"]?([\w][\w-]*)['"]?\s*:\s*([^,{}\n]+)/gm;
+  while ((match = flatRegex.exec(block)) !== null) {
+    const key = match[1];
+    if (result[key]) continue; // already parsed as nested
+    const val = resolveValue(match[2], ctx);
+    if (val) result[key] = { DEFAULT: val };
+  }
+
+  return result;
+}
+
+function parseCustomColors(configContent: string, ctx: Record<string, string>): Record<string, Record<string, string>> {
+  const extendBlock = findKeyBlock(configContent, 'extend');
+  const colorsBlock = extendBlock
+    ? findKeyBlock(extendBlock, 'colors')
+    : findKeyBlock(configContent, 'colors');
+  if (!colorsBlock) return {};
+  return parseConfigBlock(colorsBlock, ctx);
+}
+
+function parseCustomValues(configContent: string, key: string, ctx: Record<string, string>): Record<string, string> {
+  const extendBlock = findKeyBlock(configContent, 'extend');
+  const block = extendBlock
+    ? findKeyBlock(extendBlock, key)
+    : findKeyBlock(configContent, key);
+  if (!block) return {};
+  const result: Record<string, string> = {};
+  const pairRegex = /['"]?([\w][\w.-]*)['"]?\s*:\s*([^,{}\n]+)/gm;
+  let match;
+  while ((match = pairRegex.exec(block)) !== null) {
+    const val = resolveValue(match[2], ctx);
+    if (val) result[match[1]] = val;
+  }
+  return result;
 }
 
 function parseCssCustomProperties(projectPath: string): DesignToken[] {
@@ -240,6 +363,8 @@ function parseCssCustomProperties(projectPath: string): DesignToken[] {
   for (const cssFile of cssFiles) {
     try {
       const content = fs.readFileSync(cssFile, 'utf-8');
+
+      // CSS custom properties (--var: value;)
       const varRegex = /(--[\w-]+)\s*:\s*([^;]+);/g;
       let match;
       while ((match = varRegex.exec(content)) !== null) {
@@ -251,6 +376,87 @@ function parseCssCustomProperties(projectPath: string): DesignToken[] {
         if (value.match(/^#|^rgb|^hsl|^oklch|transparent/)) category = 'color';
         else if (value.match(/^[\d.]+(rem|em|px|%)/)) category = 'spacing';
         tokens.push({ name, value, category, source: 'css-var' });
+
+        // Tailwind v4 CSS theme variables → generate utility class tokens
+        const colorMatch = name.match(/^--color-(.+)$/);
+        if (colorMatch) {
+          const cls = colorMatch[1];
+          for (const prefix of ['text', 'bg', 'border']) {
+            tokens.push({ name: `${prefix}-${cls}`, value, category: 'color', source: 'tailwind' });
+          }
+        }
+        const spacingMatch = name.match(/^--spacing-(.+)$/);
+        if (spacingMatch) {
+          const cls = spacingMatch[1];
+          for (const prefix of ['p', 'px', 'py', 'm', 'mx', 'my', 'gap', 'w', 'h']) {
+            tokens.push({ name: `${prefix}-${cls}`, value, category: 'spacing', source: 'tailwind' });
+          }
+        }
+        const fontSizeMatch = name.match(/^--font-size-(.+)$/);
+        if (fontSizeMatch) {
+          tokens.push({ name: `text-${fontSizeMatch[1]}`, value, category: 'typography', source: 'tailwind' });
+        }
+        const radiusMatch = name.match(/^--radius-(.+)$/);
+        if (radiusMatch) {
+          tokens.push({ name: `rounded-${radiusMatch[1]}`, value, category: 'border', source: 'tailwind' });
+        }
+        const shadowMatch = name.match(/^--shadow-(.+)$/);
+        if (shadowMatch) {
+          tokens.push({ name: `shadow-${shadowMatch[1]}`, value, category: 'effect', source: 'tailwind' });
+        }
+      }
+
+      // SCSS variables ($var: value;)
+      if (cssFile.endsWith('.scss')) {
+        // First pass: build resolution context for $var references
+        const scssCtx: Record<string, string> = {};
+        const scssVarRegex = /\$([\w-]+)\s*:\s*([^;]+);/g;
+        let scssMatch;
+        while ((scssMatch = scssVarRegex.exec(content)) !== null) {
+          const raw = scssMatch[2].replace(/\s*!default\s*$/, '').trim();
+          const strVal = raw.match(/^['"](.+)['"]$/);
+          scssCtx[`$${scssMatch[1]}`] = strVal ? strVal[1] : raw;
+        }
+
+        // Second pass: resolve references and emit tokens
+        scssVarRegex.lastIndex = 0;
+        while ((scssMatch = scssVarRegex.exec(content)) !== null) {
+          const name = `$${scssMatch[1]}`;
+          if (seen.has(name)) continue;
+          seen.add(name);
+          let raw = scssMatch[2].replace(/\s*!default\s*$/, '').trim();
+          const strVal = raw.match(/^['"](.+)['"]$/);
+          if (strVal) raw = strVal[1];
+          // Resolve $var references (one level deep)
+          if (raw.startsWith('$') && scssCtx[raw]) raw = scssCtx[raw];
+          let category = 'other';
+          if (raw.match(/^#|^rgb|^hsl|^oklch|transparent/)) category = 'color';
+          else if (raw.match(/^[\d.]+(rem|em|px|%)/)) category = 'spacing';
+          tokens.push({ name, value: raw, category, source: 'css-var' });
+        }
+
+        // SCSS maps: $map: (key: value, ...);
+        const mapRegex = /\$([\w-]+)\s*:\s*\(([^)]+)\)\s*(?:!default\s*)?;/g;
+        let mapMatch;
+        while ((mapMatch = mapRegex.exec(content)) !== null) {
+          const mapName = mapMatch[1];
+          const entries = mapMatch[2];
+          const entryRegex = /([\w-]+)\s*:\s*([^,)]+)/g;
+          let entryMatch;
+          while ((entryMatch = entryRegex.exec(entries)) !== null) {
+            const entryName = `$${mapName}.${entryMatch[1]}`;
+            if (seen.has(entryName)) continue;
+            seen.add(entryName);
+            let val = entryMatch[2].trim().replace(/\s*!default\s*$/, '');
+            const entryStr = val.match(/^['"](.+)['"]$/);
+            if (entryStr) val = entryStr[1];
+            if (val.startsWith('$') && scssCtx[val]) val = scssCtx[val];
+            let category = 'other';
+            if (val.match(/^#|^rgb|^hsl|^oklch|transparent/)) category = 'color';
+            else if (val.match(/^[\d.]+(rem|em|px|%)/)) category = 'spacing';
+            tokens.push({ name: entryName, value: val, category, source: 'css-var' });
+          }
+        }
       }
     } catch { /* ignore */ }
   }
@@ -267,17 +473,57 @@ function findTailwindConfig(projectPath: string): string | null {
   return null;
 }
 
+function hasTailwindInProject(projectPath: string): boolean {
+  try {
+    const pkgPath = path.join(projectPath, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      return 'tailwindcss' in deps;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 export function getDesignTokens(projectPath: string): DesignToken[] {
   const tokens: DesignToken[] = [];
   const configPath = findTailwindConfig(projectPath);
+  const hasTailwind = configPath || hasTailwindInProject(projectPath);
+
+  if (hasTailwind) {
+    tokens.push(...getDefaultTailwindTokens());
+  }
 
   if (configPath) {
-    tokens.push(...getDefaultTailwindTokens());
     try {
       const configContent = fs.readFileSync(configPath, 'utf-8');
-      const customColors = parseCustomColors(configContent);
+      const ctx = buildResolutionContext(configContent);
+
+      // Custom colors
+      const customColors = parseCustomColors(configContent, ctx);
       if (Object.keys(customColors).length > 0) {
         tokens.push(...generateColorTokens(customColors));
+      }
+
+      // Custom spacing
+      const customSpacing = parseCustomValues(configContent, 'spacing', ctx);
+      const spacingPrefixes = ['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'm', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'gap', 'w', 'h'];
+      for (const [size, value] of Object.entries(customSpacing)) {
+        for (const prefix of spacingPrefixes) {
+          tokens.push({ name: `${prefix}-${size}`, value, category: 'spacing', source: 'tailwind' });
+        }
+      }
+
+      // Custom font sizes
+      const customFontSize = parseCustomValues(configContent, 'fontSize', ctx);
+      for (const [size, value] of Object.entries(customFontSize)) {
+        tokens.push({ name: `text-${size}`, value, category: 'typography', source: 'tailwind' });
+      }
+
+      // Custom border radius
+      const customBorderRadius = parseCustomValues(configContent, 'borderRadius', ctx);
+      for (const [size, value] of Object.entries(customBorderRadius)) {
+        tokens.push({ name: size ? `rounded-${size}` : 'rounded', value, category: 'border', source: 'tailwind' });
       }
     } catch { /* ignore parse errors */ }
   }

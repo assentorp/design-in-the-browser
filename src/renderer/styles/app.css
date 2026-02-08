@@ -656,6 +656,16 @@ body,
   cursor: not-allowed;
 }
 
+.edit-queue-send-waiting {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.edit-queue-send-waiting:hover {
+  background: var(--accent);
+  color: white;
+}
+
 .edit-queue-cancel {
   height: 32px;
   padding: 0 12px;
@@ -1585,4 +1595,21 @@ body,
   height: 5px;
   background: var(--border-color);
   border-radius: 50%;
+}
+
+/* App loading spinner */
+.app-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--text-secondary);
+  border-radius: 50%;
+  animation: cli-spin 0.6s linear infinite;
 }

@@ -25,6 +25,9 @@ export const annotationScript = `
   let classInspectorHideTimeout = null;
   let altKeyDown = false;
   let altHoverElement = null;
+  let altInspectorSwitchTimeout = null;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
 
   // Multi-edit state - stores pending annotations with individual notes
   let pendingAnnotations = []; // Array of {element, note, bounds, selector, tagName, text, attributes}
@@ -960,7 +963,7 @@ export const annotationScript = `
   }
 
   // Class inspector functions - shown when hovering the code button
-  function showClassInspector(el, anchorRect) {
+  function showClassInspector(el, anchorRect, mouseX, mouseY) {
     // Clear any pending hide
     if (classInspectorHideTimeout) {
       clearTimeout(classInspectorHideTimeout);
@@ -1069,13 +1072,19 @@ export const annotationScript = `
     const inspectorH = inspectorRect.height;
     const pad = 8;
 
-    // Position below the code button
-    let top = anchorRect.bottom + 6;
-    let left = anchorRect.right - Math.min(inspectorW, 200); // Align right edge roughly with button
+    // Position near cursor if mouse coords provided, otherwise below anchor element
+    let top, left;
+    if (mouseX != null && mouseY != null) {
+      top = mouseY + 16;
+      left = mouseX + 12;
+    } else {
+      top = anchorRect.bottom + 6;
+      left = anchorRect.right - Math.min(inspectorW, 200);
+    }
 
     // Adjust if off-screen vertically
     if (top + inspectorH + pad > window.innerHeight) {
-      top = anchorRect.top - inspectorH - 6;
+      top = (anchorRect ? anchorRect.top : mouseY) - inspectorH - 6;
     }
     // Clamp vertically
     if (top + inspectorH + pad > window.innerHeight) {
@@ -1201,11 +1210,15 @@ export const annotationScript = `
       e.stopPropagation();
     }, true);
 
-    // Cancel hide when mouse enters inspector
+    // Cancel hide and element-switch when mouse enters inspector
     classInspectorElement.addEventListener('mouseenter', function() {
       if (classInspectorHideTimeout) {
         clearTimeout(classInspectorHideTimeout);
         classInspectorHideTimeout = null;
+      }
+      if (altInspectorSwitchTimeout) {
+        clearTimeout(altInspectorSwitchTimeout);
+        altInspectorSwitchTimeout = null;
       }
     });
 
@@ -1232,6 +1245,10 @@ export const annotationScript = `
       clearTimeout(classInspectorHideTimeout);
       classInspectorHideTimeout = null;
     }
+    if (altInspectorSwitchTimeout) {
+      clearTimeout(altInspectorSwitchTimeout);
+      altInspectorSwitchTimeout = null;
+    }
     classInspectorAnchor = null;
     if (classInspectorElement) {
       classInspectorElement.remove();
@@ -1247,6 +1264,17 @@ export const annotationScript = `
   function handleAltKeyDown(e) {
     if (e.key === 'Alt' && !altKeyDown) {
       altKeyDown = true;
+      if (!annotateMode) return;
+      // Immediately inspect the element under the cursor
+      var target = document.elementFromPoint(lastMouseX, lastMouseY);
+      if (target && target !== document.body && target !== document.documentElement &&
+          !(target.closest && target.closest('.claude-design-popover')) &&
+          !(target.closest && target.closest('.claude-design-class-inspector')) &&
+          !(target.closest && target.closest('.claude-design-code-btn'))) {
+        altHoverElement = target;
+        altHoverElement.classList.add('claude-design-alt-highlight');
+        showClassInspector(target, null, lastMouseX, lastMouseY);
+      }
     }
   }
 
@@ -1262,6 +1290,8 @@ export const annotationScript = `
   }
 
   function handleMouseMoveForAlt(e) {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
     if (!annotateMode || !altKeyDown) return;
 
     var target = e.target;
@@ -1280,8 +1310,20 @@ export const annotationScript = `
       // Add highlight to new element
       altHoverElement = target;
       altHoverElement.classList.add('claude-design-alt-highlight');
-      var rect = target.getBoundingClientRect();
-      showClassInspector(target, rect);
+
+      // If inspector is already visible, delay switching so the user
+      // has time to move their mouse into it without it jumping away
+      if (classInspectorElement) {
+        if (altInspectorSwitchTimeout) clearTimeout(altInspectorSwitchTimeout);
+        var switchTarget = target;
+        var sx = e.clientX, sy = e.clientY;
+        altInspectorSwitchTimeout = setTimeout(function() {
+          altInspectorSwitchTimeout = null;
+          showClassInspector(switchTarget, null, sx, sy);
+        }, 300);
+      } else {
+        showClassInspector(target, null, e.clientX, e.clientY);
+      }
     }
   }
 
@@ -2141,25 +2183,6 @@ export const annotationScript = `
             pageUrl: window.location.pathname,
           }, '*');
         }
-      });
-
-      // Show class inspector on hover
-      codeButtonElement.addEventListener('mouseenter', function() {
-        // Cancel any pending hide
-        if (classInspectorHideTimeout) {
-          clearTimeout(classInspectorHideTimeout);
-          classInspectorHideTimeout = null;
-        }
-        var btnRect = codeButtonElement.getBoundingClientRect();
-        showClassInspector(el, btnRect);
-      });
-
-      codeButtonElement.addEventListener('mouseleave', function(e) {
-        // Don't hide if moving to the inspector itself
-        if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.claude-design-class-inspector')) {
-          return;
-        }
-        scheduleHideInspector();
       });
 
       document.body.appendChild(codeButtonElement);

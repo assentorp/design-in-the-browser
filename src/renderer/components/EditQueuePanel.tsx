@@ -35,10 +35,9 @@ export default function EditQueuePanel({ edits, actions, cliRunning }: EditQueue
       </div>
       <div className="edit-queue-actions">
         <button
-          className="edit-queue-send"
+          className={`edit-queue-send${cliRunning ? ' edit-queue-send-waiting' : ''}`}
           onClick={() => actions?.sendAll()}
-          disabled={cliRunning}
-          title={cliRunning ? 'Wait for Claude to finish' : undefined}
+          title={cliRunning ? 'Claude is busy — click to send anyway' : undefined}
         >
           {cliRunning ? 'Waiting...' : 'Send'}
         </button>

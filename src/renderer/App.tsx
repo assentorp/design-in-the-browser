@@ -23,6 +23,19 @@ const CLI_COMMANDS: Record<CliTool, string> = {
   gemini: 'gemini',
 };
 
+const SAVED_SESSIONS_KEY = 'ditb-active-sessions';
+
+interface SavedSessionConfig {
+  name: string;
+  path: string;
+  startCommand: string;
+  url: string;
+  cliTool: CliTool;
+  shell: ShellType;
+  claudeModel?: string;
+  dangerouslySkipPermissions?: boolean;
+}
+
 interface UpdateInfo {
   version: string;
   url: string;
@@ -51,6 +64,7 @@ export default function App() {
   sessionsRef.current = sessions;
   const cliRunningRef = useRef<Set<string>>(new Set());
   const cliTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const savedConfigsRef = useRef<Map<string, SavedSessionConfig>>(new Map());
 
   // Load presets from disk on mount (with migration from localStorage)
   useEffect(() => {
@@ -77,11 +91,65 @@ export default function App() {
     });
   }, []);
 
-  // Show modal on first launch if no sessions (after presets are loaded)
+  // Restore saved sessions or show config modal on launch
   useEffect(() => {
-    if (presetsLoaded && sessions.length === 0) {
-      setShowConfigModal(true);
+    if (!presetsLoaded || sessions.length > 0) return;
+
+    const savedJson = localStorage.getItem(SAVED_SESSIONS_KEY);
+    if (savedJson) {
+      try {
+        const savedConfigs: SavedSessionConfig[] = JSON.parse(savedJson);
+        if (savedConfigs.length > 0) {
+          const newSessions: Session[] = [];
+          const commands: typeof pendingCommandsRef.current = [];
+          let counter = 0;
+
+          for (const config of savedConfigs) {
+            counter++;
+            const newSession = createSession(
+              { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
+              counter
+            );
+            newSession.url = config.url || 'http://localhost:3000';
+
+            const devServerTabId = newSession.terminalTabs[0].id;
+            const cliTabId = `${newSession.id}-2`;
+            const cliLabel = config.cliTool.charAt(0).toUpperCase() + config.cliTool.slice(1);
+
+            newSession.terminalTabs[0].name = 'Dev Server';
+            newSession.terminalTabs.push({ id: cliTabId, name: cliLabel });
+            newSession.terminalTabCounter = 2;
+            newSession.devServerTabId = devServerTabId;
+            newSession.cliToolTabId = cliTabId;
+            newSession.cliTool = config.cliTool;
+            newSession.activeTerminalTabId = cliTabId;
+
+            newSessions.push(newSession);
+            savedConfigsRef.current.set(newSession.id, config);
+
+            if (config.startCommand) {
+              commands.push({ sessionId: newSession.id, tabId: devServerTabId, command: config.startCommand });
+            }
+
+            let cliCommand = CLI_COMMANDS[config.cliTool];
+            if (config.cliTool === 'claude') {
+              if (config.claudeModel) cliCommand += ` --model ${config.claudeModel}`;
+              if (config.dangerouslySkipPermissions) cliCommand += ' --dangerously-skip-permissions';
+            }
+            commands.push({ sessionId: newSession.id, tabId: cliTabId, command: cliCommand });
+          }
+
+          setSessions(newSessions);
+          setActiveSessionId(newSessions[newSessions.length - 1].id);
+          setSessionCounter(counter);
+          pendingCommandsRef.current = [...pendingCommandsRef.current, ...commands];
+          return;
+        }
+      } catch {
+        // Ignore parse errors, fall through to show modal
+      }
     }
+    setShowConfigModal(true);
   }, [presetsLoaded]);
 
   // Listen for settings menu trigger
@@ -321,6 +389,21 @@ export default function App() {
       setSessionCounter(newIndex);
       setShowConfigModal(false);
 
+      // Save session config for restore on reload/restart
+      savedConfigsRef.current.set(newSession.id, {
+        name: config.name,
+        path: config.path,
+        startCommand: config.startCommand,
+        url: config.url,
+        cliTool: config.cliTool,
+        shell: config.shell,
+        claudeModel: config.claudeModel || undefined,
+        dangerouslySkipPermissions: config.dangerouslySkipPermissions || undefined,
+      });
+      localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(
+        Array.from(savedConfigsRef.current.values())
+      ));
+
       // Save as preset if requested
       if (config.saveAsPreset) {
         const newPreset: ProjectPreset = {
@@ -403,6 +486,16 @@ export default function App() {
       // Destroy the terminal for this session
       destroyTerminalSession(sessionId);
 
+      // Remove saved session config
+      savedConfigsRef.current.delete(sessionId);
+      if (savedConfigsRef.current.size > 0) {
+        localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(
+          Array.from(savedConfigsRef.current.values())
+        ));
+      } else {
+        localStorage.removeItem(SAVED_SESSIONS_KEY);
+      }
+
       setSessions((prev) => {
         const filtered = prev.filter((s) => s.id !== sessionId);
         if (filtered.length === 0) {
@@ -466,14 +559,20 @@ export default function App() {
     return (
       <div className="app">
         {updateBanner}
-        <ProjectConfigModal
-          presets={projectPresets}
-          canClose={false}
-          onClose={() => {}}
-          onCreate={handleCreateProject}
-          onDeletePreset={handleDeletePreset}
-          onUpdatePreset={handleUpdatePreset}
-        />
+        {presetsLoaded ? (
+          <ProjectConfigModal
+            presets={projectPresets}
+            canClose={false}
+            onClose={() => {}}
+            onCreate={handleCreateProject}
+            onDeletePreset={handleDeletePreset}
+            onUpdatePreset={handleUpdatePreset}
+          />
+        ) : (
+          <div className="app-loading">
+            <div className="app-loading-spinner" />
+          </div>
+        )}
       </div>
     );
   }
