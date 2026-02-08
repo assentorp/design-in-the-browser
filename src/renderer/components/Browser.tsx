@@ -480,17 +480,25 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         // Also focus the webview so mousemove events fire inside it
         webview.focus();
       }
+      if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        webview.executeJavaScript('window.__claudeDesignSetGKey && window.__claudeDesignSetGKey(true); true;').catch(() => {});
+        webview.focus();
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Alt') {
         webview.executeJavaScript('window.__claudeDesignSetAltKey && window.__claudeDesignSetAltKey(false); true;').catch(() => {});
       }
+      if (e.key === 'g') {
+        webview.executeJavaScript('window.__claudeDesignSetGKey && window.__claudeDesignSetGKey(false); true;').catch(() => {});
+      }
     };
 
-    // Clear ALT state when window loses focus (e.g. user switches apps while holding ALT)
+    // Clear ALT/G state when window loses focus
     const handleBlur = () => {
       webview.executeJavaScript('window.__claudeDesignSetAltKey && window.__claudeDesignSetAltKey(false); true;').catch(() => {});
+      webview.executeJavaScript('window.__claudeDesignSetGKey && window.__claudeDesignSetGKey(false); true;').catch(() => {});
     };
 
     window.addEventListener('keydown', handleKeyDown, true);

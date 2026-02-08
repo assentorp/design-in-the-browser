@@ -501,6 +501,84 @@ export const annotationScript = `
         font-size: 13px;
         text-align: center;
       }
+      .claude-design-spacing-overlay {
+        position: fixed;
+        z-index: 2147483645;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .claude-design-spacing-margin {
+        background: rgba(249, 115, 22, 0.15);
+        border: 1px dashed rgba(249, 115, 22, 0.4);
+      }
+      .claude-design-spacing-padding {
+        background: rgba(34, 197, 94, 0.15);
+        border: 1px dashed rgba(34, 197, 94, 0.4);
+      }
+      .claude-design-spacing-label {
+        font-size: 10px;
+        font-weight: 600;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        padding: 1px 4px;
+        border-radius: 3px;
+        white-space: nowrap;
+        line-height: 1;
+      }
+      .claude-design-spacing-margin .claude-design-spacing-label {
+        color: #f97316;
+        background: rgba(249, 115, 22, 0.2);
+      }
+      .claude-design-spacing-padding .claude-design-spacing-label {
+        color: #22c55e;
+        background: rgba(34, 197, 94, 0.2);
+      }
+      .claude-design-ruler-line {
+        position: fixed;
+        z-index: 2147483644;
+        pointer-events: none;
+      }
+      .claude-design-ruler-line-h {
+        height: 1px;
+        left: 0;
+        right: 0;
+        background: repeating-linear-gradient(to right, #e879f9 0, #e879f9 4px, transparent 4px, transparent 8px);
+      }
+      .claude-design-ruler-line-v {
+        width: 1px;
+        top: 0;
+        bottom: 0;
+        background: repeating-linear-gradient(to bottom, #e879f9 0, #e879f9 4px, transparent 4px, transparent 8px);
+      }
+      .claude-design-ruler-label {
+        position: fixed;
+        z-index: 2147483644;
+        pointer-events: none;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        color: #e879f9;
+        background: rgba(30, 30, 30, 0.85);
+        padding: 2px 5px;
+        border-radius: 3px;
+        white-space: nowrap;
+        line-height: 1;
+      }
+      .claude-design-ruler-dimensions {
+        position: fixed;
+        z-index: 2147483644;
+        pointer-events: none;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        color: #fff;
+        background: #e879f9;
+        padding: 2px 6px;
+        border-radius: 3px;
+        white-space: nowrap;
+        line-height: 1;
+      }
       .claude-design-class-inspector {
         position: fixed;
         z-index: 2147483647;
@@ -1197,6 +1275,138 @@ export const annotationScript = `
     scheduleHideInspector();
   }
 
+  // ---- Spacing Visualizer ----
+  var spacingOverlays = [];
+
+  function showSpacingOverlays(el) {
+    clearSpacingOverlays();
+    if (!el) return;
+
+    var rect = el.getBoundingClientRect();
+    var computed = window.getComputedStyle(el);
+
+    var mt = parseFloat(computed.marginTop) || 0;
+    var mr = parseFloat(computed.marginRight) || 0;
+    var mb = parseFloat(computed.marginBottom) || 0;
+    var ml = parseFloat(computed.marginLeft) || 0;
+    var pt = parseFloat(computed.paddingTop) || 0;
+    var pr = parseFloat(computed.paddingRight) || 0;
+    var pb = parseFloat(computed.paddingBottom) || 0;
+    var pl = parseFloat(computed.paddingLeft) || 0;
+
+    function createOverlay(top, left, width, height, type, value) {
+      if (value <= 0) return;
+      var div = document.createElement('div');
+      div.className = 'claude-design-spacing-overlay claude-design-spacing-' + type;
+      div.style.top = top + 'px';
+      div.style.left = left + 'px';
+      div.style.width = width + 'px';
+      div.style.height = height + 'px';
+      if (Math.min(width, height) >= 14) {
+        div.innerHTML = '<span class="claude-design-spacing-label">' + Math.round(value) + '</span>';
+      }
+      document.body.appendChild(div);
+      spacingOverlays.push(div);
+    }
+
+    // Margin overlays (orange) - top, right, bottom, left
+    createOverlay(rect.top - mt, rect.left - ml, rect.width + ml + mr, mt, 'margin', mt);
+    createOverlay(rect.bottom, rect.left - ml, rect.width + ml + mr, mb, 'margin', mb);
+    createOverlay(rect.top, rect.left - ml, ml, rect.height, 'margin', ml);
+    createOverlay(rect.top, rect.right, mr, rect.height, 'margin', mr);
+
+    // Padding overlays (green) - top, right, bottom, left
+    createOverlay(rect.top, rect.left, rect.width, pt, 'padding', pt);
+    createOverlay(rect.bottom - pb, rect.left, rect.width, pb, 'padding', pb);
+    createOverlay(rect.top + pt, rect.left, pl, rect.height - pt - pb, 'padding', pl);
+    createOverlay(rect.top + pt, rect.right - pr, pr, rect.height - pt - pb, 'padding', pr);
+  }
+
+  function clearSpacingOverlays() {
+    for (var i = 0; i < spacingOverlays.length; i++) {
+      if (spacingOverlays[i].parentNode) spacingOverlays[i].parentNode.removeChild(spacingOverlays[i]);
+    }
+    spacingOverlays = [];
+  }
+
+  // ---- Ruler Guides (G key) ----
+  var gKeyDown = false;
+  var gHoverElement = null;
+  var rulerElements = [];
+
+  function showRulerGuides(el) {
+    clearRulerGuides();
+    if (!el) return;
+
+    var rect = el.getBoundingClientRect();
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+
+    function createLine(cls, style) {
+      var div = document.createElement('div');
+      div.className = 'claude-design-ruler-line ' + cls;
+      Object.assign(div.style, style);
+      document.body.appendChild(div);
+      rulerElements.push(div);
+    }
+
+    function createLabel(top, left, text) {
+      var div = document.createElement('div');
+      div.className = 'claude-design-ruler-label';
+      div.style.top = top + 'px';
+      div.style.left = left + 'px';
+      div.textContent = text;
+      document.body.appendChild(div);
+      rulerElements.push(div);
+    }
+
+    // Four guide lines extending from element edges
+    createLine('claude-design-ruler-line-h', { top: Math.round(rect.top) + 'px' });
+    createLine('claude-design-ruler-line-h', { top: Math.round(rect.bottom) + 'px' });
+    createLine('claude-design-ruler-line-v', { left: Math.round(rect.left) + 'px' });
+    createLine('claude-design-ruler-line-v', { left: Math.round(rect.right) + 'px' });
+
+    // Distance labels from viewport edges
+    var distTop = Math.round(rect.top);
+    var distBottom = Math.round(vh - rect.bottom);
+    var distLeft = Math.round(rect.left);
+    var distRight = Math.round(vw - rect.right);
+
+    // Top distance
+    if (distTop > 10) {
+      createLabel(rect.top / 2 - 8, rect.left + rect.width / 2 + 6, distTop + 'px');
+    }
+    // Bottom distance
+    if (distBottom > 10) {
+      createLabel(rect.bottom + (vh - rect.bottom) / 2 - 8, rect.left + rect.width / 2 + 6, distBottom + 'px');
+    }
+    // Left distance
+    if (distLeft > 10) {
+      createLabel(rect.top + rect.height / 2 + 6, rect.left / 2 - 12, distLeft + 'px');
+    }
+    // Right distance
+    if (distRight > 10) {
+      createLabel(rect.top + rect.height / 2 + 6, rect.right + (vw - rect.right) / 2 - 12, distRight + 'px');
+    }
+
+    // Element dimensions badge
+    var dimDiv = document.createElement('div');
+    dimDiv.className = 'claude-design-ruler-dimensions';
+    dimDiv.textContent = Math.round(rect.width) + ' \\u00D7 ' + Math.round(rect.height);
+    dimDiv.style.top = (rect.bottom + 6) + 'px';
+    dimDiv.style.left = (rect.left + rect.width / 2) + 'px';
+    dimDiv.style.transform = 'translateX(-50%)';
+    document.body.appendChild(dimDiv);
+    rulerElements.push(dimDiv);
+  }
+
+  function clearRulerGuides() {
+    for (var i = 0; i < rulerElements.length; i++) {
+      if (rulerElements[i].parentNode) rulerElements[i].parentNode.removeChild(rulerElements[i]);
+    }
+    rulerElements = [];
+  }
+
   // ALT+hover inspection handlers
   function handleAltKeyDown(e) {
     if (e.key === 'Alt' && !altKeyDown) {
@@ -1207,6 +1417,7 @@ export const annotationScript = `
   function handleAltKeyUp(e) {
     if (e.key === 'Alt' && altKeyDown) {
       altKeyDown = false;
+      clearSpacingOverlays();
       if (altHoverElement) {
         altHoverElement.classList.remove('claude-design-alt-highlight');
       }
@@ -1215,8 +1426,26 @@ export const annotationScript = `
     }
   }
 
+  // G key handlers for ruler guides
+  function handleGKeyDown(e) {
+    if (e.key === 'g' && !gKeyDown && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Don't trigger if typing in an input/textarea
+      var tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target.contentEditable === 'true')) return;
+      gKeyDown = true;
+    }
+  }
+
+  function handleGKeyUp(e) {
+    if (e.key === 'g' && gKeyDown) {
+      gKeyDown = false;
+      clearRulerGuides();
+      gHoverElement = null;
+    }
+  }
+
   function handleMouseMoveForAlt(e) {
-    if (!annotateMode || !altKeyDown) return;
+    if (!annotateMode) return;
 
     var target = e.target;
     if (target === document.body || target === document.documentElement ||
@@ -1225,6 +1454,15 @@ export const annotationScript = `
         (target.closest && target.closest('.claude-design-code-btn'))) {
       return;
     }
+
+    // G key: ruler guides
+    if (gKeyDown && gHoverElement !== target) {
+      gHoverElement = target;
+      showRulerGuides(target);
+    }
+
+    // ALT key: class inspector + spacing
+    if (!altKeyDown) return;
 
     if (altHoverElement !== target) {
       // Remove highlight from previous element
@@ -1236,6 +1474,7 @@ export const annotationScript = `
       altHoverElement.classList.add('claude-design-alt-highlight');
       var rect = target.getBoundingClientRect();
       showClassInspector(target, rect);
+      showSpacingOverlays(target);
     }
   }
 
@@ -2362,6 +2601,8 @@ export const annotationScript = `
     document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('keydown', handleAltKeyDown, true);
     document.addEventListener('keyup', handleAltKeyUp, true);
+    document.addEventListener('keydown', handleGKeyDown, true);
+    document.addEventListener('keyup', handleGKeyUp, true);
     document.addEventListener('mousemove', handleMouseMoveForAlt, true);
   }
 
@@ -2377,12 +2618,18 @@ export const annotationScript = `
     document.removeEventListener('keydown', handleKeyDown, true);
     document.removeEventListener('keydown', handleAltKeyDown, true);
     document.removeEventListener('keyup', handleAltKeyUp, true);
+    document.removeEventListener('keydown', handleGKeyDown, true);
+    document.removeEventListener('keyup', handleGKeyUp, true);
     document.removeEventListener('mousemove', handleMouseMoveForAlt, true);
+    clearSpacingOverlays();
+    clearRulerGuides();
     if (altHoverElement) {
       altHoverElement.classList.remove('claude-design-alt-highlight');
     }
     altKeyDown = false;
     altHoverElement = null;
+    gKeyDown = false;
+    gHoverElement = null;
 
     if (highlightedElement) {
       highlightedElement.classList.remove('claude-design-highlight');
@@ -2447,11 +2694,23 @@ export const annotationScript = `
       altKeyDown = true;
     } else if (!down && altKeyDown) {
       altKeyDown = false;
+      clearSpacingOverlays();
       if (altHoverElement) {
         altHoverElement.classList.remove('claude-design-alt-highlight');
       }
       altHoverElement = null;
       removeClassInspectorImmediate();
+    }
+  }
+
+  // Set G key state from parent window (for when webview doesn't have focus)
+  function setGKeyState(down) {
+    if (down && !gKeyDown) {
+      gKeyDown = true;
+    } else if (!down && gKeyDown) {
+      gKeyDown = false;
+      clearRulerGuides();
+      gHoverElement = null;
     }
   }
 
@@ -2465,5 +2724,6 @@ export const annotationScript = `
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
   window.__claudeDesignAddToTodo = addToTodoList;
   window.__claudeDesignSetAltKey = setAltKeyState;
+  window.__claudeDesignSetGKey = setGKeyState;
 })();
 `;
