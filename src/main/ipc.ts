@@ -810,7 +810,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
     return results;
   });
 
-  // List design tokens for @@-mention autocomplete
+  // List design tokens for >mention autocomplete
   ipcMain.handle('project:list-tokens', async (_, { projectPath }: { projectPath: string }) => {
     try {
       return getDesignTokens(projectPath);

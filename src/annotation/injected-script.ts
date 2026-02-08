@@ -997,18 +997,18 @@ export const annotationScript = `
     return formats[(idx + 1) % formats.length];
   }
 
-  // Expand @filename and @@token mentions using the textarea's mention maps
+  // Expand @filename and >token mentions using the textarea's mention maps
   function expandMentions(text, textarea) {
     var result = text;
 
-    // First expand @@token mentions (must be before @ to avoid partial match)
+    // First expand >token mentions (must be before @ to avoid partial match)
     var tokenMap = textarea && textarea.__tokenMentionMap;
     if (tokenMap) {
       var tokenNames = Object.keys(tokenMap);
       tokenNames.sort(function(a, b) { return b.length - a.length; });
       for (var i = 0; i < tokenNames.length; i++) {
         var tName = tokenNames[i];
-        result = result.split('@@' + tName).join(tokenMap[tName]);
+        result = result.split('>' + tName).join(tokenMap[tName]);
       }
     }
 
@@ -1626,7 +1626,7 @@ export const annotationScript = `
   }
 
   function setupMentionAutocomplete(textarea) {
-    // mode: 'file' for @files, 'token' for @@tokens
+    // mode: 'file' for @files, 'token' for >tokens
     var mention = { active: false, startIndex: -1, mode: 'file' };
     var dropdown = null;
     var activeIndex = 0;
@@ -1899,7 +1899,7 @@ export const annotationScript = `
       var item = filteredItems[idx];
 
       if (mention.mode === 'token') {
-        // Token: store in tokenMentionMap, display as @@tokenName
+        // Token: store in tokenMentionMap, display as >tokenName
         if (!textarea.__tokenMentionMap) textarea.__tokenMentionMap = {};
         var displayName = item.name;
         var resolvedValue = item.name + ' (' + item.value + ', ' + item.source + ')';
@@ -1942,22 +1942,10 @@ export const annotationScript = `
           return;
         }
 
-        // Check for mode switch: if we're in file mode and user just typed second @
-        if (mention.mode === 'file') {
-          var query = value.substring(mention.startIndex, cursorPos);
-          if (query === '@') {
-            // Switch to token mode: startIndex moves past the second @
-            mention.mode = 'token';
-            mention.startIndex = cursorPos; // after the @@
-            renderDropdown('');
-            return;
-          }
-        }
-
         // Verify the trigger is still there
         if (mention.mode === 'token') {
-          // For @@, check that @@ precedes startIndex
-          if (mention.startIndex < 2 || value[mention.startIndex - 1] !== '@' || value[mention.startIndex - 2] !== '@') {
+          // For >, check that > precedes startIndex
+          if (mention.startIndex < 1 || value[mention.startIndex - 1] !== '>') {
             removeDropdown();
             return;
           }
@@ -1977,20 +1965,19 @@ export const annotationScript = `
         return;
       }
 
-      // Check if cursor is right after an @ (handles both typing @ and backspacing to @)
-      if (cursorPos > 0 && value[cursorPos - 1] === '@') {
-        // Check for @@ (token mode) — if preceded by another @
-        if (cursorPos > 1 && value[cursorPos - 2] === '@') {
-          // Only trigger if @@ is at start or preceded by whitespace
-          if (cursorPos === 2 || /\\s/.test(value[cursorPos - 3])) {
-            mention.active = true;
-            mention.mode = 'token';
-            mention.startIndex = cursorPos; // after the @@
-            renderDropdown('');
-            return;
-          }
+      // Check if cursor is right after a > (token mode) or @ (file mode)
+      if (cursorPos > 0 && value[cursorPos - 1] === '>') {
+        // > (token mode) — only trigger if > is at start or preceded by whitespace
+        if (cursorPos === 1 || /\\s/.test(value[cursorPos - 2])) {
+          mention.active = true;
+          mention.mode = 'token';
+          mention.startIndex = cursorPos; // after the >
+          renderDropdown('');
+          return;
         }
+      }
 
+      if (cursorPos > 0 && value[cursorPos - 1] === '@') {
         // Single @ (file mode)
         if (cursorPos === 1 || /\\s/.test(value[cursorPos - 2])) {
           mention.active = true;
