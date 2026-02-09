@@ -1899,17 +1899,18 @@ export const annotationScript = `
       var item = filteredItems[idx];
 
       if (mention.mode === 'token') {
-        // Token: store in tokenMentionMap, display as >tokenName
+        // Token: store in tokenMentionMap, replace >query with tokenName
         if (!textarea.__tokenMentionMap) textarea.__tokenMentionMap = {};
         var displayName = item.name;
         var resolvedValue = item.name + ' (' + item.value + ', ' + item.source + ')';
         textarea.__tokenMentionMap[displayName] = resolvedValue;
 
         var value = textarea.value;
+        var triggerStart = mention.startIndex - 1; // include the > character
         var after = value.substring(textarea.selectionStart);
-        textarea.value = value.substring(0, mention.startIndex) + displayName + after;
+        textarea.value = value.substring(0, triggerStart) + displayName + after;
 
-        var newPos = mention.startIndex + displayName.length;
+        var newPos = triggerStart + displayName.length;
         textarea.selectionStart = newPos;
         textarea.selectionEnd = newPos;
       } else {
