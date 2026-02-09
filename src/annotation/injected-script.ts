@@ -34,6 +34,10 @@ export const annotationScript = `
   let rulerLineH = null;
   let rulerLineV = null;
 
+  // Shortcut hints state
+  let shortcutHintsElement = null;
+  let shortcutHintsTimeout = null;
+
   // Multi-edit state - stores pending annotations with individual notes
   let pendingAnnotations = []; // Array of {element, note, bounds, selector, tagName, text, attributes}
 
@@ -722,6 +726,42 @@ export const annotationScript = `
         color: #fff;
         border-color: #555;
       }
+      .claude-design-shortcut-hints {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2147483647;
+        background: rgba(31, 31, 31, 0.92);
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 8px 16px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 12px;
+        color: #999;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        white-space: nowrap;
+      }
+      .claude-design-shortcut-hints.visible {
+        opacity: 1;
+      }
+      .claude-design-shortcut-hints kbd {
+        display: inline-block;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        font-size: 11px;
+        color: #e5e5e5;
+        margin-right: 4px;
+      }
       .claude-design-ruler-h,
       .claude-design-ruler-v {
         position: fixed;
@@ -957,18 +997,18 @@ export const annotationScript = `
     return formats[(idx + 1) % formats.length];
   }
 
-  // Expand @filename and @@token mentions using the textarea's mention maps
+  // Expand @filename and >token mentions using the textarea's mention maps
   function expandMentions(text, textarea) {
     var result = text;
 
-    // First expand @@token mentions (must be before @ to avoid partial match)
+    // First expand >token mentions (must be before @ to avoid partial match)
     var tokenMap = textarea && textarea.__tokenMentionMap;
     if (tokenMap) {
       var tokenNames = Object.keys(tokenMap);
       tokenNames.sort(function(a, b) { return b.length - a.length; });
       for (var i = 0; i < tokenNames.length; i++) {
         var tName = tokenNames[i];
-        result = result.split('@@' + tName).join(tokenMap[tName]);
+        result = result.split('>' + tName).join(tokenMap[tName]);
       }
     }
 
@@ -1432,6 +1472,7 @@ export const annotationScript = `
       if (badge) badge.remove();
     });
     pendingAnnotations = [];
+    todoMode = false;
     removeToolbar();
     notifyPendingUpdate();
   }
@@ -1586,7 +1627,7 @@ export const annotationScript = `
   }
 
   function setupMentionAutocomplete(textarea) {
-    // mode: 'file' for @files, 'token' for @@tokens
+    // mode: 'file' for @files, 'token' for >tokens
     var mention = { active: false, startIndex: -1, mode: 'file' };
     var dropdown = null;
     var activeIndex = 0;
@@ -1859,17 +1900,18 @@ export const annotationScript = `
       var item = filteredItems[idx];
 
       if (mention.mode === 'token') {
-        // Token: store in tokenMentionMap, display as @@tokenName
+        // Token: store in tokenMentionMap, replace >query with tokenName
         if (!textarea.__tokenMentionMap) textarea.__tokenMentionMap = {};
         var displayName = item.name;
         var resolvedValue = item.name + ' (' + item.value + ', ' + item.source + ')';
         textarea.__tokenMentionMap[displayName] = resolvedValue;
 
         var value = textarea.value;
+        var triggerStart = mention.startIndex - 1; // include the > character
         var after = value.substring(textarea.selectionStart);
-        textarea.value = value.substring(0, mention.startIndex) + displayName + after;
+        textarea.value = value.substring(0, triggerStart) + displayName + after;
 
-        var newPos = mention.startIndex + displayName.length;
+        var newPos = triggerStart + displayName.length;
         textarea.selectionStart = newPos;
         textarea.selectionEnd = newPos;
       } else {
@@ -1902,22 +1944,10 @@ export const annotationScript = `
           return;
         }
 
-        // Check for mode switch: if we're in file mode and user just typed second @
-        if (mention.mode === 'file') {
-          var query = value.substring(mention.startIndex, cursorPos);
-          if (query === '@') {
-            // Switch to token mode: startIndex moves past the second @
-            mention.mode = 'token';
-            mention.startIndex = cursorPos; // after the @@
-            renderDropdown('');
-            return;
-          }
-        }
-
         // Verify the trigger is still there
         if (mention.mode === 'token') {
-          // For @@, check that @@ precedes startIndex
-          if (mention.startIndex < 2 || value[mention.startIndex - 1] !== '@' || value[mention.startIndex - 2] !== '@') {
+          // For >, check that > precedes startIndex
+          if (mention.startIndex < 1 || value[mention.startIndex - 1] !== '>') {
             removeDropdown();
             return;
           }
@@ -1937,20 +1967,19 @@ export const annotationScript = `
         return;
       }
 
-      // Check if cursor is right after an @ (handles both typing @ and backspacing to @)
-      if (cursorPos > 0 && value[cursorPos - 1] === '@') {
-        // Check for @@ (token mode) — if preceded by another @
-        if (cursorPos > 1 && value[cursorPos - 2] === '@') {
-          // Only trigger if @@ is at start or preceded by whitespace
-          if (cursorPos === 2 || /\\s/.test(value[cursorPos - 3])) {
-            mention.active = true;
-            mention.mode = 'token';
-            mention.startIndex = cursorPos; // after the @@
-            renderDropdown('');
-            return;
-          }
+      // Check if cursor is right after a > (token mode) or @ (file mode)
+      if (cursorPos > 0 && value[cursorPos - 1] === '>') {
+        // > (token mode) — only trigger if > is at start or preceded by whitespace
+        if (cursorPos === 1 || /\\s/.test(value[cursorPos - 2])) {
+          mention.active = true;
+          mention.mode = 'token';
+          mention.startIndex = cursorPos; // after the >
+          renderDropdown('');
+          return;
         }
+      }
 
+      if (cursorPos > 0 && value[cursorPos - 1] === '@') {
         // Single @ (file mode)
         if (cursorPos === 1 || /\\s/.test(value[cursorPos - 2])) {
           mention.active = true;
@@ -2157,14 +2186,7 @@ export const annotationScript = `
     // List is now shown in React panel, not in popover
     let listHTML = '';
 
-    // If element already has annotation, just show the list (no input needed)
-    let inputAreaHTML = '';
-
-    if (existingAnnotation && !textSelection) {
-      // No input area - just show the list below
-      inputAreaHTML = '';
-    } else {
-      inputAreaHTML =
+    let inputAreaHTML =
         '<input type="file" class="claude-design-popover-file" accept="image/*" style="display: none;" />' +
         '<div class="claude-design-popover-input-row">' +
           headerHTML +
@@ -2191,7 +2213,6 @@ export const annotationScript = `
             '</div>' +
           '</div>' +
         '</div>';
-    }
 
     popoverElement.innerHTML = inputAreaHTML + listHTML;
 
@@ -2257,6 +2278,9 @@ export const annotationScript = `
     const imageBtn = popoverElement.querySelector('.claude-design-popover-image-btn');
     const imagePill = popoverElement.querySelector('.claude-design-popover-image-pill');
 
+    if (textarea && existingNote) {
+      textarea.value = existingNote;
+    }
     setTimeout(() => textarea && textarea.focus(), 50);
 
     // Auto-expand textarea as user types
@@ -2685,6 +2709,34 @@ export const annotationScript = `
     if (rulerLineV) rulerLineV.style.left = e.clientX + 'px';
   }
 
+  function showShortcutHints() {
+    removeShortcutHints();
+    shortcutHintsElement = document.createElement('div');
+    shortcutHintsElement.className = 'claude-design-shortcut-hints';
+    shortcutHintsElement.innerHTML = '<span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span>';
+    document.body.appendChild(shortcutHintsElement);
+    // Trigger fade-in on next frame
+    requestAnimationFrame(function() {
+      if (shortcutHintsElement) shortcutHintsElement.classList.add('visible');
+    });
+    // Auto-dismiss after 5s
+    shortcutHintsTimeout = setTimeout(function() {
+      if (shortcutHintsElement) shortcutHintsElement.classList.remove('visible');
+      setTimeout(removeShortcutHints, 300);
+    }, 5000);
+  }
+
+  function removeShortcutHints() {
+    if (shortcutHintsTimeout) {
+      clearTimeout(shortcutHintsTimeout);
+      shortcutHintsTimeout = null;
+    }
+    if (shortcutHintsElement) {
+      shortcutHintsElement.remove();
+      shortcutHintsElement = null;
+    }
+  }
+
   function enableAnnotateMode() {
     if (annotateMode) return;
     annotateMode = true;
@@ -2700,6 +2752,8 @@ export const annotationScript = `
     document.addEventListener('keydown', handleGKeyDown, true);
     document.addEventListener('keyup', handleGKeyUp, true);
     document.addEventListener('mousemove', handleMouseMoveForRuler, true);
+
+    showShortcutHints();
   }
 
   function disableAnnotateMode() {
@@ -2719,6 +2773,7 @@ export const annotationScript = `
     document.removeEventListener('keyup', handleGKeyUp, true);
     document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
     removeRulerGuides();
+    removeShortcutHints();
     gKeyDown = false;
     if (altHoverElement) {
       altHoverElement.classList.remove('claude-design-alt-highlight');

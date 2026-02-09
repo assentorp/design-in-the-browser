@@ -6,10 +6,20 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.2',
+    date: 'February 9, 2026',
+    changes: [
+      'Shortcut hints: entering annotate mode now shows available keyboard shortcuts (ALT, G)',
+      'Design token trigger changed from @@ to > for quicker autocomplete',
+      'Click a todo item to edit its prompt',
+      'Fix: cancelling the todo list now exits list mode',
+    ],
+  },
+  {
     version: '1.3.0',
     date: 'February 8, 2026',
     changes: [
-      'Design token autocomplete: type @@ in the annotation textarea to search and insert Tailwind tokens with color swatches and "applied" badges',
+      'Design token autocomplete: type > in the annotation textarea to search and insert Tailwind tokens with color swatches and "applied" badges',
       'Ruler guides: hold G in annotate mode to show crosshair lines that follow your cursor for checking alignment',
       'CSS Inspector now follows your cursor and delays switching when hovering between elements',
       'Clear Cache & Reload (Cmd+Shift+R) clears webview cache and hard-reloads the page',

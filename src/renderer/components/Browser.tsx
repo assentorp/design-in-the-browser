@@ -117,7 +117,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
           console.error('[Browser] Failed to inject project files:', err);
         }
 
-        // Inject design tokens for @@-mention autocomplete
+        // Inject design tokens for >mention autocomplete
         try {
           const tokens = await mainAPI.listDesignTokens(projectPath);
           await webview.executeJavaScript(
