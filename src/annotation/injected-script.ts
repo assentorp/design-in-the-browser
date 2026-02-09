@@ -1472,6 +1472,7 @@ export const annotationScript = `
       if (badge) badge.remove();
     });
     pendingAnnotations = [];
+    todoMode = false;
     removeToolbar();
     notifyPendingUpdate();
   }
@@ -2185,14 +2186,7 @@ export const annotationScript = `
     // List is now shown in React panel, not in popover
     let listHTML = '';
 
-    // If element already has annotation, just show the list (no input needed)
-    let inputAreaHTML = '';
-
-    if (existingAnnotation && !textSelection) {
-      // No input area - just show the list below
-      inputAreaHTML = '';
-    } else {
-      inputAreaHTML =
+    let inputAreaHTML =
         '<input type="file" class="claude-design-popover-file" accept="image/*" style="display: none;" />' +
         '<div class="claude-design-popover-input-row">' +
           headerHTML +
@@ -2219,7 +2213,6 @@ export const annotationScript = `
             '</div>' +
           '</div>' +
         '</div>';
-    }
 
     popoverElement.innerHTML = inputAreaHTML + listHTML;
 
@@ -2285,6 +2278,9 @@ export const annotationScript = `
     const imageBtn = popoverElement.querySelector('.claude-design-popover-image-btn');
     const imagePill = popoverElement.querySelector('.claude-design-popover-image-pill');
 
+    if (textarea && existingNote) {
+      textarea.value = existingNote;
+    }
     setTimeout(() => textarea && textarea.focus(), 50);
 
     // Auto-expand textarea as user types
