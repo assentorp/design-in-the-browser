@@ -2698,7 +2698,8 @@ export const annotationScript = `
   }
 
   function handleGKeyDown(e) {
-    if ((e.key === 'g' || e.key === 'G') && !gKeyDown && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    var tag = document.activeElement && document.activeElement.tagName;
+    if ((e.key === 'g' || e.key === 'G') && !gKeyDown && !e.metaKey && !e.ctrlKey && !e.altKey && tag !== 'TEXTAREA' && tag !== 'INPUT') {
       gKeyDown = true;
       if (highlightedElement) {
         highlightedElement.classList.remove('claude-design-highlight');
