@@ -10,7 +10,7 @@ export const changelog: ChangelogEntry[] = [
     date: 'February 9, 2026',
     changes: [
       'Shortcut hints: entering annotate mode now shows available keyboard shortcuts (ALT, G)',
-      'Design token trigger changed from @@ to > for quicker autocomplete',
+      'Design token trigger changed from @@ to >',
       'Click a todo item to edit its prompt',
       'Fix: cancelling the todo list now exits list mode',
     ],
