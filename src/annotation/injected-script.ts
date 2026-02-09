@@ -2300,6 +2300,18 @@ export const annotationScript = `
     if (textarea) {
       textarea.addEventListener('input', autoResize);
       setupMentionAutocomplete(textarea);
+
+      // Cycle placeholder hints when textarea is empty
+      if (!existingNote && !textSelection) {
+        var hints = ['What do you want to change?', 'Type @ to mention a file', 'Type > to insert a design token'];
+        var hintIndex = 0;
+        var hintInterval = setInterval(function() {
+          if (!document.contains(textarea)) { clearInterval(hintInterval); return; }
+          if (textarea.value.length > 0) return;
+          hintIndex = (hintIndex + 1) % hints.length;
+          textarea.placeholder = hints[hintIndex];
+        }, 3000);
+      }
     }
 
     function handleFile(file) {
