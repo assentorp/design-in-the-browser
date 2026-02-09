@@ -2722,11 +2722,11 @@ export const annotationScript = `
     requestAnimationFrame(function() {
       if (shortcutHintsElement) shortcutHintsElement.classList.add('visible');
     });
-    // Auto-dismiss after 2.5s
+    // Auto-dismiss after 5s
     shortcutHintsTimeout = setTimeout(function() {
       if (shortcutHintsElement) shortcutHintsElement.classList.remove('visible');
       setTimeout(removeShortcutHints, 300);
-    }, 2500);
+    }, 5000);
   }
 
   function removeShortcutHints() {
