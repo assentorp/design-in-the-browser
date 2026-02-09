@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.2',
+    date: 'February 9, 2026',
+    changes: [
+      'Shortcut hints: entering annotate mode now shows available keyboard shortcuts (ALT, G)',
+      'Design token trigger changed from @@ to > for quicker autocomplete',
+    ],
+  },
+  {
     version: '1.3.0',
     date: 'February 8, 2026',
     changes: [
