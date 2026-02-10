@@ -1025,6 +1025,7 @@ body,
 .project-config-page {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
@@ -1034,7 +1035,6 @@ body,
 
 .project-config-page .project-config {
   width: 100%;
-  max-width: 420px;
 }
 
 /* Project Config (shared between page & modal) */
@@ -1045,10 +1045,11 @@ body,
 }
 
 .project-config-title {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 20px;
+  margin: 0 0 16px 0;
+  text-align: center;
 }
 
 .project-config-section-title {
@@ -1068,9 +1069,13 @@ body,
 
 .project-config-actions {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
+}
+
+.project-config-actions .btn {
+  width: 100%;
 }
 
 .preset-search {
@@ -1167,11 +1172,11 @@ body,
   justify-content: center;
   gap: 8px;
   width: 100%;
-  height: 40px;
+  height: 36px;
   margin-top: 8px;
   padding: 0 16px;
   background: transparent;
-  border: 1px dashed var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-secondary);
   font-size: 14px;
@@ -1188,18 +1193,19 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0;
-  margin-bottom: 12px;
+  padding: 6px 10px 6px 6px;
   background: transparent;
-  border: none;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: color 0.15s ease;
 }
 
 .btn-back:hover {
   color: var(--text-primary);
+  border-color: var(--text-secondary);
 }
 
 .preset-empty {
@@ -1235,17 +1241,35 @@ body,
 }
 
 .modal-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  min-height: 52px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h2 {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+  pointer-events: none;
+}
+
+.modal-header-spacer {
+  width: 28px;
+  height: 28px;
+}
+
+.modal-inline {
+  max-width: 420px;
+  box-shadow: none;
+  border-radius: 16px;
 }
 
 .modal-close {
@@ -1501,10 +1525,39 @@ body,
   opacity: 1;
 }
 
+.onboarding-dots {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.onboarding-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  opacity: 0.25;
+}
+
+.onboarding-dot.active {
+  background: var(--accent);
+  opacity: 1;
+}
+
+/* Onboarding Card */
+.onboarding-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 40px 36px 36px;
+}
+
 /* Onboarding Gate */
 .onboarding-gate {
   width: 100%;
-  max-width: 300px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1550,12 +1603,12 @@ body,
 .onboarding-checklist-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   line-height: 1.4;
 }
 
@@ -1564,11 +1617,48 @@ body,
   flex-shrink: 0;
 }
 
-.onboarding-continue {
-  height: 34px;
-  padding: 0 32px;
-  width: auto;
+.onboarding-editor-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.onboarding-editor-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: transparent;
   font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.onboarding-editor-option:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.onboarding-editor-option.active {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.onboarding-editor-empty {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 12px 0;
+  margin: 0;
+}
+
+.onboarding-continue {
+  width: 100%;
 }
 
 

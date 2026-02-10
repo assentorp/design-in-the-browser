@@ -78,6 +78,29 @@ const TAILWIND_SHADOWS: Record<string, string> = {
   'none': 'none',
 };
 
+const TAILWIND_MAX_WIDTH: Record<string, string> = {
+  '0': '0rem', 'none': 'none', 'xs': '20rem', 'sm': '24rem', 'md': '28rem',
+  'lg': '32rem', 'xl': '36rem', '2xl': '42rem', '3xl': '48rem', '4xl': '56rem',
+  '5xl': '64rem', '6xl': '72rem', '7xl': '80rem', 'full': '100%',
+  'min': 'min-content', 'max': 'max-content', 'fit': 'fit-content', 'prose': '65ch',
+  'screen-sm': '640px', 'screen-md': '768px', 'screen-lg': '1024px',
+  'screen-xl': '1280px', 'screen-2xl': '1536px',
+};
+
+const TAILWIND_MAX_HEIGHT: Record<string, string> = {
+  'none': 'none', 'full': '100%', 'screen': '100vh',
+  'min': 'min-content', 'max': 'max-content', 'fit': 'fit-content',
+};
+
+const TAILWIND_MIN_WIDTH: Record<string, string> = {
+  '0': '0px', 'full': '100%', 'min': 'min-content', 'max': 'max-content', 'fit': 'fit-content',
+};
+
+const TAILWIND_MIN_HEIGHT: Record<string, string> = {
+  '0': '0px', 'full': '100%', 'screen': '100vh',
+  'min': 'min-content', 'max': 'max-content', 'fit': 'fit-content',
+};
+
 const TAILWIND_OPACITY: Record<string, string> = {
   '0': '0', '5': '0.05', '10': '0.1', '15': '0.15', '20': '0.2', '25': '0.25',
   '30': '0.3', '35': '0.35', '40': '0.4', '45': '0.45', '50': '0.5',
@@ -114,13 +137,43 @@ function generateColorTokens(colors: Record<string, Record<string, string>>): De
 
 function generateSpacingTokens(): DesignToken[] {
   const tokens: DesignToken[] = [];
-  const prefixes = ['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'm', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'gap', 'gap-x', 'gap-y', 'w', 'h', 'space-x', 'space-y'];
+  const prefixes = ['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'm', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'gap', 'gap-x', 'gap-y', 'w', 'h', 'min-w', 'min-h', 'max-w', 'max-h', 'space-x', 'space-y'];
 
   for (const [size, value] of Object.entries(TAILWIND_SPACING)) {
     for (const prefix of prefixes) {
       tokens.push({ name: `${prefix}-${size}`, value, category: 'spacing', source: 'tailwind' });
     }
   }
+
+  // Named max-width scale (max-w-xs, max-w-sm, max-w-4xl, etc.)
+  for (const [size, value] of Object.entries(TAILWIND_MAX_WIDTH)) {
+    tokens.push({ name: `max-w-${size}`, value, category: 'spacing', source: 'tailwind' });
+  }
+
+  // Named max-height scale
+  for (const [size, value] of Object.entries(TAILWIND_MAX_HEIGHT)) {
+    tokens.push({ name: `max-h-${size}`, value, category: 'spacing', source: 'tailwind' });
+  }
+
+  // Named min-width scale
+  for (const [size, value] of Object.entries(TAILWIND_MIN_WIDTH)) {
+    tokens.push({ name: `min-w-${size}`, value, category: 'spacing', source: 'tailwind' });
+  }
+
+  // Named min-height scale
+  for (const [size, value] of Object.entries(TAILWIND_MIN_HEIGHT)) {
+    tokens.push({ name: `min-h-${size}`, value, category: 'spacing', source: 'tailwind' });
+  }
+
+  // Special w/h values
+  const sizeSpecials: Record<string, string> = {
+    'auto': 'auto', 'full': '100%', 'screen': '100vw', 'min': 'min-content', 'max': 'max-content', 'fit': 'fit-content',
+  };
+  for (const [size, value] of Object.entries(sizeSpecials)) {
+    tokens.push({ name: `w-${size}`, value, category: 'spacing', source: 'tailwind' });
+    tokens.push({ name: `h-${size}`, value: size === 'screen' ? '100vh' : value, category: 'spacing', source: 'tailwind' });
+  }
+
   return tokens;
 }
 

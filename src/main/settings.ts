@@ -5,6 +5,7 @@ import * as path from 'path';
 export interface AppSettings {
   screenshotCleanupMinutes: number;
   editor: string;
+  editorChosen: boolean;
   analyticsEnabled: boolean;
   analyticsConsentGiven: boolean;
   onboardingCompleted: boolean;
@@ -14,6 +15,7 @@ export interface AppSettings {
 const defaultSettings: AppSettings = {
   screenshotCleanupMinutes: 5,
   editor: 'vscode',
+  editorChosen: false,
   analyticsEnabled: false,
   analyticsConsentGiven: false,
   onboardingCompleted: false,

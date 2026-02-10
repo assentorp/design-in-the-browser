@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import posthog from 'posthog-js';
-import type { ProjectPreset, CliTool, ShellType } from '../../shared/types';
+import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared/types';
 import appIcon from '../../../build/icon.png';
 
 interface ProjectConfigModalProps {
@@ -89,6 +89,37 @@ export default function ProjectConfigModal({
         });
       }
     }
+  };
+
+  // Editor selection during onboarding
+  const [editorChosen, setEditorChosen] = useState<boolean | null>(null);
+  const [availableEditors, setAvailableEditors] = useState<CodeEditor[]>([]);
+  const [selectedEditor, setSelectedEditor] = useState<CodeEditor>('vscode');
+
+  const EDITOR_LABELS: Record<CodeEditor, string> = {
+    vscode: 'VS Code',
+    cursor: 'Cursor',
+    zed: 'Zed',
+    sublime: 'Sublime Text',
+    webstorm: 'WebStorm',
+    nova: 'Nova',
+  };
+
+  useEffect(() => {
+    window.mainAPI?.detectEditors().then((editors) => {
+      setAvailableEditors(editors);
+      if (editors.length > 0) setSelectedEditor(editors[0]);
+    });
+    window.mainAPI?.getSettings().then((s) => {
+      // Existing users who already completed onboarding skip the editor screen
+      setEditorChosen(s.editorChosen || s.onboardingCompleted);
+      if (s.editor) setSelectedEditor(s.editor as CodeEditor);
+    });
+  }, []);
+
+  const handleEditorContinue = () => {
+    setEditorChosen(true);
+    window.mainAPI?.saveSettings({ editor: selectedEditor, editorChosen: true });
   };
 
   // Check platform and WSL availability
@@ -206,8 +237,38 @@ export default function ProjectConfigModal({
   const isValid = name.trim() && path.trim();
   const showSearch = presets.length > 4;
 
-  // --- List view: saved projects + "New project" button ---
-  const listContent = (
+  // --- Shared header ---
+  const title = view === 'list' ? 'Open Project'
+    : view === 'edit' ? 'Edit Project'
+    : hasPresets ? 'New Project'
+    : 'Create your first project';
+
+  const showBack = view !== 'list' && hasPresets;
+
+  const panelHeader = (
+    <div className="modal-header">
+      {showBack ? (
+        <button type="button" className="btn-back" onClick={handleBack}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          Back
+        </button>
+      ) : <span className="modal-header-spacer" />}
+      <h2>{title}</h2>
+      {canClose ? (
+        <button className="modal-close" onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      ) : <span className="modal-header-spacer" />}
+    </div>
+  );
+
+  // --- List body ---
+  const listBody = (
     <div className="project-config">
       <div className="project-config-section">
         {showSearch && (
@@ -277,21 +338,10 @@ export default function ProjectConfigModal({
     </div>
   );
 
-  // --- Form view: new or edit ---
-  const formContent = (
+  // --- Form body ---
+  const formBody = (
     <div className="project-config">
       <div className="project-config-section">
-        {hasPresets && (
-          <button type="button" className="btn-back" onClick={handleBack}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-            Back
-          </button>
-        )}
-        {!canClose && !hasPresets && (
-          <h2 className="project-config-title">Create your first project</h2>
-        )}
         <form onSubmit={handleSubmit}>
           <div className="project-config-form">
             <div className="form-group">
@@ -400,11 +450,6 @@ export default function ProjectConfigModal({
               </div>
             )}
             <div className="project-config-actions">
-              {canClose && (
-                <button type="button" className="btn btn-secondary" onClick={onClose}>
-                  Cancel
-                </button>
-              )}
               <button type="submit" className="btn btn-primary" disabled={!isValid}>
                 {view === 'edit' ? 'Open Project' : 'Create Project'}
               </button>
@@ -415,106 +460,171 @@ export default function ProjectConfigModal({
     </div>
   );
 
-  const content = view === 'list' ? listContent : formContent;
+  const body = view === 'list' ? listBody : formBody;
 
   // Full page on startup
   if (!canClose) {
+    // Determine current onboarding step for dot indicators
+    const onboardingStep = onboardingCompleted === false ? 0
+      : editorChosen === false ? 1
+      : analyticsConsentGiven === false ? 2
+      : discordDismissed === false ? 3
+      : -1;
+
+    const stepDots = (step: number) => (
+      <div className="onboarding-dots">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className={`onboarding-dot${i === step ? ' active' : ''}`} />
+        ))}
+      </div>
+    );
+
     // Getting started screen
-    if (onboardingCompleted === false) {
+    if (onboardingStep === 0) {
       return (
         <div className="project-config-page">
-          <div className="onboarding-gate">
-            <img className="onboarding-gate-appicon" src={appIcon} alt="Design In The Browser" />
-            <h2 className="onboarding-gate-title">Let's get started</h2>
-            <p className="onboarding-gate-subtitle">Make sure you have the following ready:</p>
-            <div className="onboarding-checklist">
-              <div className="onboarding-checklist-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                <span>A local dev server for your project</span>
+          <div className="onboarding-card">
+            <div className="onboarding-gate">
+              <img className="onboarding-gate-appicon" src={appIcon} alt="Design In The Browser" />
+              <h2 className="onboarding-gate-title">Let's get started</h2>
+              <p className="onboarding-gate-subtitle">Make sure you have the following ready:</p>
+              <div className="onboarding-checklist">
+                <div className="onboarding-checklist-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>A local dev server for your project</span>
+                </div>
+                <div className="onboarding-checklist-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>Claude Code, Cursor, or Gemini CLI</span>
+                </div>
               </div>
-              <div className="onboarding-checklist-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                <span>Claude Code, Cursor, or Gemini CLI</span>
-              </div>
+              <button className="btn btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
+                Continue
+              </button>
             </div>
-            <button className="btn btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
-              Continue
-            </button>
           </div>
+          {stepDots(0)}
         </div>
       );
     }
 
-    // Block the app until analytics consent is given
-    if (analyticsConsentGiven === false) {
+    // Editor selection screen
+    if (onboardingStep === 1) {
       return (
         <div className="project-config-page">
-          <div className="onboarding-gate">
-            <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 20V10" />
-              <path d="M12 20V4" />
-              <path d="M6 20v-6" />
-            </svg>
-            <h2 className="onboarding-gate-title">Share Analytics</h2>
-            <p className="onboarding-gate-text">
-              Help improve Design In The Browser by sharing anonymous usage data. No personal data or project content is collected.
-            </p>
-            <button className="btn btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
-              Share with Developers
-            </button>
-            <button className="onboarding-skip" onClick={() => handleAnalyticsChoice(false)}>
-              No thanks
-            </button>
+          <div className="onboarding-card">
+            <div className="onboarding-gate">
+              <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 18l6-6-6-6" />
+                <path d="M8 6l-6 6 6 6" />
+              </svg>
+              <h2 className="onboarding-gate-title">Code Editor</h2>
+              <p className="onboarding-gate-text">
+                Choose your preferred editor. This is used when opening files from the element inspector.
+              </p>
+              <div className="onboarding-editor-list">
+                {availableEditors.map((editor) => (
+                  <button
+                    key={editor}
+                    className={`onboarding-editor-option${selectedEditor === editor ? ' active' : ''}`}
+                    onClick={() => setSelectedEditor(editor)}
+                  >
+                    {EDITOR_LABELS[editor]}
+                  </button>
+                ))}
+                {availableEditors.length === 0 && (
+                  <p className="onboarding-editor-empty">No editors detected</p>
+                )}
+              </div>
+              <button className="btn btn-primary onboarding-continue" onClick={handleEditorContinue}>
+                Continue
+              </button>
+            </div>
           </div>
+          {stepDots(1)}
+        </div>
+      );
+    }
+
+    // Share analytics screen
+    if (onboardingStep === 2) {
+      return (
+        <div className="project-config-page">
+          <div className="onboarding-card">
+            <div className="onboarding-gate">
+              <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 20V10" />
+                <path d="M12 20V4" />
+                <path d="M6 20v-6" />
+              </svg>
+              <h2 className="onboarding-gate-title">Share Analytics</h2>
+              <p className="onboarding-gate-text">
+                Help improve Design In The Browser by sharing anonymous usage data. No personal data or project content is collected.
+              </p>
+              <button className="btn btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
+                Share with Developers
+              </button>
+              <button className="onboarding-skip" onClick={() => handleAnalyticsChoice(false)}>
+                No thanks
+              </button>
+            </div>
+          </div>
+          {stepDots(2)}
         </div>
       );
     }
 
     // Discord screen
-    if (discordDismissed === false) {
+    if (onboardingStep === 3) {
       return (
         <div className="project-config-page">
-          <div className="onboarding-gate">
-            <svg className="onboarding-gate-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
-              <path d="M14 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
-              <path d="M8.5 17c0 1-1.356 3-1.832 3-.906 0-2.168-3.16-2.668-5.5-.5-2.34-.5-4.5 0-7C4.5 5.5 6.5 4 8.5 3c1.5 1 3 1.5 3.5 1.5s2-0.5 3.5-1.5c2 1 4 2.5 4.5 4.5.5 2.5.5 4.66 0 7-.5 2.34-1.762 5.5-2.668 5.5C16.856 20 15.5 18 15.5 17" />
-            </svg>
-            <h2 className="onboarding-gate-title">Join the Community</h2>
-            <p className="onboarding-gate-text">
-              Get help, share feedback, and stay updated on new features in our Discord.
-            </p>
-            <button
-              className="btn btn-primary onboarding-continue"
-              onClick={() => {
-                window.open('https://discord.com/invite/dYGPPH6tPC');
-                setDiscordDismissed(true);
-                window.mainAPI?.saveSettings({ discordDismissed: true });
-              }}
-            >
-              Join Discord
-            </button>
-            <button
-              className="onboarding-skip"
-              onClick={() => {
-                setDiscordDismissed(true);
-                window.mainAPI?.saveSettings({ discordDismissed: true });
-              }}
-            >
-              Skip
-            </button>
+          <div className="onboarding-card">
+            <div className="onboarding-gate">
+              <svg className="onboarding-gate-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
+                <path d="M14 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
+                <path d="M8.5 17c0 1-1.356 3-1.832 3-.906 0-2.168-3.16-2.668-5.5-.5-2.34-.5-4.5 0-7C4.5 5.5 6.5 4 8.5 3c1.5 1 3 1.5 3.5 1.5s2-0.5 3.5-1.5c2 1 4 2.5 4.5 4.5.5 2.5.5 4.66 0 7-.5 2.34-1.762 5.5-2.668 5.5C16.856 20 15.5 18 15.5 17" />
+              </svg>
+              <h2 className="onboarding-gate-title">Join the Community</h2>
+              <p className="onboarding-gate-text">
+                Get help, share feedback, and stay updated on new features in our Discord.
+              </p>
+              <button
+                className="btn btn-primary onboarding-continue"
+                onClick={() => {
+                  window.open('https://discord.com/invite/dYGPPH6tPC');
+                  setDiscordDismissed(true);
+                  window.mainAPI?.saveSettings({ discordDismissed: true });
+                }}
+              >
+                Join Discord
+              </button>
+              <button
+                className="onboarding-skip"
+                onClick={() => {
+                  setDiscordDismissed(true);
+                  window.mainAPI?.saveSettings({ discordDismissed: true });
+                }}
+              >
+                No thanks
+              </button>
+            </div>
           </div>
+          {stepDots(3)}
         </div>
       );
     }
 
     return (
       <div className="project-config-page">
-        {content}
+        <div className="modal modal-inline">
+          {panelHeader}
+          <div className="modal-body">{body}</div>
+        </div>
       </div>
     );
   }
@@ -523,18 +633,8 @@ export default function ProjectConfigModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{view === 'list' ? 'Open Project' : view === 'edit' ? 'Edit Project' : 'New Project'}</h2>
-          <button className="modal-close" onClick={onClose}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div className="modal-body">
-          {content}
-        </div>
+        {panelHeader}
+        <div className="modal-body">{body}</div>
       </div>
     </div>
   );

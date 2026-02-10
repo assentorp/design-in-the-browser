@@ -6,6 +6,17 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.3',
+    date: 'February 10, 2026',
+    changes: [
+      'Onboarding flow: new getting started screen with requirements checklist on first launch',
+      'Analytics opt-in: PostHog analytics is now off by default (GDPR compliant) with consent screen during onboarding',
+      'Analytics toggle in Settings to enable/disable anonymous usage data sharing at any time',
+      'Discord invite screen during onboarding to join the community',
+      'Fix: G key ruler shortcut no longer triggers when typing in textarea or input fields',
+    ],
+  },
+  {
     version: '1.3.2',
     date: 'February 9, 2026',
     changes: [
