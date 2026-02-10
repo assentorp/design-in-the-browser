@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import posthog from 'posthog-js';
 import type { AppSettings, CodeEditor } from '../../shared/types';
 
 interface SettingsModalProps {
@@ -32,7 +33,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     window.mainAPI?.detectEditors().then(setAvailableEditors);
   }, []);
 
-  const handleChange = async (key: keyof AppSettings, value: number | string) => {
+  const handleChange = async (key: keyof AppSettings, value: number | string | boolean) => {
     if (!settings) return;
 
     setSaving(true);
@@ -40,6 +41,24 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     if (updated) {
       setSettings(updated);
     }
+
+    // Toggle PostHog capturing at runtime
+    if (key === 'analyticsEnabled') {
+      if (value) {
+        if (posthog.__loaded) {
+          posthog.opt_in_capturing();
+        } else {
+          posthog.init('phc_GvJ6Ja6MY05KTmtD3Wj7QF3rCbczJwUQhLN8jPU8qqe', {
+            api_host: 'https://eu.i.posthog.com',
+            capture_exceptions: true,
+            debug: import.meta.env.MODE === 'development',
+          });
+        }
+      } else if (posthog.__loaded) {
+        posthog.opt_out_capturing();
+      }
+    }
+
     setSaving(false);
   };
 
@@ -119,6 +138,20 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </select>
               <span className="settings-hint">
                 Screenshots are stored in your system's temp folder and won't fill up your disk. They're cleaned up automatically by the OS even if the app closes before the timer runs.
+              </span>
+            </div>
+            <div className="settings-group">
+              <label className="settings-label settings-label-row">
+                <input
+                  type="checkbox"
+                  checked={settings.analyticsEnabled}
+                  onChange={(e) => handleChange('analyticsEnabled', e.target.checked)}
+                  disabled={saving}
+                />
+                Share anonymous usage data
+              </label>
+              <span className="settings-hint">
+                Help improve Design In The Browser by sharing anonymous crash reports and basic usage data. No personal data or project content is ever collected.
               </span>
             </div>
           </div>

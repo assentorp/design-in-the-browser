@@ -81,6 +81,10 @@ export type CodeEditor = 'vscode' | 'cursor' | 'zed' | 'sublime' | 'webstorm' | 
 export interface AppSettings {
   screenshotCleanupMinutes: number;
   editor: CodeEditor;
+  analyticsEnabled: boolean;
+  analyticsConsentGiven: boolean;
+  onboardingCompleted: boolean;
+  discordDismissed: boolean;
 }
 
 export interface ProjectPreset {

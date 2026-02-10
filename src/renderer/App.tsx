@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import posthog from 'posthog-js';
 import Browser, { type PendingEdit, type EditActions } from './components/Browser';
 import Terminal, { destroyTerminalSession, scrollTerminalToBottom } from './components/Terminal';
 import Resizer from './components/Resizer';
@@ -117,6 +118,27 @@ export default function App() {
       const lastSeen = localStorage.getItem('ditb-last-seen-version');
       if (lastSeen !== version) {
         setHasUnseenChanges(true);
+      }
+    });
+  }, []);
+
+  // Initialize PostHog conditionally based on analytics setting
+  const posthogInitializedRef = useRef(false);
+  useEffect(() => {
+    window.mainAPI?.getSettings().then((s) => {
+      if (s.analyticsEnabled) {
+        if (!posthogInitializedRef.current) {
+          posthog.init('phc_GvJ6Ja6MY05KTmtD3Wj7QF3rCbczJwUQhLN8jPU8qqe', {
+            api_host: 'https://eu.i.posthog.com',
+            capture_exceptions: true,
+            debug: import.meta.env.MODE === 'development',
+          });
+          posthogInitializedRef.current = true;
+        } else {
+          posthog.opt_in_capturing();
+        }
+      } else if (posthogInitializedRef.current) {
+        posthog.opt_out_capturing();
       }
     });
   }, []);

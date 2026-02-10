@@ -5,11 +5,19 @@ import * as path from 'path';
 export interface AppSettings {
   screenshotCleanupMinutes: number;
   editor: string;
+  analyticsEnabled: boolean;
+  analyticsConsentGiven: boolean;
+  onboardingCompleted: boolean;
+  discordDismissed: boolean;
 }
 
 const defaultSettings: AppSettings = {
   screenshotCleanupMinutes: 5,
   editor: 'vscode',
+  analyticsEnabled: false,
+  analyticsConsentGiven: false,
+  onboardingCompleted: false,
+  discordDismissed: false,
 };
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');

@@ -1303,6 +1303,17 @@ body,
   color: var(--text-primary);
 }
 
+.settings-label-row {
+  flex-direction: row;
+  align-items: center;
+  cursor: pointer;
+}
+
+.settings-label-row input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
 .settings-description {
   font-size: 12px;
   font-weight: 400;
@@ -1474,6 +1485,92 @@ body,
 .btn-secondary:hover:not(:disabled) {
   background: var(--border-color);
 }
+
+/* Onboarding skip link (analytics "No thanks", discord "Skip") */
+.onboarding-skip {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.5;
+  margin-top: 24px;
+}
+
+.onboarding-skip:hover {
+  opacity: 1;
+}
+
+/* Onboarding Gate */
+.onboarding-gate {
+  width: 100%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.onboarding-gate-appicon {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+
+.onboarding-gate-icon {
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.onboarding-gate-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px 0;
+}
+
+.onboarding-gate-subtitle,
+.onboarding-gate-text {
+  margin: 0 0 24px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.onboarding-checklist {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 28px;
+}
+
+.onboarding-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.onboarding-checklist-item svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.onboarding-continue {
+  height: 34px;
+  padding: 0 32px;
+  width: auto;
+  font-size: 13px;
+}
+
 
 /* Update Banner */
 .update-banner {

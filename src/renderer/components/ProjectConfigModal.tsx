@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
+import posthog from 'posthog-js';
 import type { ProjectPreset, CliTool, ShellType } from '../../shared/types';
+import appIcon from '../../../build/icon.png';
 
 interface ProjectConfigModalProps {
   presets: ProjectPreset[];
@@ -53,6 +55,41 @@ export default function ProjectConfigModal({
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [isWindows, setIsWindows] = useState(false);
   const [wslAvailable, setWslAvailable] = useState(false);
+
+  // Onboarding + analytics consent: null = loading, true = done, false = not yet
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const [analyticsConsentGiven, setAnalyticsConsentGiven] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    window.mainAPI?.getSettings().then((s) => {
+      setOnboardingCompleted(s.onboardingCompleted);
+      setAnalyticsConsentGiven(s.analyticsConsentGiven);
+      setDiscordDismissed(s.discordDismissed);
+    });
+  }, []);
+
+  const handleOnboardingContinue = () => {
+    setOnboardingCompleted(true);
+    window.mainAPI?.saveSettings({ onboardingCompleted: true });
+  };
+
+  const [discordDismissed, setDiscordDismissed] = useState<boolean | null>(null);
+
+  const handleAnalyticsChoice = (enabled: boolean) => {
+    setAnalyticsConsentGiven(true);
+    window.mainAPI?.saveSettings({ analyticsEnabled: enabled, analyticsConsentGiven: true });
+    if (enabled) {
+      if (posthog.__loaded) {
+        posthog.opt_in_capturing();
+      } else {
+        posthog.init('phc_GvJ6Ja6MY05KTmtD3Wj7QF3rCbczJwUQhLN8jPU8qqe', {
+          api_host: 'https://eu.i.posthog.com',
+          capture_exceptions: true,
+          debug: import.meta.env.MODE === 'development',
+        });
+      }
+    }
+  };
 
   // Check platform and WSL availability
   useEffect(() => {
@@ -382,6 +419,99 @@ export default function ProjectConfigModal({
 
   // Full page on startup
   if (!canClose) {
+    // Getting started screen
+    if (onboardingCompleted === false) {
+      return (
+        <div className="project-config-page">
+          <div className="onboarding-gate">
+            <img className="onboarding-gate-appicon" src={appIcon} alt="Design In The Browser" />
+            <h2 className="onboarding-gate-title">Let's get started</h2>
+            <p className="onboarding-gate-subtitle">Make sure you have the following ready:</p>
+            <div className="onboarding-checklist">
+              <div className="onboarding-checklist-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>A local dev server for your project</span>
+              </div>
+              <div className="onboarding-checklist-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Claude Code, Cursor, or Gemini CLI</span>
+              </div>
+            </div>
+            <button className="btn btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
+              Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Block the app until analytics consent is given
+    if (analyticsConsentGiven === false) {
+      return (
+        <div className="project-config-page">
+          <div className="onboarding-gate">
+            <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 20V10" />
+              <path d="M12 20V4" />
+              <path d="M6 20v-6" />
+            </svg>
+            <h2 className="onboarding-gate-title">Share Analytics</h2>
+            <p className="onboarding-gate-text">
+              Help improve Design In The Browser by sharing anonymous usage data. No personal data or project content is collected.
+            </p>
+            <button className="btn btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
+              Share with Developers
+            </button>
+            <button className="onboarding-skip" onClick={() => handleAnalyticsChoice(false)}>
+              No thanks
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Discord screen
+    if (discordDismissed === false) {
+      return (
+        <div className="project-config-page">
+          <div className="onboarding-gate">
+            <svg className="onboarding-gate-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
+              <path d="M14 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
+              <path d="M8.5 17c0 1-1.356 3-1.832 3-.906 0-2.168-3.16-2.668-5.5-.5-2.34-.5-4.5 0-7C4.5 5.5 6.5 4 8.5 3c1.5 1 3 1.5 3.5 1.5s2-0.5 3.5-1.5c2 1 4 2.5 4.5 4.5.5 2.5.5 4.66 0 7-.5 2.34-1.762 5.5-2.668 5.5C16.856 20 15.5 18 15.5 17" />
+            </svg>
+            <h2 className="onboarding-gate-title">Join the Community</h2>
+            <p className="onboarding-gate-text">
+              Get help, share feedback, and stay updated on new features in our Discord.
+            </p>
+            <button
+              className="btn btn-primary onboarding-continue"
+              onClick={() => {
+                window.open('https://discord.com/invite/dYGPPH6tPC');
+                setDiscordDismissed(true);
+                window.mainAPI?.saveSettings({ discordDismissed: true });
+              }}
+            >
+              Join Discord
+            </button>
+            <button
+              className="onboarding-skip"
+              onClick={() => {
+                setDiscordDismissed(true);
+                window.mainAPI?.saveSettings({ discordDismissed: true });
+              }}
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="project-config-page">
         {content}
