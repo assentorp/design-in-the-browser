@@ -9,10 +9,9 @@ export const changelog: ChangelogEntry[] = [
     version: '1.3.3',
     date: 'February 10, 2026',
     changes: [
-      'Onboarding flow: new getting started screen with requirements checklist on first launch',
-      'Analytics opt-in: PostHog analytics is now off by default (GDPR compliant) with consent screen during onboarding',
-      'Analytics toggle in Settings to enable/disable anonymous usage data sharing at any time',
-      'Discord invite screen during onboarding to join the community',
+      'Onboarding flow: getting started screen, code editor selection, analytics consent, and Discord invite',
+      'Analytics opt-in: PostHog analytics is now off by default (GDPR compliant) with toggle in Settings',
+      'Design token autocomplete now includes max-w, min-w, max-h, and min-h utilities',
       'Fix: G key ruler shortcut no longer triggers when typing in textarea or input fields',
     ],
   },

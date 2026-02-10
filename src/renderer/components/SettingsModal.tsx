@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import posthog from 'posthog-js';
+import { initAnalytics, disableAnalytics } from '../analytics';
 import type { AppSettings, CodeEditor } from '../../shared/types';
 
 interface SettingsModalProps {
@@ -45,17 +45,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     // Toggle PostHog capturing at runtime
     if (key === 'analyticsEnabled') {
       if (value) {
-        if (posthog.__loaded) {
-          posthog.opt_in_capturing();
-        } else {
-          posthog.init('phc_GvJ6Ja6MY05KTmtD3Wj7QF3rCbczJwUQhLN8jPU8qqe', {
-            api_host: 'https://eu.i.posthog.com',
-            capture_exceptions: true,
-            debug: import.meta.env.MODE === 'development',
-          });
-        }
-      } else if (posthog.__loaded) {
-        posthog.opt_out_capturing();
+        initAnalytics();
+      } else {
+        disableAnalytics();
       }
     }
 
@@ -151,7 +143,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 Share anonymous usage data
               </label>
               <span className="settings-hint">
-                Help improve Design In The Browser by sharing anonymous crash reports and basic usage data. No personal data or project content is ever collected.
+                Crash reports and basic usage events are sent to PostHog (EU servers). No personal data, project content, or file paths are collected.
               </span>
             </div>
           </div>

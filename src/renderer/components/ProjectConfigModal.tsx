@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import posthog from 'posthog-js';
+import { initAnalytics } from '../analytics';
 import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared/types';
 import appIcon from '../../../build/icon.png';
 
@@ -79,15 +79,7 @@ export default function ProjectConfigModal({
     setAnalyticsConsentGiven(true);
     window.mainAPI?.saveSettings({ analyticsEnabled: enabled, analyticsConsentGiven: true });
     if (enabled) {
-      if (posthog.__loaded) {
-        posthog.opt_in_capturing();
-      } else {
-        posthog.init('phc_GvJ6Ja6MY05KTmtD3Wj7QF3rCbczJwUQhLN8jPU8qqe', {
-          api_host: 'https://eu.i.posthog.com',
-          capture_exceptions: true,
-          debug: import.meta.env.MODE === 'development',
-        });
-      }
+      initAnalytics();
     }
   };
 
@@ -563,7 +555,7 @@ export default function ProjectConfigModal({
               </svg>
               <h2 className="onboarding-gate-title">Share Analytics</h2>
               <p className="onboarding-gate-text">
-                Help improve Design In The Browser by sharing anonymous usage data. No personal data or project content is collected.
+                Help improve Design In The Browser by sharing anonymous crash reports and usage events via PostHog (EU servers). No personal data, project content, or file paths are collected. You can change this anytime in Settings.
               </p>
               <button className="btn btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
                 Share with Developers
