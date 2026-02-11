@@ -5,27 +5,29 @@ interface ResizerProps {
 }
 
 export default function Resizer({ onResize }: ResizerProps) {
-  const isDragging = useRef(false);
   const startX = useRef(0);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      isDragging.current = true;
+      e.preventDefault();
       startX.current = e.clientX;
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
+      // Prevent webview from stealing mouse events during drag
+      const panes = document.querySelectorAll<HTMLElement>('.pane');
+      panes.forEach((p) => (p.style.pointerEvents = 'none'));
+
       const handleMouseMove = (e: MouseEvent) => {
-        if (!isDragging.current) return;
         const delta = e.clientX - startX.current;
         startX.current = e.clientX;
         onResize(delta);
       };
 
       const handleMouseUp = () => {
-        isDragging.current = false;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        panes.forEach((p) => (p.style.pointerEvents = ''));
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
       };

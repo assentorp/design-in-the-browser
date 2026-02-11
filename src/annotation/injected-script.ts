@@ -34,6 +34,9 @@ export const annotationScript = `
   let rulerLineH = null;
   let rulerLineV = null;
 
+  // Animation freeze state
+  let animationsPaused = false;
+
   // Shortcut hints state
   let shortcutHintsElement = null;
   let shortcutHintsTimeout = null;
@@ -292,7 +295,6 @@ export const annotationScript = `
         background: rgba(255, 255, 255, 0.1) !important;
       }
       .claude-design-code-btn {
-        all: unset !important;
         position: fixed !important;
         z-index: 2147483647 !important;
         width: 28px !important;
@@ -2804,11 +2806,35 @@ export const annotationScript = `
     if (rulerLineV) rulerLineV.style.left = e.clientX + 'px';
   }
 
+  function toggleAnimationFreeze() {
+    animationsPaused = !animationsPaused;
+    var els = document.querySelectorAll('*');
+    if (animationsPaused) {
+      els.forEach(function(el) {
+        el.style.animationPlayState = 'paused';
+        el.style.transitionDuration = '0s';
+      });
+    } else {
+      els.forEach(function(el) {
+        el.style.animationPlayState = '';
+        el.style.transitionDuration = '';
+      });
+    }
+  }
+
+  function handleFKey(e) {
+    var tag = document.activeElement && document.activeElement.tagName;
+    if ((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey && tag !== 'TEXTAREA' && tag !== 'INPUT') {
+      e.preventDefault();
+      toggleAnimationFreeze();
+    }
+  }
+
   function showShortcutHints() {
     removeShortcutHints();
     shortcutHintsElement = document.createElement('div');
     shortcutHintsElement.className = 'claude-design-shortcut-hints';
-    shortcutHintsElement.innerHTML = '<span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span>';
+    shortcutHintsElement.innerHTML = '<span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span><span><kbd>F</kbd> Freeze animations</span>';
     document.body.appendChild(shortcutHintsElement);
     // Trigger fade-in on next frame
     requestAnimationFrame(function() {
@@ -2847,6 +2873,7 @@ export const annotationScript = `
     document.addEventListener('keydown', handleGKeyDown, true);
     document.addEventListener('keyup', handleGKeyUp, true);
     document.addEventListener('mousemove', handleMouseMoveForRuler, true);
+    document.addEventListener('keydown', handleFKey, true);
 
     showShortcutHints();
   }
@@ -2867,8 +2894,13 @@ export const annotationScript = `
     document.removeEventListener('keydown', handleGKeyDown, true);
     document.removeEventListener('keyup', handleGKeyUp, true);
     document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
+    document.removeEventListener('keydown', handleFKey, true);
     removeRulerGuides();
     removeShortcutHints();
+    // Unfreeze animations when leaving annotate mode
+    if (animationsPaused) {
+      toggleAnimationFreeze();
+    }
     gKeyDown = false;
     if (altHoverElement) {
       altHoverElement.classList.remove('claude-design-alt-highlight');

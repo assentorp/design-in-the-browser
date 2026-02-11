@@ -191,17 +191,21 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }
   }, []);
 
-  // Re-inject saved pending edits after webview becomes ready
+  // Re-inject saved pending edits after webview becomes ready (only edits present at mount time)
+  const initialEditsSnapshot = useRef(initialEdits);
   const initialEditsInjectedRef = useRef(false);
   useEffect(() => {
-    if (!isReady || initialEditsInjectedRef.current || !initialEdits?.length) return;
+    if (!isReady || initialEditsInjectedRef.current) return;
     initialEditsInjectedRef.current = true;
+
+    const edits = initialEditsSnapshot.current;
+    if (!edits?.length) return;
 
     const webview = webviewRef.current;
     if (!webview) return;
 
     (async () => {
-      for (const edit of initialEdits) {
+      for (const edit of edits) {
         try {
           await webview.executeJavaScript(
             `window.__claudeDesignAddToTodo && window.__claudeDesignAddToTodo(${JSON.stringify(edit.note)}, ${JSON.stringify(edit.selector)}, ${JSON.stringify(edit.tagName || 'div')}, ${JSON.stringify(edit.text || '')}, ${JSON.stringify(edit.attributes || '')}); true;`
@@ -211,7 +215,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         }
       }
     })();
-  }, [isReady, initialEdits]);
+  }, [isReady]);
 
   // Load initial URL after webview is mounted in DOM
   useEffect(() => {
@@ -645,8 +649,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         {isLoading && <div className="browser-loading-bar" />}
         {!isReady && !hasEverLoadedRef.current && (
           <div className="browser-loading-placeholder">
-            <div className="toolbar-spinner browser-loading-spinner" />
-            <span className="browser-loading-text">Loading browser...</span>
+            <div className="app-loading-spinner" />
           </div>
         )}
         {hasMainAPI ? (

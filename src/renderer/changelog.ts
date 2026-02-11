@@ -13,8 +13,13 @@ export const changelog: ChangelogEntry[] = [
       'Codex CLI support: added as a CLI tool option alongside Claude, Cursor, and Gemini',
       'Queued edits (todo list) now persist when switching between projects',
       'Option+Arrow word jumping now works in the terminal on macOS',
+      'Freeze animations: press F in annotate mode to pause all CSS animations and transitions',
+      'Wider resize range: browser/terminal split can now go from 10% to 90%',
       'Fix browser flashing/blinking on every URL change',
       'Fix page CSS bleeding into the annotation prompt box and buttons',
+      'Fix resize handle getting stuck when dragging over the webview',
+      'Fix code button disappearing after CSS hardening',
+      'Fix todo items being doubled on first add',
     ],
   },
   {

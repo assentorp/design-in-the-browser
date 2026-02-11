@@ -261,8 +261,8 @@ export default function App() {
   const handleResize = useCallback(
     (delta: number) => {
       const newWidth = Math.max(
-        30,
-        Math.min(70, browserWidthRef.current + (delta / window.innerWidth) * 100)
+        10,
+        Math.min(90, browserWidthRef.current + (delta / window.innerWidth) * 100)
       );
       browserWidthRef.current = newWidth;
       setSessions((prev) =>
