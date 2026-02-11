@@ -6,6 +6,18 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.4',
+    date: 'February 11, 2026',
+    changes: [
+      'Remember window size & sidebar position across app restarts',
+      'Codex CLI support: added as a CLI tool option alongside Claude, Cursor, and Gemini',
+      'Queued edits (todo list) now persist when switching between projects',
+      'Option+Arrow word jumping now works in the terminal on macOS',
+      'Fix browser flashing/blinking on every URL change',
+      'Fix page CSS bleeding into the annotation prompt box and buttons',
+    ],
+  },
+  {
     version: '1.3.3',
     date: 'February 10, 2026',
     changes: [

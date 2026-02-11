@@ -74,6 +74,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
     const terminal = new XTerm({
       cursorBlink: true,
+      macOptionIsMeta: true,
       fontSize: 13,
       fontFamily: '"SF Mono", Monaco, "Cascadia Code", "Consolas", monospace',
       theme: {

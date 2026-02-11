@@ -3,6 +3,7 @@ import * as path from 'path';
 import { setupIPC } from './ipc';
 import { createMenu } from './menu';
 import { checkForUpdates } from './updater';
+import { getSettings, saveSettings } from './settings';
 
 // Disable hardware acceleration on Windows to prevent gray screen issues
 if (process.platform === 'win32') {
@@ -59,9 +60,13 @@ function createWindow() {
     icon = undefined;
   }
 
-  mainWindow = new BrowserWindow({
-    width: Math.round(screen.getPrimaryDisplay().workAreaSize.width * 0.9),
-    height: Math.round(screen.getPrimaryDisplay().workAreaSize.height * 0.9),
+  const settings = getSettings();
+  const saved = settings.windowBounds;
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+
+  const windowOpts: Electron.BrowserWindowConstructorOptions = {
+    width: saved?.width || Math.round(workArea.width * 0.9),
+    height: saved?.height || Math.round(workArea.height * 0.9),
     minWidth: 1000,
     minHeight: 600,
     title: `Design In The Browser v${app.getVersion()}`,
@@ -74,7 +79,18 @@ function createWindow() {
       preload: preloadPath,
       webviewTag: true,
     },
-  });
+  };
+
+  if (saved?.x != null && saved?.y != null) {
+    windowOpts.x = saved.x;
+    windowOpts.y = saved.y;
+  }
+
+  mainWindow = new BrowserWindow(windowOpts);
+
+  if (saved?.maximized) {
+    mainWindow.maximize();
+  }
 
   // Allow webview to load any URL - remove restrictive CSP headers
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -111,6 +127,21 @@ function createWindow() {
     console.log('[Main] Loading renderer from:', rendererPath);
     mainWindow.loadFile(rendererPath);
   }
+
+  mainWindow.on('close', () => {
+    if (!mainWindow) return;
+    const maximized = mainWindow.isMaximized();
+    const bounds = maximized ? mainWindow.getNormalBounds() : mainWindow.getBounds();
+    saveSettings({
+      windowBounds: {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        maximized,
+      },
+    });
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;

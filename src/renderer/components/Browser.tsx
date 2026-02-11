@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Toolbar from './Toolbar';
-import type { AnnotationData, MultiEditData } from '../../shared/types';
+import type { AnnotationData, MultiEditData, SessionPendingEdit } from '../../shared/types';
 import { annotationScript } from '../../annotation/injected-script';
 
 // Check if running in Electron (must be called at runtime)
@@ -9,6 +9,9 @@ const getMainAPI = () => typeof window !== 'undefined' ? window.mainAPI : undefi
 export interface PendingEdit {
   note: string;
   selector: string;
+  tagName?: string;
+  text?: string;
+  attributes?: string;
 }
 
 export interface EditActions {
@@ -28,6 +31,7 @@ interface BrowserProps {
   projectPath: string;
   onAnnotation?: (data: AnnotationData) => void;
   cliRunning?: boolean;
+  initialEdits?: SessionPendingEdit[];
 }
 
 export type ViewportType = 'desktop' | 'tablet' | 'mobile';
@@ -44,7 +48,7 @@ const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
   mobile: 375,
 };
 
-export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning }: BrowserProps) {
+export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning, initialEdits }: BrowserProps) {
   const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -55,6 +59,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [viewportSizes, setViewportSizes] = useState<ViewportSizes>(DEFAULT_VIEWPORT_SIZES);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const injectedRef = useRef(false);
+  const hasEverLoadedRef = useRef(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onAnnotationRef = useRef(onAnnotation);
   onAnnotationRef.current = onAnnotation;
@@ -130,6 +135,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       }
 
       setIsReady(true);
+      hasEverLoadedRef.current = true;
       console.log('[Browser] Injection complete, isReady = true');
     } catch (err) {
       console.error('[Browser] Injection error:', err);
@@ -184,6 +190,28 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       console.error('Add to todo list error:', err);
     }
   }, []);
+
+  // Re-inject saved pending edits after webview becomes ready
+  const initialEditsInjectedRef = useRef(false);
+  useEffect(() => {
+    if (!isReady || initialEditsInjectedRef.current || !initialEdits?.length) return;
+    initialEditsInjectedRef.current = true;
+
+    const webview = webviewRef.current;
+    if (!webview) return;
+
+    (async () => {
+      for (const edit of initialEdits) {
+        try {
+          await webview.executeJavaScript(
+            `window.__claudeDesignAddToTodo && window.__claudeDesignAddToTodo(${JSON.stringify(edit.note)}, ${JSON.stringify(edit.selector)}, ${JSON.stringify(edit.tagName || 'div')}, ${JSON.stringify(edit.text || '')}, ${JSON.stringify(edit.attributes || '')}); true;`
+          );
+        } catch {
+          // Webview may not be ready
+        }
+      }
+    })();
+  }, [isReady, initialEdits]);
 
   // Load initial URL after webview is mounted in DOM
   useEffect(() => {
@@ -498,8 +526,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Alt') {
         webview.executeJavaScript('window.__claudeDesignSetAltKey && window.__claudeDesignSetAltKey(true); true;').catch(() => {});
-        // Also focus the webview so mousemove events fire inside it
-        webview.focus();
+        // Focus the webview so mousemove events fire inside it,
+        // but only if the terminal doesn't have focus (Alt+Arrow for word jump)
+        const active = document.activeElement;
+        const inTerminal = active?.closest('.terminal-pane') || active?.classList.contains('xterm-helper-textarea');
+        if (!inTerminal) {
+          webview.focus();
+        }
       }
     };
 
@@ -610,7 +643,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       />
       <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
         {isLoading && <div className="browser-loading-bar" />}
-        {!isReady && (
+        {!isReady && !hasEverLoadedRef.current && (
           <div className="browser-loading-placeholder">
             <div className="toolbar-spinner browser-loading-spinner" />
             <span className="browser-loading-text">Loading browser...</span>
@@ -621,7 +654,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             className="webview-container"
             style={{
               ...(currentWidth ? { width: currentWidth, maxWidth: '100%' } : {}),
-              visibility: isReady ? 'visible' : 'hidden',
+              visibility: isReady || hasEverLoadedRef.current ? 'visible' : 'hidden',
             }}
           >
             <webview

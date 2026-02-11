@@ -24,6 +24,7 @@ export function createSession(
     cliTool: null,
     cliToolRunning: false,
     shell: config?.shell || 'default',
+    pendingEdits: [],
   };
 }
 

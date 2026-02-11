@@ -54,6 +54,14 @@ export interface TerminalTab {
   name: string;
 }
 
+export interface SessionPendingEdit {
+  note: string;
+  selector: string;
+  tagName?: string;
+  text?: string;
+  attributes?: string;
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -70,13 +78,22 @@ export interface Session {
   cliTool: CliTool | null;
   cliToolRunning: boolean;
   shell: ShellType;
+  pendingEdits: SessionPendingEdit[];
 }
 
-export type CliTool = 'claude' | 'cursor' | 'gemini';
+export type CliTool = 'claude' | 'cursor' | 'gemini' | 'codex';
 
 export type ShellType = 'default' | 'wsl';
 
 export type CodeEditor = 'vscode' | 'cursor' | 'zed' | 'sublime' | 'webstorm' | 'nova';
+
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+}
 
 export interface AppSettings {
   screenshotCleanupMinutes: number;
@@ -86,6 +103,8 @@ export interface AppSettings {
   analyticsConsentGiven: boolean;
   onboardingCompleted: boolean;
   discordDismissed: boolean;
+  windowBounds?: WindowBounds;
+  browserWidthPercent?: number;
 }
 
 export interface ProjectPreset {

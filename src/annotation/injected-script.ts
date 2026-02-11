@@ -65,249 +65,304 @@ export const annotationScript = `
         outline-offset: 2px !important;
       }
       .claude-design-popover {
-        position: fixed;
-        z-index: 2147483647;
-        background: transparent;
-        border: none;
-        border-radius: 0;
-        padding: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        width: 320px;
-        color: #e5e5e5;
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        width: 320px !important;
+        color: #e5e5e5 !important;
         cursor: default !important;
+        box-sizing: border-box !important;
+        float: none !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        line-height: normal !important;
+        text-align: left !important;
       }
-      .claude-design-popover * {
+      .claude-design-popover *,
+      .claude-design-popover *::before,
+      .claude-design-popover *::after {
+        box-sizing: border-box !important;
         cursor: default !important;
+        float: none !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        line-height: normal !important;
+        text-indent: 0 !important;
+        text-decoration: none !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
       }
       .claude-design-popover button {
+        all: unset !important;
         cursor: pointer !important;
+        box-sizing: border-box !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
       }
       .claude-design-popover textarea {
         cursor: text !important;
       }
       .claude-design-popover-textarea {
-        width: 100%;
-        min-height: 120px;
-        max-height: 400px;
-        background: #303030;
-        border: 1px solid #4a4a4a;
-        border-radius: 24px;
-        padding: 18px 22px;
-        color: #e5e5e5;
-        font-size: 14px;
-        font-family: inherit;
-        resize: none;
-        outline: none;
-        box-sizing: border-box;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        overflow-y: hidden;
+        width: 100% !important;
+        min-height: 120px !important;
+        max-height: 400px !important;
+        background: #303030 !important;
+        border: 1px solid #4a4a4a !important;
+        border-radius: 24px !important;
+        padding: 18px 22px !important;
+        color: #e5e5e5 !important;
+        font-size: 14px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        resize: none !important;
+        outline: none !important;
+        box-sizing: border-box !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+        overflow-y: hidden !important;
+        margin: 0 !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        line-height: normal !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
       }
       .claude-design-popover-textarea:focus {
-        border-color: #5a5a5a;
+        border-color: #5a5a5a !important;
       }
       .claude-design-popover-textarea::placeholder {
-        color: #666;
+        color: #666 !important;
       }
       .claude-design-popover-input-row {
-        position: relative;
+        position: relative !important;
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       .claude-design-popover-input-row .claude-design-popover-textarea {
-        padding-right: 22px;
-        padding-bottom: 60px;
+        padding-right: 22px !important;
+        padding-bottom: 60px !important;
       }
-      .claude-design-popover-send {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        background: #c6613f;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.15s ease;
+      .claude-design-popover .claude-design-popover-send {
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 8px !important;
+        background: #c6613f !important;
+        border: none !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: background 0.15s ease !important;
+        padding: 0 !important;
+        margin: 0 !important;
       }
-      .claude-design-popover-send:hover {
-        background: #a8522f;
+      .claude-design-popover .claude-design-popover-send:hover {
+        background: #a8522f !important;
       }
-      .claude-design-popover-send svg {
-        width: 16px;
-        height: 16px;
-        color: white;
+      .claude-design-popover .claude-design-popover-send svg {
+        width: 16px !important;
+        height: 16px !important;
+        color: white !important;
+        display: block !important;
       }
-      .claude-design-popover-add {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        background: #c6613f;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.15s ease;
+      .claude-design-popover .claude-design-popover-add {
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 8px !important;
+        background: #c6613f !important;
+        border: none !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: background 0.15s ease !important;
+        padding: 0 !important;
+        margin: 0 !important;
       }
-      .claude-design-popover-add:hover {
-        background: #a8522f;
+      .claude-design-popover .claude-design-popover-add:hover {
+        background: #a8522f !important;
       }
-      .claude-design-popover-add svg {
-        width: 14px;
-        height: 14px;
-        color: white;
+      .claude-design-popover .claude-design-popover-add svg {
+        width: 14px !important;
+        height: 14px !important;
+        color: white !important;
+        display: block !important;
       }
-      .claude-design-popover-add-another {
-        height: 32px;
-        padding: 0 10px;
-        background: transparent;
-        border: none;
-        border-radius: 8px;
-        color: #888;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        transition: all 0.15s;
-        font-size: 13px;
-        font-weight: 500;
+      .claude-design-popover .claude-design-popover-add-another {
+        height: 32px !important;
+        padding: 0 10px !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 8px !important;
+        color: #888 !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        transition: all 0.15s !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        margin: 0 !important;
       }
-      .claude-design-popover-add-another:hover {
-        color: #fff;
-        background: rgba(255, 255, 255, 0.1);
+      .claude-design-popover .claude-design-popover-add-another:hover {
+        color: #fff !important;
+        background: rgba(255, 255, 255, 0.1) !important;
       }
-      .claude-design-popover-add-another svg {
-        flex-shrink: 0;
+      .claude-design-popover .claude-design-popover-add-another svg {
+        flex-shrink: 0 !important;
       }
       .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *):not(.claude-design-class-inspector):not(.claude-design-class-inspector *) {
         cursor: crosshair !important;
       }
       .claude-design-popover-textarea.dragover {
-        border-color: #c6613f;
-        background: rgba(198, 97, 63, 0.1);
+        border-color: #c6613f !important;
+        background: rgba(198, 97, 63, 0.1) !important;
       }
-      .claude-design-popover-image-pill {
-        display: none;
-        align-items: center;
-        gap: 6px;
-        height: 32px;
-        padding: 0 10px;
-        background: rgba(255, 255, 255, 0.1);
-        border: none;
-        border-radius: 8px;
-        color: #ccc;
-        font-size: 12px;
-        cursor: pointer;
-        transition: all 0.15s;
+      .claude-design-popover .claude-design-popover-image-pill {
+        display: none !important;
+        align-items: center !important;
+        gap: 6px !important;
+        height: 32px !important;
+        padding: 0 10px !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        border: none !important;
+        border-radius: 8px !important;
+        color: #ccc !important;
+        font-size: 12px !important;
+        cursor: pointer !important;
+        transition: all 0.15s !important;
+        margin: 0 !important;
       }
-      .claude-design-popover-image-pill.active {
-        display: flex;
+      .claude-design-popover .claude-design-popover-image-pill.active {
+        display: flex !important;
       }
-      .claude-design-popover-image-pill:hover {
-        background: rgba(239, 68, 68, 0.2);
-        color: #ef4444;
+      .claude-design-popover .claude-design-popover-image-pill:hover {
+        background: rgba(239, 68, 68, 0.2) !important;
+        color: #ef4444 !important;
       }
-      .claude-design-popover-image-pill svg {
-        width: 12px;
-        height: 12px;
+      .claude-design-popover .claude-design-popover-image-pill svg {
+        width: 12px !important;
+        height: 12px !important;
+        display: block !important;
       }
       .claude-design-popover-actions {
-        position: absolute;
-        left: 16px;
-        right: 16px;
-        bottom: 18px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+        position: absolute !important;
+        left: 16px !important;
+        right: 16px !important;
+        bottom: 18px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        background: transparent !important;
       }
       .claude-design-popover-actions-left {
-        display: flex;
-        align-items: center;
-        gap: 4px;
+        display: flex !important;
+        align-items: center !important;
+        gap: 4px !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       .claude-design-popover-actions-right {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
-      .claude-design-popover-image-btn {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        background: transparent;
-        border: none;
-        cursor: default !important;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.15s ease;
+      .claude-design-popover .claude-design-popover-image-btn {
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 8px !important;
+        background: transparent !important;
+        border: none !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: background 0.15s ease !important;
+        padding: 0 !important;
+        margin: 0 !important;
       }
-      .claude-design-popover-image-btn:hover {
-        background: rgba(255, 255, 255, 0.1);
+      .claude-design-popover .claude-design-popover-image-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
       }
       .claude-design-code-btn {
-        position: fixed;
-        z-index: 2147483647;
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
-        background: #c6613f;
-        border: 1px solid #c6613f;
+        all: unset !important;
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        width: 28px !important;
+        height: 28px !important;
+        border-radius: 6px !important;
+        background: #c6613f !important;
+        border: 1px solid #c6613f !important;
         cursor: pointer !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.15s ease;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        padding: 0;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: all 0.15s ease !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
       }
-      .claude-design-code-btn,
-      .claude-design-code-btn * {
+      .claude-design-code-btn *  {
         cursor: default !important;
       }
       .claude-design-code-btn:hover {
-        background: #a8522f;
-        border-color: #a8522f;
+        background: #a8522f !important;
+        border-color: #a8522f !important;
       }
       .claude-design-code-btn svg {
-        width: 14px;
-        height: 14px;
-        color: #fff;
-        transition: color 0.15s ease;
+        width: 14px !important;
+        height: 14px !important;
+        color: #fff !important;
+        transition: color 0.15s ease !important;
+        display: block !important;
       }
       .claude-design-code-btn:hover svg {
-        color: #fff;
+        color: #fff !important;
       }
       .claude-design-code-btn .claude-design-code-spinner {
-        width: 14px;
-        height: 14px;
-        border: 2px solid rgba(255,255,255,0.3);
-        border-top-color: #fff;
-        border-radius: 50%;
-        animation: claude-design-spin 0.6s linear infinite;
+        width: 14px !important;
+        height: 14px !important;
+        border: 2px solid rgba(255,255,255,0.3) !important;
+        border-top-color: #fff !important;
+        border-radius: 50% !important;
+        animation: claude-design-spin 0.6s linear infinite !important;
       }
       @keyframes claude-design-spin {
         to { transform: rotate(360deg); }
       }
-      .claude-design-popover-image-btn svg {
-        width: 18px;
-        height: 18px;
-        color: #888;
+      .claude-design-popover .claude-design-popover-image-btn svg {
+        width: 18px !important;
+        height: 18px !important;
+        color: #888 !important;
+        display: block !important;
       }
       .claude-design-popover-badge {
-        position: absolute;
-        top: -8px;
-        left: -8px;
-        background: #c6613f;
-        color: white;
-        font-size: 11px;
-        font-weight: 600;
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1;
+        position: absolute !important;
+        top: -8px !important;
+        left: -8px !important;
+        background: #c6613f !important;
+        color: white !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        width: 24px !important;
+        height: 24px !important;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
       }
       .claude-design-text-highlight {
         background: rgba(198, 97, 63, 0.3) !important;
@@ -315,25 +370,26 @@ export const annotationScript = `
         outline-offset: 1px !important;
       }
       .claude-design-selected-text {
-        font-size: 13px;
-        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-        color: #e5e5e5;
-        background: #252525;
-        padding: 8px 10px;
-        border-radius: 6px;
-        margin-bottom: 12px;
-        white-space: pre-wrap;
-        word-break: break-word;
-        max-height: 80px;
-        overflow-y: auto;
+        font-size: 13px !important;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace !important;
+        color: #e5e5e5 !important;
+        background: #252525 !important;
+        padding: 8px 10px !important;
+        border-radius: 6px !important;
+        margin-bottom: 12px !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+        max-height: 80px !important;
+        overflow-y: auto !important;
+        border: none !important;
       }
       .claude-design-selected-text::before {
-        content: '"';
-        color: #666;
+        content: '"' !important;
+        color: #666 !important;
       }
       .claude-design-selected-text::after {
-        content: '"';
-        color: #666;
+        content: '"' !important;
+        color: #666 !important;
       }
       .claude-design-multi-selected {
         outline: 3px solid #c6613f !important;
@@ -358,91 +414,117 @@ export const annotationScript = `
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       .claude-design-toolbar {
-        position: fixed;
-        bottom: 24px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 2147483647;
-        background: #1f1f1f;
-        border: 1px solid #333;
-        border-radius: 12px;
-        padding: 12px 16px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        position: fixed !important;
+        bottom: 24px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 2147483647 !important;
+        background: #1f1f1f !important;
+        border: 1px solid #333 !important;
+        border-radius: 12px !important;
+        padding: 12px 16px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         cursor: default !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        line-height: normal !important;
       }
-      .claude-design-toolbar * {
+      .claude-design-toolbar *,
+      .claude-design-toolbar *::before,
+      .claude-design-toolbar *::after {
         cursor: default !important;
+        box-sizing: border-box !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        line-height: normal !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
       }
       .claude-design-toolbar button {
+        all: unset !important;
         cursor: pointer !important;
+        box-sizing: border-box !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
       }
       .claude-design-toolbar-count {
-        font-size: 13px;
-        color: #888;
+        font-size: 13px !important;
+        color: #888 !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       .claude-design-toolbar-count strong {
-        color: #e5e5e5;
+        color: #e5e5e5 !important;
+        font-weight: bold !important;
       }
       .claude-design-toolbar-hint {
-        font-size: 12px;
-        color: #666;
-        padding-left: 12px;
-        border-left: 1px solid #333;
+        font-size: 12px !important;
+        color: #666 !important;
+        padding-left: 12px !important;
+        border-left: 1px solid #333 !important;
+        margin: 0 !important;
       }
-      .claude-design-toolbar-btn {
-        padding: 8px 16px;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        border: none;
-        transition: background 0.15s ease;
+      .claude-design-toolbar .claude-design-toolbar-btn {
+        padding: 8px 16px !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        border: none !important;
+        transition: background 0.15s ease !important;
+        margin: 0 !important;
       }
-      .claude-design-toolbar-btn-primary {
-        background: #c6613f;
-        color: white;
+      .claude-design-toolbar .claude-design-toolbar-btn-primary {
+        background: #c6613f !important;
+        color: white !important;
       }
-      .claude-design-toolbar-btn-primary:hover {
-        background: #a8522f;
+      .claude-design-toolbar .claude-design-toolbar-btn-primary:hover {
+        background: #a8522f !important;
       }
-      .claude-design-toolbar-btn-secondary {
-        background: transparent;
-        color: #888;
+      .claude-design-toolbar .claude-design-toolbar-btn-secondary {
+        background: transparent !important;
+        color: #888 !important;
       }
-      .claude-design-toolbar-btn-secondary:hover {
-        background: #333;
-        color: #e5e5e5;
+      .claude-design-toolbar .claude-design-toolbar-btn-secondary:hover {
+        background: #333 !important;
+        color: #e5e5e5 !important;
       }
-      .claude-design-toolbar-btn-send {
-        background: #c6613f;
-        color: white;
-        display: flex;
-        align-items: center;
-        gap: 6px;
+      .claude-design-toolbar .claude-design-toolbar-btn-send {
+        background: #c6613f !important;
+        color: white !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
       }
-      .claude-design-toolbar-btn-send:hover {
-        background: #a8522f;
+      .claude-design-toolbar .claude-design-toolbar-btn-send:hover {
+        background: #a8522f !important;
       }
-      .claude-design-toolbar-btn-send svg {
-        width: 14px;
-        height: 14px;
+      .claude-design-toolbar .claude-design-toolbar-btn-send svg {
+        width: 14px !important;
+        height: 14px !important;
+        display: block !important;
       }
       .claude-design-mention-dropdown {
-        position: fixed;
-        z-index: 2147483647;
-        background: #252525;
-        border: 1px solid #4a4a4a;
-        border-radius: 12px;
-        max-height: 300px;
-        overflow-y: auto;
-        width: 320px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-        padding: 4px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        background: #252525 !important;
+        border: 1px solid #4a4a4a !important;
+        border-radius: 12px !important;
+        max-height: 300px !important;
+        overflow-y: auto !important;
+        width: 320px !important;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
+        padding: 4px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        line-height: normal !important;
       }
       .claude-design-mention-dropdown::-webkit-scrollbar {
         width: 6px;
@@ -1480,7 +1562,7 @@ export const annotationScript = `
   // Notify React about pending annotations changes
   function notifyPendingUpdate() {
     const items = pendingAnnotations.map(function(ann) {
-      return { note: ann.note, selector: ann.selector };
+      return { note: ann.note, selector: ann.selector, tagName: ann.tagName, text: ann.text, attributes: ann.attributes };
     });
     window.postMessage({
       type: 'claude-design-pending-update',

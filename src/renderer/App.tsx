@@ -22,6 +22,7 @@ const CLI_COMMANDS: Record<CliTool, string> = {
   claude: 'claude',
   cursor: 'cursor',
   gemini: 'gemini',
+  codex: 'codex',
 };
 
 interface UpdateInfo {
@@ -49,6 +50,8 @@ export default function App() {
   const [presetsLoaded, setPresetsLoaded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const browserWidthRef = useRef(60);
+  const savedBrowserWidthRef = useRef<number | null>(null);
+  const saveWidthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCommandsRef = useRef<{ sessionId: string; tabId: string; command: string }[]>([]);
   const sessionsRef = useRef<Session[]>(sessions);
   sessionsRef.current = sessions;
@@ -122,13 +125,17 @@ export default function App() {
     });
   }, []);
 
-  // Initialize PostHog conditionally based on analytics setting
+  // Initialize PostHog conditionally based on analytics setting, and load saved browser width
   useEffect(() => {
     window.mainAPI?.getSettings().then((s) => {
       if (s.analyticsEnabled) {
         initAnalytics();
       } else {
         disableAnalytics();
+      }
+      if (s.browserWidthPercent != null) {
+        savedBrowserWidthRef.current = s.browserWidthPercent;
+        browserWidthRef.current = s.browserWidthPercent;
       }
     });
   }, []);
@@ -261,6 +268,11 @@ export default function App() {
       setSessions((prev) =>
         prev.map((s) => (s.id === activeSessionId ? { ...s, browserWidth: newWidth } : s))
       );
+      // Debounce saving to settings
+      if (saveWidthTimerRef.current) clearTimeout(saveWidthTimerRef.current);
+      saveWidthTimerRef.current = setTimeout(() => {
+        window.mainAPI?.saveSettings({ browserWidthPercent: newWidth });
+      }, 500);
     },
     [activeSessionId]
   );
@@ -275,7 +287,11 @@ export default function App() {
   const handlePendingEditsChange = useCallback((edits: PendingEdit[], actions: EditActions) => {
     setPendingEdits(edits);
     setEditActions(actions);
-  }, []);
+    // Persist to session so edits survive tab switches
+    setSessions((prev) =>
+      prev.map((s) => (s.id === activeSessionId ? { ...s, pendingEdits: edits.map((e) => ({ note: e.note, selector: e.selector, tagName: e.tagName, text: e.text, attributes: e.attributes })) } : s))
+    );
+  }, [activeSessionId]);
 
   const handleAnnotateModeChange = useCallback((enabled: boolean) => {
     setAnnotateMode(enabled);
@@ -320,6 +336,9 @@ export default function App() {
         newIndex
       );
       newSession.url = config.url || 'http://localhost:3000';
+      if (savedBrowserWidthRef.current != null) {
+        newSession.browserWidth = savedBrowserWidthRef.current;
+      }
 
       // Create two terminal tabs: Dev Server and CLI tool
       const devServerTabId = newSession.terminalTabs[0].id;
@@ -447,8 +466,11 @@ export default function App() {
 
   const handleSelectSession = useCallback((sessionId: string) => {
     if (sessionId !== activeSessionId) {
-      setPendingEdits([]);
+      // Edit actions will be re-created by the Browser component when it mounts
       setEditActions(null);
+      // Restore pending edits from the target session
+      const targetSession = sessionsRef.current.find((s) => s.id === sessionId);
+      setPendingEdits(targetSession?.pendingEdits || []);
     }
     setActiveSessionId(sessionId);
   }, [activeSessionId]);
@@ -558,6 +580,7 @@ export default function App() {
             projectPath={activeSession.projectPath}
             onAnnotation={handleAnnotation}
             cliRunning={activeSession.cliToolRunning}
+            initialEdits={activeSession.pendingEdits}
           />
         </div>
         {!activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}

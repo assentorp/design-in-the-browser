@@ -2,6 +2,14 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+}
+
 export interface AppSettings {
   screenshotCleanupMinutes: number;
   editor: string;
@@ -10,6 +18,8 @@ export interface AppSettings {
   analyticsConsentGiven: boolean;
   onboardingCompleted: boolean;
   discordDismissed: boolean;
+  windowBounds?: WindowBounds;
+  browserWidthPercent?: number;
 }
 
 const defaultSettings: AppSettings = {

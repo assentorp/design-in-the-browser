@@ -392,6 +392,7 @@ export default function ProjectConfigModal({
                 className="form-select"
               >
                 <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
                 <option value="cursor">Cursor</option>
                 <option value="gemini">Gemini</option>
               </select>
