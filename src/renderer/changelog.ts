@@ -14,6 +14,9 @@ export const changelog: ChangelogEntry[] = [
       'Fix resize handle getting stuck when dragging over the webview',
       'Fix code button disappearing after CSS hardening',
       'Fix todo items being doubled on first add',
+      'File autocomplete: breadcrumb tree panel shows full folder path on hover',
+      'File autocomplete: filename no longer gets squeezed by long directory paths',
+      'Fix annotation prompt box appearing far from the selected element near the bottom of the page',
     ],
   },
   {

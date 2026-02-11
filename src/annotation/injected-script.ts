@@ -579,11 +579,8 @@ export const annotationScript = `
         font-size: 13px;
         color: #e5e5e5;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
         font-weight: 500;
-        min-width: 0;
-        flex: 1;
+        flex-shrink: 0;
       }
       .claude-design-mention-dir {
         font-size: 12px;
@@ -591,14 +588,51 @@ export const annotationScript = `
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-left: auto;
+        direction: rtl;
+        text-align: right;
         min-width: 0;
+        flex: 1;
       }
       .claude-design-mention-empty {
         padding: 12px 10px;
         color: #666;
         font-size: 13px;
         text-align: center;
+      }
+      .claude-design-mention-breadcrumb {
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        background: #252525 !important;
+        border: 1px solid #4a4a4a !important;
+        border-radius: 12px !important;
+        padding: 8px 12px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
+        white-space: nowrap !important;
+        pointer-events: none !important;
+      }
+      .claude-design-mention-breadcrumb-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #777;
+        line-height: 22px;
+      }
+      .claude-design-mention-breadcrumb-row.is-file {
+        color: #e5e5e5;
+      }
+      .claude-design-mention-breadcrumb-indent {
+        display: inline-block;
+        width: 16px;
+        flex-shrink: 0;
+      }
+      .claude-design-mention-breadcrumb-folder {
+        opacity: 0.5;
+        font-size: 13px;
+      }
+      .claude-design-mention-breadcrumb-file {
+        font-size: 13px;
       }
       .claude-design-token-swatch {
         flex-shrink: 0;
@@ -1714,6 +1748,7 @@ export const annotationScript = `
     // mode: 'file' for @files, 'token' for >tokens
     var mention = { active: false, startIndex: -1, mode: 'file' };
     var dropdown = null;
+    var breadcrumb = null;
     var activeIndex = 0;
     var filteredItems = [];
 
@@ -1798,11 +1833,72 @@ export const annotationScript = `
       return results;
     }
 
+    function showBreadcrumb(idx) {
+      var item = filteredItems[idx];
+      if (!item || !item.dir || item.dir === '.' || mention.mode === 'token') {
+        hideBreadcrumb();
+        return;
+      }
+      if (!breadcrumb) {
+        breadcrumb = document.createElement('div');
+        breadcrumb.className = 'claude-design-mention-breadcrumb';
+        document.body.appendChild(breadcrumb);
+      }
+      var parts = item.dir.split('/');
+      var icon = getFileIcon(item.name);
+      var cls = getIconClass(item.name);
+      var html = '';
+      for (var i = 0; i < parts.length; i++) {
+        html += '<div class="claude-design-mention-breadcrumb-row">';
+        for (var j = 0; j < i; j++) html += '<span class="claude-design-mention-breadcrumb-indent"></span>';
+        html += '<span class="claude-design-mention-breadcrumb-folder">\uD83D\uDCC1</span> ';
+        html += escapeHtml(parts[i]);
+        html += '</div>';
+      }
+      html += '<div class="claude-design-mention-breadcrumb-row is-file">';
+      for (var j = 0; j < parts.length; j++) html += '<span class="claude-design-mention-breadcrumb-indent"></span>';
+      html += '<span class="claude-design-mention-icon ' + cls + '" style="width:16px;height:16px;font-size:7px;border-radius:3px;">' + icon.label + '</span> ';
+      html += escapeHtml(item.name);
+      html += '</div>';
+      breadcrumb.innerHTML = html;
+
+      // Position to the right of the dropdown
+      if (dropdown) {
+        var dr = dropdown.getBoundingClientRect();
+        var bw = breadcrumb.offsetWidth || 200;
+        var bh = breadcrumb.offsetHeight || 100;
+        var left = dr.right + 6;
+        if (left + bw > window.innerWidth - 6) left = dr.left - bw - 6;
+        breadcrumb.style.left = left + 'px';
+
+        // Align vertically with the active item
+        var activeEl = dropdown.querySelectorAll('.claude-design-mention-item')[idx];
+        if (activeEl) {
+          var ar = activeEl.getBoundingClientRect();
+          var top = ar.top;
+          if (top + bh > window.innerHeight - 6) top = window.innerHeight - 6 - bh;
+          if (top < 6) top = 6;
+          breadcrumb.style.top = top + 'px';
+        } else {
+          breadcrumb.style.top = dr.top + 'px';
+        }
+        breadcrumb.style.bottom = 'auto';
+      }
+    }
+
+    function hideBreadcrumb() {
+      if (breadcrumb) {
+        breadcrumb.remove();
+        breadcrumb = null;
+      }
+    }
+
     function removeDropdown() {
       if (dropdown) {
         dropdown.remove();
         dropdown = null;
       }
+      hideBreadcrumb();
       mention.active = false;
       mention.mode = 'file';
       activeIndex = 0;
@@ -1977,6 +2073,7 @@ export const annotationScript = `
       if (items[idx]) {
         items[idx].scrollIntoView({ block: 'nearest' });
       }
+      showBreadcrumb(idx);
     }
 
     function selectItem(idx) {
@@ -2134,13 +2231,21 @@ export const annotationScript = `
 
     if (!rect) return;
 
+    const popHeight = popoverElement.offsetHeight || 150;
     let top = rect.bottom + 10;
     let left = rect.left;
 
-    if (top + 300 > window.innerHeight) top = rect.top - 300;
+    if (top + popHeight > window.innerHeight) {
+      // Try above the element
+      top = rect.top - popHeight - 10;
+    }
+    if (top < 10) {
+      // No room above either — anchor to bottom of viewport, overlapping element
+      top = window.innerHeight - popHeight - 10;
+    }
+
     if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
     if (left < 10) left = 10;
-    if (top < 10) top = 10;
 
     popoverElement.style.top = top + 'px';
     popoverElement.style.left = left + 'px';
@@ -2200,15 +2305,11 @@ export const annotationScript = `
     popoverElement = document.createElement('div');
     popoverElement.className = 'claude-design-popover';
 
-    let top = rect.bottom + 10;
+    // Initial rough position — will be corrected by positionPopover() after DOM insert
     let left = rect.left;
-
-    if (top + 300 > window.innerHeight) top = rect.top - 300;
     if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
     if (left < 10) left = 10;
-    if (top < 10) top = 10;
-
-    popoverElement.style.top = top + 'px';
+    popoverElement.style.top = (rect.bottom + 10) + 'px';
     popoverElement.style.left = left + 'px';
 
     // Add scroll listener to reposition popover and code button
@@ -2301,6 +2402,9 @@ export const annotationScript = `
     popoverElement.innerHTML = inputAreaHTML + listHTML;
 
     document.body.appendChild(popoverElement);
+
+    // Reposition now that we know the actual height
+    positionPopover();
 
     // Create floating code button at top-right of the selected element
     if (el && !textSelection) {
