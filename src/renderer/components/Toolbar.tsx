@@ -18,6 +18,8 @@ interface ToolbarProps {
   viewportSizes: ViewportSizes;
   onViewportChange: (viewport: ViewportType | null) => void;
   onViewportSizeChange: (sizes: ViewportSizes) => void;
+  zoomFactor?: number;
+  onZoomReset?: () => void;
 }
 
 export default function Toolbar({
@@ -37,6 +39,8 @@ export default function Toolbar({
   viewportSizes,
   onViewportChange,
   onViewportSizeChange,
+  zoomFactor = 1.0,
+  onZoomReset,
 }: ToolbarProps) {
   const [editingViewport, setEditingViewport] = useState<ViewportType | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -205,6 +209,16 @@ export default function Toolbar({
         )}
       </div>
 
+      {Math.abs(zoomFactor - 1.0) > 0.001 && (
+        <button
+          className="toolbar-btn toolbar-zoom-btn"
+          onClick={onZoomReset}
+          title="Reset zoom (Cmd+0)"
+        >
+          {Math.round(zoomFactor * 100)}%
+        </button>
+      )}
+
       <button
         className="toolbar-btn toolbar-code-btn"
         onClick={onToggleCodeView}
@@ -220,24 +234,9 @@ export default function Toolbar({
       <button
         className={`toolbar-btn toolbar-annotate-btn ${annotateMode ? 'active' : ''}`}
         onClick={onToggleAnnotate}
-        title={annotateMode ? 'Exit Edit Mode (Esc)' : 'Enter Edit Mode'}
+        title={annotateMode ? 'Exit Edit Mode (Cmd+E)' : 'Enter Edit Mode (Cmd+E)'}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle
-            cx="8"
-            cy="8"
-            r="6"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <circle cx="8" cy="8" r="2" fill="currentColor" />
-          <path
-            d="M8 2V4M8 12V14M2 8H4M12 8H14"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </svg>
+        <kbd className="toolbar-kbd">&#8984;E</kbd>
         <span>{annotateMode ? 'Editing' : 'Edit'}</span>
       </button>
 

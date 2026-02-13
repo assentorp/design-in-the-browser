@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, app, dialog, session } from 'electron';
+import { BrowserWindow, ipcMain, app, dialog, session, webContents as webContentsModule } from 'electron';
 import { downloadUpdate, installUpdate } from './updater';
 import * as pty from 'node-pty';
 import * as path from 'path';
@@ -824,6 +824,17 @@ export function setupIPC(mainWindow: BrowserWindow) {
   ipcMain.handle('webview:clear-cache', async () => {
     await session.defaultSession.clearCache();
   });
+
+  // Send all queued edits — execute directly on webview webContents
+  ipcMain.on('webview:send-all', () => {
+    const allContents = webContentsModule.getAllWebContents();
+    for (const contents of allContents) {
+      if (contents.getType() === 'webview') {
+        contents.executeJavaScript('window.__claudeDesignSendAll && window.__claudeDesignSendAll(); true;').catch(() => {});
+      }
+    }
+  });
+
 
   // Handle update download request
   ipcMain.on('app:download-update', () => {

@@ -77,15 +77,15 @@ export function createMenu(mainWindow: BrowserWindow) {
         { role: 'togglefullscreen' },
         { type: 'separator' },
         {
-          label: 'Toggle Annotate Mode',
-          accelerator: 'CmdOrCtrl+Shift+A',
+          label: 'Toggle Edit Mode',
           click: () => {
             mainWindow.webContents.send('toggle-annotate');
           },
         },
         {
           label: 'Send Queued Edits',
-          accelerator: 'CmdOrCtrl+E',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          // Handled via before-input-event for webview compatibility
           click: () => {
             mainWindow.webContents.send('send-queued-edits');
           },

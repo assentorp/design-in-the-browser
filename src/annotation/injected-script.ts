@@ -37,6 +37,10 @@ export const annotationScript = `
   // Animation freeze state
   let animationsPaused = false;
 
+  // Pixel grid overlay state: 'off' | 'grid' | 'baseline'
+  let gridMode = 'off';
+  let gridOverlayElement = null;
+
   // Shortcut hints state
   let shortcutHintsElement = null;
   let shortcutHintsTimeout = null;
@@ -847,16 +851,15 @@ export const annotationScript = `
       .claude-design-shortcut-hints {
         position: fixed;
         top: 16px;
-        left: 50%;
-        transform: translateX(-50%);
+        left: 16px;
         z-index: 2147483647;
         background: rgba(31, 31, 31, 0.92);
         border: 1px solid #333;
         border-radius: 10px;
-        padding: 8px 16px;
+        padding: 10px 14px;
         display: flex;
-        align-items: center;
-        gap: 16px;
+        flex-direction: column;
+        gap: 6px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 12px;
         color: #999;
@@ -880,6 +883,54 @@ export const annotationScript = `
         color: #e5e5e5;
         margin-right: 4px;
       }
+      .claude-design-grid-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 2147483639;
+      }
+      .claude-design-grid-overlay.grid-spatial {
+        background-image:
+          linear-gradient(to right, rgba(128, 128, 128, 0.3) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(128, 128, 128, 0.3) 1px, transparent 1px);
+        background-size: 8px 8px;
+      }
+      .claude-design-grid-overlay.grid-baseline {
+        background-image:
+          linear-gradient(to bottom, rgba(198, 97, 63, 0.25) 1px, transparent 1px);
+        background-size: 100% 4px;
+      }
+      .claude-design-grid-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 13px;
+        line-height: 1.4;
+        z-index: 2147483647;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        text-align: center;
+      }
+      .claude-design-grid-toast.visible {
+        opacity: 1;
+      }
+      .claude-design-grid-toast .grid-toast-title {
+        font-weight: 600;
+      }
+      .claude-design-grid-toast .grid-toast-desc {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 12px;
+      }
+
       .claude-design-ruler-h,
       .claude-design-ruler-v {
         position: fixed;
@@ -2612,6 +2663,10 @@ export const annotationScript = `
       // Enter: Send if not in list mode, add to list if in list mode
       if (e.key === 'Enter') {
         e.preventDefault();
+        // Reset stale todoMode if there are no pending annotations
+        if (todoMode && pendingAnnotations.length === 0) {
+          todoMode = false;
+        }
         if (todoMode || pendingAnnotations.length > 0) {
           saveCurrentAnnotation();
         } else {
@@ -2752,7 +2807,7 @@ export const annotationScript = `
     // Get useful attributes for grepping
     const attrs = [];
     if (selectedElement.id) attrs.push('id="' + selectedElement.id + '"');
-    if (selectedElement.className) attrs.push('class="' + selectedElement.className.split(' ').slice(0, 3).join(' ') + '"');
+    if (selectedElement.className && typeof selectedElement.className === 'string') attrs.push('class="' + selectedElement.className.split(' ').slice(0, 3).join(' ') + '"');
     ['data-testid', 'data-component', 'aria-label', 'name', 'href'].forEach(function(attr) {
       const val = selectedElement.getAttribute(attr);
       if (val) attrs.push(attr + '="' + val.substring(0, 30) + '"');
@@ -2862,6 +2917,7 @@ export const annotationScript = `
         window.__claudeDesignNotifyModeChange(false);
       }
     }
+    // Cmd+E / Ctrl+E handled by persistent listener (see below)
   }
 
   // Ruler crosshair guides (G key)
@@ -2934,11 +2990,75 @@ export const annotationScript = `
     }
   }
 
+  var gridToastTimer = null;
+  function showGridToast(title, desc) {
+    var toast = document.querySelector('.claude-design-grid-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'claude-design-grid-toast';
+      document.body.appendChild(toast);
+    }
+    toast.innerHTML = '<span class="grid-toast-title">' + title + '</span>' + (desc ? '<br><span class="grid-toast-desc">' + desc + '</span>' : '');
+    toast.classList.add('visible');
+    if (gridToastTimer) clearTimeout(gridToastTimer);
+    gridToastTimer = setTimeout(function() {
+      toast.classList.remove('visible');
+    }, 1500);
+  }
+
+  function cycleGridOverlay() {
+    // Cycle: off → grid → baseline → off
+    if (gridMode === 'off') {
+      gridMode = 'grid';
+      showGridToast('8px Spatial Grid', 'Check spacing and alignment consistency');
+    } else if (gridMode === 'grid') {
+      gridMode = 'baseline';
+      showGridToast('4px Baseline Grid', 'Check vertical rhythm and typography alignment');
+    } else {
+      gridMode = 'off';
+      showGridToast('Grid Off', '');
+    }
+    applyGridOverlay();
+  }
+
+  function applyGridOverlay() {
+    if (gridMode === 'off') {
+      if (gridOverlayElement) {
+        gridOverlayElement.remove();
+        gridOverlayElement = null;
+      }
+      return;
+    }
+    if (!gridOverlayElement) {
+      gridOverlayElement = document.createElement('div');
+      gridOverlayElement.className = 'claude-design-grid-overlay';
+      document.body.appendChild(gridOverlayElement);
+    }
+    gridOverlayElement.classList.remove('grid-spatial', 'grid-baseline');
+    gridOverlayElement.classList.add(gridMode === 'grid' ? 'grid-spatial' : 'grid-baseline');
+  }
+
+  function removeGridOverlay() {
+    gridMode = 'off';
+    if (gridOverlayElement) {
+      gridOverlayElement.remove();
+      gridOverlayElement = null;
+    }
+  }
+
+  function handleShiftGKey(e) {
+    var tag = document.activeElement && document.activeElement.tagName;
+    if ((e.key === 'G') && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && tag !== 'TEXTAREA' && tag !== 'INPUT') {
+      e.preventDefault();
+      cycleGridOverlay();
+    }
+  }
+
   function showShortcutHints() {
     removeShortcutHints();
     shortcutHintsElement = document.createElement('div');
     shortcutHintsElement.className = 'claude-design-shortcut-hints';
-    shortcutHintsElement.innerHTML = '<span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span><span><kbd>F</kbd> Freeze animations</span>';
+    shortcutHintsElement.innerHTML = '<span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span><span><kbd>Shift+G</kbd> Grid overlay</span><span><kbd>F</kbd> Freeze animations</span>';
     document.body.appendChild(shortcutHintsElement);
     // Trigger fade-in on next frame
     requestAnimationFrame(function() {
@@ -2978,6 +3098,7 @@ export const annotationScript = `
     document.addEventListener('keyup', handleGKeyUp, true);
     document.addEventListener('mousemove', handleMouseMoveForRuler, true);
     document.addEventListener('keydown', handleFKey, true);
+    document.addEventListener('keydown', handleShiftGKey, true);
 
     showShortcutHints();
   }
@@ -2999,7 +3120,9 @@ export const annotationScript = `
     document.removeEventListener('keyup', handleGKeyUp, true);
     document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
     document.removeEventListener('keydown', handleFKey, true);
+    document.removeEventListener('keydown', handleShiftGKey, true);
     removeRulerGuides();
+    removeGridOverlay();
     removeShortcutHints();
     // Unfreeze animations when leaving annotate mode
     if (animationsPaused) {
@@ -3083,6 +3206,20 @@ export const annotationScript = `
     }
   }
 
+  // Persistent Cmd+E / Ctrl+E listener (not removed when annotate mode is disabled)
+  document.addEventListener('keydown', function(e) {
+    if ((e.key === 'e' || e.key === 'E') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      if (annotateMode) {
+        disableAnnotateMode();
+        window.__claudeDesignNotifyModeChange(false);
+      } else {
+        enableAnnotateMode();
+        window.__claudeDesignNotifyModeChange(true);
+      }
+    }
+  }, true);
+
   // Expose functions for external control
   window.__claudeDesignEnable = enableAnnotateMode;
   window.__claudeDesignDisable = disableAnnotateMode;
@@ -3093,5 +3230,6 @@ export const annotationScript = `
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
   window.__claudeDesignAddToTodo = addToTodoList;
   window.__claudeDesignSetAltKey = setAltKeyState;
+  window.__claudeDesignToggleFreeze = toggleAnimationFreeze;
 })();
 `;

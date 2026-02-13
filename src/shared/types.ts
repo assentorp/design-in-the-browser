@@ -192,6 +192,7 @@ export interface MainAPI {
   getPathForFile: (file: File) => string;
   getAppVersion: () => Promise<string>;
   clearWebviewCache: () => Promise<void>;
+  sendAllEdits: () => void;
 }
 
 export interface ElementSearchInfo {

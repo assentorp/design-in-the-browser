@@ -28,13 +28,16 @@ export default function TabBar({
   return (
     <div className="tab-bar">
       <div className="tabs">
-        {sessions.map((session) => (
+        {sessions.map((session, index) => (
           <div
             key={session.id}
             className={`tab ${session.id === activeSessionId ? 'active' : ''}`}
             onClick={() => onSelectSession(session.id)}
+            title={index < 9 ? `${session.name} (${navigator.platform.includes('Mac') ? '\u2318' : 'Ctrl+'}${index + 1})` : session.name}
           >
-            <span className="tab-name">{session.name}</span>
+            <div className="tab-content">
+              <span className="tab-name">{session.name}</span>
+            </div>
             <button
               className="tab-close"
               onClick={(e) => {

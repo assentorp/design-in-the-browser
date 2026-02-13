@@ -5,6 +5,9 @@ import { createMenu } from './menu';
 import { checkForUpdates } from './updater';
 import { getSettings, saveSettings } from './settings';
 
+// Disable Chromium's media router to prevent macOS local network permission prompt
+app.commandLine.appendSwitch('disable-features', 'MediaRouter');
+
 // Disable hardware acceleration on Windows to prevent gray screen issues
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration();
@@ -147,6 +150,16 @@ function createWindow() {
     mainWindow = null;
   });
 
+  // Keep main window at zoom level 0 (100%) — redirect zoom to webview via IPC
+  mainWindow.webContents.setZoomLevel(0);
+  setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const level = mainWindow.webContents.getZoomLevel();
+    if (level !== 0) {
+      mainWindow.webContents.setZoomLevel(0);
+    }
+  }, 16);
+
   if (!ipcSetup) {
     setupIPC(mainWindow);
     ipcSetup = true;
@@ -167,6 +180,36 @@ app.on('activate', () => {
   if (mainWindow === null) {
     createWindow();
   }
+});
+
+// Cmd+1..9 switches project tabs — intercept on ALL webContents (main window + webviews)
+app.on('web-contents-created', (_, contents) => {
+  contents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (!input.meta && !input.control) return;
+
+    // Cmd+Shift+S: send queued edits (handle before the shift filter)
+    if (input.shift && !input.alt && (input.key === 's' || input.key === 'S') && mainWindow) {
+      _event.preventDefault();
+      mainWindow.webContents.send('send-queued-edits');
+      return;
+    }
+
+    if (input.shift || input.alt) return;
+    const num = parseInt(input.key, 10);
+    if (num >= 1 && num <= 9 && mainWindow) {
+      _event.preventDefault();
+      mainWindow.webContents.send('switch-tab', num - 1);
+      return;
+    }
+
+    // Cmd+=/-, Cmd+0: block native zoom, send to renderer for CSS zoom on webview
+    if ((input.key === '=' || input.key === '+' || input.key === '-' || input.key === '0') && mainWindow) {
+      _event.preventDefault();
+      const direction = input.key === '-' ? 'out' : input.key === '0' ? 'reset' : 'in';
+      mainWindow.webContents.send('webview-zoom', direction);
+    }
+  });
 });
 
 // Allow navigation in webview

@@ -117,6 +117,8 @@ const mainAPI: MainAPI = {
   getAppVersion: () => ipcRenderer.invoke('app:version'),
 
   clearWebviewCache: () => ipcRenderer.invoke('webview:clear-cache'),
+
+  sendAllEdits: () => ipcRenderer.send('webview:send-all'),
 };
 
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);
@@ -135,6 +137,22 @@ contextBridge.exposeInMainWorld('onSendQueuedEdits', (callback: () => void) => {
   ipcRenderer.on('send-queued-edits', () => callback());
 });
 
+contextBridge.exposeInMainWorld('onToggleAnnotate', (callback: () => void) => {
+  ipcRenderer.on('toggle-annotate', () => callback());
+});
+
+contextBridge.exposeInMainWorld('onSwitchTab', (callback: (index: number) => void) => {
+  ipcRenderer.on('switch-tab', (_event, index: number) => callback(index));
+});
+
 contextBridge.exposeInMainWorld('onClearCacheReload', (callback: () => void) => {
   ipcRenderer.on('clear-cache-and-reload', () => callback());
+});
+
+contextBridge.exposeInMainWorld('onWebviewZoom', (callback: (direction: string) => void) => {
+  ipcRenderer.on('webview-zoom', (_event, direction: string) => callback(direction));
+});
+
+contextBridge.exposeInMainWorld('requestWebviewZoom', (direction: string) => {
+  ipcRenderer.send('webview:zoom', direction);
 });

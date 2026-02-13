@@ -6,6 +6,23 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.6',
+    date: 'February 13, 2026',
+    changes: [
+      'Browser zoom: Cmd+=/- zooms only the webpage, not the app UI. Cmd+0 resets.',
+      'Cmd+E now toggles edit mode on and off',
+      'Cmd+1 through Cmd+9 switches between project tabs',
+      'Tab names fade out gracefully when truncated instead of hard ellipsis',
+      'Edit button shows Cmd+E keyboard hint in the toolbar',
+      'Send Queued Edits shortcut changed to Cmd+Shift+S',
+      'Shift+G cycles grid overlay: 8px spatial grid, 4px baseline grid, off',
+      'Fix selecting SVG elements causing a crash',
+      'Fix Send button for queued edits not working',
+      'Fix Enter key not submitting annotations when todo list was cleared',
+      'Suppress macOS local network permission prompt',
+    ],
+  },
+  {
     version: '1.3.5',
     date: 'February 11, 2026',
     changes: [
@@ -59,7 +76,7 @@ export const changelog: ChangelogEntry[] = [
       'Ruler guides: hold G in annotate mode to show crosshair lines that follow your cursor for checking alignment',
       'CSS Inspector now follows your cursor and delays switching when hovering between elements',
       'Clear Cache & Reload (Cmd+Shift+R) clears webview cache and hard-reloads the page',
-      'Send All shortcut (Cmd+E) now shown as keyboard hint on the Send button',
+      'Send All shortcut (Cmd+Shift+E) now shown as keyboard hint on the Send button',
       'App no longer restores previous sessions on launch — always starts fresh with project picker',
       'Reload button now ignores cache for faster iteration',
     ],
@@ -91,7 +108,7 @@ export const changelog: ChangelogEntry[] = [
     date: 'February 5, 2026',
     changes: [
       'Edit queue no longer auto-sends when CLI goes idle',
-      'Use Cmd+E (Ctrl+E on Windows/Linux) to send all queued edits',
+      'Use Cmd+Shift+E (Ctrl+Shift+E on Windows/Linux) to send all queued edits',
       'Fix edit queue flushing immediately after annotation is queued',
     ],
   },

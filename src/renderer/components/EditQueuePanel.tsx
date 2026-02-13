@@ -36,11 +36,11 @@ export default function EditQueuePanel({ edits, actions, cliRunning }: EditQueue
       <div className="edit-queue-actions">
         <button
           className={`edit-queue-send${cliRunning ? ' edit-queue-send-waiting' : ''}`}
-          onClick={() => actions?.sendAll()}
+          onClick={() => window.mainAPI?.sendAllEdits()}
           title={cliRunning ? 'Claude is busy — click to send anyway' : undefined}
         >
           {cliRunning ? 'Waiting...' : 'Send'}
-          <kbd className="edit-queue-kbd">{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}E</kbd>
+          <kbd className="edit-queue-kbd">{navigator.platform.includes('Mac') ? '⌘⇧' : 'Ctrl+Shift+'}S</kbd>
         </button>
         <button
           className="edit-queue-cancel"

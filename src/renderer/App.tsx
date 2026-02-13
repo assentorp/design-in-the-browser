@@ -104,16 +104,24 @@ export default function App() {
     }
   }, []);
 
-  // Listen for Send Queued Edits shortcut (Cmd+E)
+  // Listen for Toggle Edit Mode shortcut (Cmd+E)
+  useEffect(() => {
+    const onToggleAnnotate = (window as unknown as { onToggleAnnotate?: (cb: () => void) => void }).onToggleAnnotate;
+    if (onToggleAnnotate) {
+      onToggleAnnotate(() => setAnnotateMode(prev => !prev));
+    }
+  }, []);
+
+  // Listen for Send Queued Edits shortcut (Cmd+Shift+S)
   useEffect(() => {
     const onSendQueuedEdits = (window as unknown as { onSendQueuedEdits?: (cb: () => void) => void }).onSendQueuedEdits;
     if (onSendQueuedEdits) {
       onSendQueuedEdits(() => {
-        editActionsRef.current?.sendAll();
+        // Send directly via main process (bypasses fragile editActions ref)
+        window.mainAPI?.sendAllEdits();
       });
     }
   }, []);
-
 
   // Check for unseen changelog on mount
   useEffect(() => {
@@ -474,6 +482,19 @@ export default function App() {
     }
     setActiveSessionId(sessionId);
   }, [activeSessionId]);
+
+  // Cmd+1..9 switches project tabs (via menu accelerators)
+  useEffect(() => {
+    const onSwitchTab = (window as unknown as { onSwitchTab?: (cb: (index: number) => void) => void }).onSwitchTab;
+    if (onSwitchTab) {
+      onSwitchTab((index: number) => {
+        const target = sessionsRef.current[index];
+        if (target) {
+          handleSelectSession(target.id);
+        }
+      });
+    }
+  }, [handleSelectSession]);
 
   const updateBanner = updateInfo && (
     <div className="update-banner">

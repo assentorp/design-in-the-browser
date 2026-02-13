@@ -57,6 +57,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [hasMainAPI, setHasMainAPI] = useState(() => !!getMainAPI());
   const [viewport, setViewport] = useState<ViewportType | null>(null);
   const [viewportSizes, setViewportSizes] = useState<ViewportSizes>(DEFAULT_VIEWPORT_SIZES);
+  const [zoomFactor, setZoomFactor] = useState(1.0);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const injectedRef = useRef(false);
   const hasEverLoadedRef = useRef(false);
@@ -519,8 +520,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     toggle();
   }, [annotateMode, isReady]);
 
-  // Forward ALT key state to webview when in annotate mode
-  // This ensures ALT+hover works even when the webview doesn't have focus
+  // Forward ALT and F keys to webview when in annotate mode
   useEffect(() => {
     if (!annotateMode || !isReady) return;
 
@@ -536,6 +536,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         const inTerminal = active?.closest('.terminal-pane') || active?.classList.contains('xterm-helper-textarea');
         if (!inTerminal) {
           webview.focus();
+        }
+      }
+      // Forward F key to webview for freeze animations
+      if ((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const tag = (document.activeElement as HTMLElement)?.tagName;
+        if (tag !== 'TEXTAREA' && tag !== 'INPUT') {
+          webview.executeJavaScript('window.__claudeDesignToggleFreeze && window.__claudeDesignToggleFreeze(); true;').catch(() => {});
         }
       }
     };
@@ -561,6 +568,20 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       window.removeEventListener('blur', handleBlur);
     };
   }, [annotateMode, isReady]);
+
+  // Cmd+E toggles edit mode when renderer has focus (webview case handled in injected script)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E') && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        onAnnotateModeChange(!annotateMode);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [annotateMode, onAnnotateModeChange]);
+
 
 
   const navigate = useCallback((targetUrl: string) => {
@@ -612,6 +633,40 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }
   }, []);
 
+  // Webview zoom — apply CSS zoom inside the webview page
+  const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+  const zoomFactorRef = useRef(1.0);
+
+  const applyZoomToWebview = useCallback((factor: number) => {
+    zoomFactorRef.current = factor;
+    setZoomFactor(factor);
+    const webview = webviewRef.current;
+    if (webview) {
+      webview.executeJavaScript(`document.documentElement.style.zoom = '${factor}'; true;`).catch(() => {});
+    }
+  }, []);
+
+  const stepZoom = useCallback((direction: string) => {
+    const current = zoomFactorRef.current;
+    let next: number;
+    if (direction === 'reset') {
+      next = 1.0;
+    } else if (direction === 'in') {
+      next = ZOOM_LEVELS.find((z) => z > current + 0.001) ?? current;
+    } else {
+      next = [...ZOOM_LEVELS].reverse().find((z) => z < current - 0.001) ?? current;
+    }
+    applyZoomToWebview(next);
+  }, [applyZoomToWebview]);
+
+  // Listen for zoom IPC from main (redirected native zoom)
+  useEffect(() => {
+    const onZoom = (window as unknown as { onWebviewZoom?: (cb: (dir: string) => void) => void }).onWebviewZoom;
+    if (onZoom) {
+      onZoom((direction: string) => stepZoom(direction));
+    }
+  }, [stepZoom]);
+
   const toggleAnnotate = useCallback(() => {
     onAnnotateModeChange(!annotateMode);
   }, [annotateMode, onAnnotateModeChange]);
@@ -644,6 +699,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         viewportSizes={viewportSizes}
         onViewportChange={setViewport}
         onViewportSizeChange={setViewportSizes}
+        zoomFactor={zoomFactor}
+        onZoomReset={() => applyZoomToWebview(1.0)}
       />
       <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
         {isLoading && <div className="browser-loading-bar" />}
