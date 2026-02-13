@@ -3220,6 +3220,12 @@ export const annotationScript = `
     }
   }, true);
 
+  // Release DOM references on page unload to prevent memory leaks
+  window.addEventListener('beforeunload', function() {
+    pendingAnnotations.forEach(function(ann) { ann.element = null; });
+    pendingAnnotations = [];
+  });
+
   // Expose functions for external control
   window.__claudeDesignEnable = enableAnnotateMode;
   window.__claudeDesignDisable = disableAnnotateMode;

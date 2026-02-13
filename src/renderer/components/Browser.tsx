@@ -370,7 +370,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     setupMessageBridge();
 
     // Poll for messages - use JSON to ensure serializable return value
+    // Guard against queuing: skip poll if previous one is still in flight
+    let polling = false;
     const pollInterval = setInterval(async () => {
+      if (polling) return;
+      polling = true;
       try {
         const result = await webview.executeJavaScript(`
           (function() {
@@ -480,8 +484,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         }
       } catch {
         // Webview might not be ready or navigating
+      } finally {
+        polling = false;
       }
-    }, 100);
+    }, 200);
 
     return () => clearInterval(pollInterval);
   }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, addToTodoList, projectPath, openFileInCodeView]);

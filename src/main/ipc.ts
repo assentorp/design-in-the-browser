@@ -12,10 +12,14 @@ import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } f
 import { getPresets, savePresets } from './presets';
 import { getDesignTokens } from './tailwind-tokens';
 
+// Max buffered output chunks before renderer signals ready (~5MB worth)
+const MAX_OUTPUT_BUFFER = 1000;
+
 interface SessionState {
   ptyProcess: pty.IPty;
   ready: boolean;
   outputBuffer: string[];
+  disposables: { dispose: () => void }[];
 }
 
 const sessions = new Map<string, SessionState>();
@@ -76,26 +80,32 @@ export function setupIPC(mainWindow: BrowserWindow) {
       ptyProcess,
       ready: false,
       outputBuffer: [],
+      disposables: [],
     };
 
     sessions.set(sessionId, session);
     console.log('[IPC] PTY process started for session:', sessionId, 'PID:', ptyProcess.pid);
 
-    // Send terminal output to renderer (buffer until ready)
-    ptyProcess.onData((data) => {
+    // Send terminal output to renderer (buffer until ready, with cap)
+    const dataDisposable = ptyProcess.onData((data) => {
       const s = sessions.get(sessionId);
       if (!s) return;
 
       if (s.ready) {
         mainWindow.webContents.send('terminal:data', { sessionId, data });
       } else {
-        s.outputBuffer.push(data);
+        if (s.outputBuffer.length < MAX_OUTPUT_BUFFER) {
+          s.outputBuffer.push(data);
+        }
+        // Drop data beyond the cap — renderer will get what's available when it signals ready
       }
     });
 
-    ptyProcess.onExit(() => {
+    const exitDisposable = ptyProcess.onExit(() => {
       console.log('[IPC] PTY process exited for session:', sessionId);
     });
+
+    session.disposables.push(dataDisposable, exitDisposable);
   });
 
   // Destroy a terminal session
@@ -103,6 +113,9 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const session = sessions.get(sessionId);
     if (session) {
       console.log('[IPC] Destroying session:', sessionId);
+      for (const d of session.disposables) d.dispose();
+      session.disposables.length = 0;
+      session.outputBuffer.length = 0;
       session.ptyProcess.kill();
       sessions.delete(sessionId);
     }
@@ -215,7 +228,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
       const screenshotPaths: string[] = [];
 
-      // Save screenshot for each annotation
+      // Save screenshot for each annotation, then release base64 from memory
       for (let i = 0; i < anyData.annotations.length; i++) {
         const ann = anyData.annotations[i];
         if (ann.screenshot) {
@@ -229,6 +242,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
             console.error('[IPC] Failed to save screenshot:', err);
             screenshotPaths.push('');
           }
+          ann.screenshot = '';  // Release base64 string from memory
         } else {
           screenshotPaths.push('');
         }
@@ -258,7 +272,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       let screenshotPath: string | undefined;
       let referenceImagePath: string | undefined;
 
-      // Save screenshot if present
+      // Save screenshot if present, then release base64 from memory
       if (data.screenshot) {
         try {
           screenshotPath = path.join(screenshotDir, `claude-design-screenshot-${timestamp}.png`);
@@ -268,9 +282,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
         } catch (err) {
           console.error('[IPC] Failed to save screenshot:', err);
         }
+        data.screenshot = '';  // Release base64 string from memory
       }
 
-      // Save reference image if present
+      // Save reference image if present, then release base64 from memory
       if (data.referenceImage) {
         try {
           const matches = data.referenceImage.match(/^data:image\/(\w+);base64,/);
@@ -282,6 +297,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
         } catch (err) {
           console.error('[IPC] Failed to save reference image:', err);
         }
+        data.referenceImage = '';  // Release base64 string from memory
       }
 
       const prompt = formatAnnotationPrompt(data, screenshotPath, referenceImagePath);
@@ -852,6 +868,9 @@ export function setupIPC(mainWindow: BrowserWindow) {
   mainWindow.on('closed', () => {
     for (const [sessionId, session] of sessions) {
       console.log('[IPC] Cleaning up session:', sessionId);
+      for (const d of session.disposables) d.dispose();
+      session.disposables.length = 0;
+      session.outputBuffer.length = 0;
       session.ptyProcess.kill();
     }
     sessions.clear();

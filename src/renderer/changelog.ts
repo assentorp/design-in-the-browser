@@ -6,6 +6,17 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.7',
+    date: 'February 13, 2026',
+    changes: [
+      'Fix massive memory leak: cap terminal output buffer in main process (was growing unbounded)',
+      'Fix memory leak: guard webview message polling against queuing and reduce poll rate',
+      'Fix memory leak: dispose PTY event listeners when terminal sessions are destroyed',
+      'Fix memory leak: release base64 screenshot data from memory after writing to disk',
+      'Fix memory leak: clear DOM element references from pending annotations on page unload',
+    ],
+  },
+  {
     version: '1.3.6',
     date: 'February 13, 2026',
     changes: [
