@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.8',
+    date: 'February 14, 2026',
+    changes: [
+      'Fix terminal spawning as non-login shell: MCP tools, nvm, homebrew, and git credentials now work correctly',
+    ],
+  },
+  {
     version: '1.3.7',
     date: 'February 13, 2026',
     changes: [

@@ -54,7 +54,8 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
     console.log('[IPC] Creating new session:', sessionId, 'cwd:', cwdToUse, 'shell:', shellToUse, 'useWsl:', useWsl);
 
-    // For WSL, we need to convert the Windows path and cd into it
+    // Spawn as login shell so .zprofile/.zshrc/.bash_profile are sourced
+    // (critical for PATH, SSH_AUTH_SOCK, nvm, homebrew, git credentials, MCP tools)
     const shellArgs: string[] = [];
     let wslCwd = cwdToUse;
 
@@ -63,6 +64,8 @@ export function setupIPC(mainWindow: BrowserWindow) {
       wslCwd = toWslPath(cwd);
       // Start WSL with bash and cd to the directory
       shellArgs.push('-e', 'bash', '-c', `cd "${wslCwd}" && exec bash`);
+    } else if (!useWsl) {
+      shellArgs.push('-l');
     }
 
     const ptyProcess = pty.spawn(shellToUse, shellArgs, {
