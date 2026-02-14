@@ -51,6 +51,7 @@ export const annotationScript = `
   // Text selection state
   let selectedText = null;
   let selectedTextRange = null;
+  let textSelectionJustMade = false;
 
   // Inject styles
   const styleId = 'claude-design-annotation-styles';
@@ -2873,6 +2874,42 @@ export const annotationScript = `
   }
 
   // Handle text selection (mouseup)
+  function handleMouseUp(e) {
+    if (!annotateMode) return;
+    if (selectedElement) return; // Don't check text selection if element popover is open
+    if (popoverElement) return; // Don't check if popover already open
+    if (e.target.closest && e.target.closest('.claude-design-popover')) return;
+    if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
+    if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
+    if (e.target.closest && e.target.closest('.claude-design-class-inspector')) return;
+
+    var selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.toString().trim()) return;
+
+    var text = selection.toString().trim();
+    if (!text) return;
+
+    var range = selection.getRangeAt(0);
+    var rect = range.getBoundingClientRect();
+
+    // Store text selection state
+    selectedText = text;
+    selectedTextRange = range;
+    textSelectionJustMade = true;
+    // Clear flag after a short delay in case click doesn't fire
+    setTimeout(function() { textSelectionJustMade = false; }, 300);
+
+    // Clear any element highlight
+    if (highlightedElement) {
+      highlightedElement.classList.remove('claude-design-highlight');
+      highlightedElement = null;
+    }
+
+    var container = range.commonAncestorContainer;
+    var contextEl = container.nodeType === 3 ? container.parentElement : container;
+
+    createPopover(contextEl, { text: text, rect: rect });
+  }
 
   function handleClick(e) {
     if (!annotateMode) return;
@@ -2884,8 +2921,14 @@ export const annotationScript = `
     e.preventDefault();
     e.stopPropagation();
 
-    // If popover is open, clicking outside cancels it
-    if (selectedElement && popoverElement) {
+    // Skip if text selection was just made (mouseup already handled it)
+    if (textSelectionJustMade) {
+      textSelectionJustMade = false;
+      return;
+    }
+
+    // If popover is open (element or text selection), clicking outside cancels it
+    if (popoverElement) {
       cancelAnnotation();
       return;
     }
@@ -3089,6 +3132,7 @@ export const annotationScript = `
 
     document.addEventListener('mouseover', handleMouseOver, true);
     document.addEventListener('mouseout', handleMouseOut, true);
+    document.addEventListener('mouseup', handleMouseUp, true);
     document.addEventListener('click', handleClick, true);
     document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('keydown', handleAltKeyDown, true);
@@ -3111,6 +3155,7 @@ export const annotationScript = `
 
     document.removeEventListener('mouseover', handleMouseOver, true);
     document.removeEventListener('mouseout', handleMouseOut, true);
+    document.removeEventListener('mouseup', handleMouseUp, true);
     document.removeEventListener('click', handleClick, true);
     document.removeEventListener('keydown', handleKeyDown, true);
     document.removeEventListener('keydown', handleAltKeyDown, true);
