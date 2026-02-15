@@ -337,24 +337,28 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     mainAPI.openInEditor(filePath, gotoLine, undefined, projectPath);
   }, [clearSelection, projectPath]);
 
-  // Poll for messages from the injected script
+  // Event-driven message bridge: webview signals via console.log, we fetch on demand
   useEffect(() => {
     if (!isReady) return;
 
     const webview = webviewRef.current;
     if (!webview) return;
 
-    // Set up message polling via a bridge script
+    // Set up message bridge in webview — posts messages to a queue,
+    // then signals the renderer via console.log instead of requiring polling
     const setupMessageBridge = async () => {
       try {
         await webview.executeJavaScript(`
           if (!window.__claudeDesignMessageBridge) {
             window.__claudeDesignMessageBridge = true;
             window.__claudeDesignMessages = [];
+            // Capture native console.log before page code can override it
+            var __claudeSignal = console.log.bind(console);
 
             window.addEventListener('message', function(e) {
               if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-open-source')) {
                 window.__claudeDesignMessages.push(e.data);
+                __claudeSignal('__claude_msg__');
               }
             });
           }
@@ -369,12 +373,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
     setupMessageBridge();
 
-    // Poll for messages - use JSON to ensure serializable return value
-    // Guard against queuing: skip poll if previous one is still in flight
-    let polling = false;
-    const pollInterval = setInterval(async () => {
-      if (polling) return;
-      polling = true;
+    // Fetch and process queued messages from the webview
+    let fetching = false;
+    const fetchMessages = async () => {
+      if (fetching) return;
+      fetching = true;
       try {
         const result = await webview.executeJavaScript(`
           (function() {
@@ -485,11 +488,22 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       } catch {
         // Webview might not be ready or navigating
       } finally {
-        polling = false;
+        fetching = false;
       }
-    }, 200);
+    };
 
-    return () => clearInterval(pollInterval);
+    // Listen for signal from webview instead of polling
+    const handleConsoleMessage = (e: Electron.ConsoleMessageEvent) => {
+      if (e.message === '__claude_msg__') {
+        fetchMessages();
+      }
+    };
+
+    webview.addEventListener('console-message', handleConsoleMessage);
+
+    return () => {
+      webview.removeEventListener('console-message', handleConsoleMessage);
+    };
   }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, addToTodoList, projectPath, openFileInCodeView]);
 
   // Sync CLI running state to webview so it can auto-queue annotations

@@ -10,6 +10,7 @@ export const changelog: ChangelogEntry[] = [
     date: 'February 14, 2026',
     changes: [
       'Fix terminal spawning as non-login shell: MCP tools, nvm, homebrew, and git credentials now work correctly',
+      'Fix high CPU usage: replace constant webview polling with event-driven messaging (119% → near 0% at idle)',
     ],
   },
   {
