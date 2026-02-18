@@ -191,12 +191,14 @@ export default function App() {
 
       const sid = session.id;
 
-      // Ignore tiny data chunks (cursor blinks, TUI redraws) — these
-      // shouldn't keep the "running" state alive after Claude finishes
+      // Small data chunks (cursor positioning, TUI redraws) — reset the
+      // idle timer to keep "running" alive while the TUI is active (e.g.
+      // Claude waiting for permission input).  When the CLI returns to
+      // the shell prompt the PTY goes fully silent, so the timer expires.
       if (data.length <= 8) {
-        // Still start the idle timer if we're currently marked as running
-        // but don't reset an existing one for small chunks
-        if (cliRunningRef.current.has(sid) && !cliTimersRef.current.has(sid)) {
+        if (cliRunningRef.current.has(sid)) {
+          const existing = cliTimersRef.current.get(sid);
+          if (existing) clearTimeout(existing);
           cliTimersRef.current.set(
             sid,
             setTimeout(() => {

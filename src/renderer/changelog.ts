@@ -6,7 +6,7 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: '1.3.10',
+    version: '1.4.0',
     date: 'February 18, 2026',
     changes: [
       'Area selection: click and drag to select a region of the page and annotate it',
@@ -16,6 +16,7 @@ export const changelog: ChangelogEntry[] = [
       'Shortcut hints moved to bottom-left and now show the Drag hint',
       'Fix native image drag interfering with area selection in annotate mode',
       'Fix Alt inspect activating while the annotation prompt is open',
+      'Fix annotation prompt box overflowing when text is long — now scrolls at max height',
     ],
   },
   {

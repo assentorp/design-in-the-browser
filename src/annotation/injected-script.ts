@@ -135,7 +135,7 @@ export const annotationScript = `
         outline: none !important;
         box-sizing: border-box !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
-        overflow-y: hidden !important;
+        overflow-y: auto !important;
         margin: 0 !important;
         text-transform: none !important;
         letter-spacing: normal !important;
@@ -2547,13 +2547,8 @@ export const annotationScript = `
       textarea.style.height = 'auto';
       var scrollH = textarea.scrollHeight;
       var minH = 120;
-      var padBottom = 60; // account for padding-bottom in input-row mode
-      textarea.style.height = Math.max(minH, scrollH) + 'px';
-      if (scrollH > 400) {
-        textarea.style.overflowY = 'auto';
-      } else {
-        textarea.style.overflowY = 'hidden';
-      }
+      var maxH = 400;
+      textarea.style.height = Math.min(maxH, Math.max(minH, scrollH)) + 'px';
     }
     if (textarea) {
       textarea.addEventListener('input', autoResize);
