@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 'react';
 import Toolbar from './Toolbar';
 import type { AnnotationData, MultiEditData, SessionPendingEdit } from '../../shared/types';
 import { annotationScript } from '../../annotation/injected-script';
@@ -32,6 +32,8 @@ interface BrowserProps {
   onAnnotation?: (data: AnnotationData) => void;
   cliRunning?: boolean;
   initialEdits?: SessionPendingEdit[];
+  onZoom?: MutableRefObject<((direction: string) => void) | null>;
+  onToggleTerminal?: () => void;
 }
 
 export type ViewportType = 'desktop' | 'tablet' | 'mobile';
@@ -48,7 +50,7 @@ const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
   mobile: 375,
 };
 
-export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning, initialEdits }: BrowserProps) {
+export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning, initialEdits, onZoom, onToggleTerminal }: BrowserProps) {
   const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -356,7 +358,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             var __claudeSignal = console.log.bind(console);
 
             window.addEventListener('message', function(e) {
-              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-open-source')) {
+              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-open-source' || e.data.type === 'claude-design-toggle-terminal')) {
                 window.__claudeDesignMessages.push(e.data);
                 __claudeSignal('__claude_msg__');
               }
@@ -479,6 +481,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                 }
               } else if (msg.type === 'claude-design-mode-change') {
                 onAnnotateModeChange(msg.enabled);
+              } else if (msg.type === 'claude-design-toggle-terminal') {
+                onToggleTerminal?.();
               } else if (msg.type === 'claude-design-pending-update') {
                 onPendingEditsChange(msg.items || [], { sendAll: sendAllEdits, removeItem: removeEditItem, clearAll: clearAllEdits });
               }
@@ -679,13 +683,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     applyZoomToWebview(next);
   }, [applyZoomToWebview]);
 
-  // Listen for zoom IPC from main (redirected native zoom)
+  // Expose zoom handler to parent via ref
   useEffect(() => {
-    const onZoom = (window as unknown as { onWebviewZoom?: (cb: (dir: string) => void) => void }).onWebviewZoom;
-    if (onZoom) {
-      onZoom((direction: string) => stepZoom(direction));
-    }
-  }, [stepZoom]);
+    if (onZoom) onZoom.current = stepZoom;
+    return () => { if (onZoom) onZoom.current = null; };
+  }, [onZoom, stepZoom]);
 
   const toggleAnnotate = useCallback(() => {
     onAnnotateModeChange(!annotateMode);

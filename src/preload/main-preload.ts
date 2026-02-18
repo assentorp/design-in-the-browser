@@ -149,10 +149,6 @@ contextBridge.exposeInMainWorld('onClearCacheReload', (callback: () => void) => 
   ipcRenderer.on('clear-cache-and-reload', () => callback());
 });
 
-contextBridge.exposeInMainWorld('onWebviewZoom', (callback: (direction: string) => void) => {
-  ipcRenderer.on('webview-zoom', (_event, direction: string) => callback(direction));
-});
-
-contextBridge.exposeInMainWorld('requestWebviewZoom', (direction: string) => {
-  ipcRenderer.send('webview:zoom', direction);
+contextBridge.exposeInMainWorld('onPaneZoom', (callback: (direction: string, source: string) => void) => {
+  ipcRenderer.on('pane-zoom', (_event, direction: string, source: string) => callback(direction, source));
 });

@@ -52,6 +52,14 @@ export const annotationScript = `
   let selectedText = null;
   let selectedTextRange = null;
 
+  // Area selection state (click-and-drag)
+  let areaSelecting = false;
+  let areaStartX = 0;
+  let areaStartY = 0;
+  let areaOverlayElement = null;
+  let areaSelectedRect = null;
+  let mouseDownTarget = null;
+
   // Inject styles
   const styleId = 'claude-design-annotation-styles';
   if (!document.getElementById(styleId)) {
@@ -850,7 +858,7 @@ export const annotationScript = `
       }
       .claude-design-shortcut-hints {
         position: fixed;
-        top: 16px;
+        bottom: 16px;
         left: 16px;
         z-index: 2147483647;
         background: rgba(31, 31, 31, 0.92);
@@ -948,6 +956,14 @@ export const annotationScript = `
         height: 100vh;
         width: 0;
         border-left: 1px dashed rgba(198, 97, 63, 0.5);
+      }
+      .claude-design-area-select {
+        position: fixed;
+        pointer-events: none;
+        z-index: 2147483640;
+        border: 2px dashed #c6613f;
+        background: rgba(198, 97, 63, 0.08);
+        border-radius: 3px;
       }
     \`;
     document.head.appendChild(style);
@@ -1503,7 +1519,7 @@ export const annotationScript = `
   function handleAltKeyDown(e) {
     if (e.key === 'Alt' && !altKeyDown) {
       altKeyDown = true;
-      if (!annotateMode) return;
+      if (!annotateMode || popoverElement) return;
       // Immediately inspect the element under the cursor
       var target = document.elementFromPoint(lastMouseX, lastMouseY);
       if (target && target !== document.body && target !== document.documentElement &&
@@ -1531,7 +1547,7 @@ export const annotationScript = `
   function handleMouseMoveForAlt(e) {
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
-    if (!annotateMode || !altKeyDown) return;
+    if (!annotateMode || !altKeyDown || popoverElement) return;
 
     var target = e.target;
     if (target === document.body || target === document.documentElement ||
@@ -2372,7 +2388,10 @@ export const annotationScript = `
 
     // Build header based on selection type
     let headerHTML = '';
-    if (textSelection) {
+    const isAreaSelection = textSelection && textSelection.isAreaSelection;
+    if (isAreaSelection) {
+      // No header — the dashed outline shows the selection
+    } else if (textSelection) {
       const truncatedText = textSelection.text.length > 60
         ? textSelection.text.substring(0, 60) + '...'
         : textSelection.text;
@@ -2384,7 +2403,7 @@ export const annotationScript = `
       headerHTML = '<span class="claude-design-popover-badge">' + badgeNum + '</span>';
     }
 
-    const placeholder = textSelection ? 'Fix typo...' : 'What do you want to change?';
+    const placeholder = isAreaSelection ? 'Describe this area...' : (textSelection ? 'Fix typo...' : 'What do you want to change?');
 
     // Check for React source (used by floating code button)
     const reactSource = el ? findReactSource(el) : null;
@@ -2710,6 +2729,9 @@ export const annotationScript = `
     removePopover();
     referenceImageData = null;
 
+    // Clear area selection
+    removeAreaSelection();
+
     // Clear element selection highlight (but keep pending annotations)
     if (selectedElement) {
       // Only remove selected class if not in pending annotations
@@ -2738,6 +2760,12 @@ export const annotationScript = `
       return;
     }
 
+    // Handle area selection - sends immediately
+    if (areaSelectedRect) {
+      sendAnnotation();
+      return;
+    }
+
     // Handle text selection - still sends immediately
     if (selectedText && selectedTextRange) {
       sendAnnotation();
@@ -2759,6 +2787,56 @@ export const annotationScript = `
 
     if (!request) {
       textarea && textarea.focus();
+      return;
+    }
+
+    // Handle area selection annotation
+    if (areaSelectedRect) {
+      const r = areaSelectedRect;
+      const padding = 10;
+      const bounds = {
+        x: Math.max(0, Math.floor(r.x - padding)),
+        y: Math.max(0, Math.floor(r.y - padding)),
+        width: Math.ceil(r.width + padding * 2),
+        height: Math.ceil(r.height + padding * 2),
+      };
+
+      // Find the nearest matching element for context
+      const areaEl = findAreaElement(r);
+      let tagName = 'area-selection';
+      let text = '';
+      let selector = '';
+      let attributes = '';
+
+      if (areaEl) {
+        tagName = areaEl.tagName.toLowerCase();
+        text = (areaEl.textContent || '').trim().substring(0, 50);
+        selector = generateSelector(areaEl);
+        const attrs = [];
+        if (areaEl.id) attrs.push('id="' + areaEl.id + '"');
+        if (areaEl.className && typeof areaEl.className === 'string') attrs.push('class="' + areaEl.className.split(' ').slice(0, 3).join(' ') + '"');
+        ['data-testid', 'data-component', 'aria-label', 'name', 'href'].forEach(function(attr) {
+          const val = areaEl.getAttribute(attr);
+          if (val) attrs.push(attr + '="' + val.substring(0, 30) + '"');
+        });
+        attributes = attrs.join(' ');
+      }
+
+      const data = {
+        url: window.location.href,
+        element: {
+          tagName: tagName,
+          text: text,
+          attributes: attributes,
+          selector: selector,
+        },
+        bounds: bounds,
+        referenceImage: referenceImageData,
+        request: request,
+      };
+
+      window.__claudeDesignSendAnnotation(data);
+      cancelAnnotation();
       return;
     }
 
@@ -2845,7 +2923,7 @@ export const annotationScript = `
   }
 
   function handleMouseOver(e) {
-    if (!annotateMode || selectedElement || gKeyDown) return;
+    if (!annotateMode || selectedElement || gKeyDown || areaSelecting) return;
 
     const target = e.target;
     if (target === document.body || target === document.documentElement ||
@@ -2875,6 +2953,7 @@ export const annotationScript = `
   // Handle text selection (mouseup)
 
   function handleClick(e) {
+    if (areaSelecting) return;
     if (!annotateMode) return;
     if (e.target.closest && e.target.closest('.claude-design-popover')) return;
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
@@ -3058,7 +3137,7 @@ export const annotationScript = `
     removeShortcutHints();
     shortcutHintsElement = document.createElement('div');
     shortcutHintsElement.className = 'claude-design-shortcut-hints';
-    shortcutHintsElement.innerHTML = '<span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span><span><kbd>Shift+G</kbd> Grid overlay</span><span><kbd>F</kbd> Freeze animations</span>';
+    shortcutHintsElement.innerHTML = '<span><kbd>Drag</kbd> Select area</span><span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span><span><kbd>Shift+G</kbd> Grid overlay</span><span><kbd>F</kbd> Freeze animations</span>';
     document.body.appendChild(shortcutHintsElement);
     // Trigger fade-in on next frame
     requestAnimationFrame(function() {
@@ -3082,6 +3161,130 @@ export const annotationScript = `
     }
   }
 
+  // Area selection handlers (click-and-drag)
+  function handleAreaMouseDown(e) {
+    if (!annotateMode || altKeyDown || gKeyDown) return;
+    if (e.button !== 0) return;
+    if (e.target.closest && (
+      e.target.closest('.claude-design-popover') ||
+      e.target.closest('.claude-design-toolbar') ||
+      e.target.closest('.claude-design-code-btn') ||
+      e.target.closest('.claude-design-class-inspector') ||
+      e.target.closest('.claude-design-shortcut-hints')
+    )) return;
+
+    mouseDownTarget = e.target;
+    areaStartX = e.clientX;
+    areaStartY = e.clientY;
+    areaSelecting = false;
+    e.preventDefault();
+  }
+
+  function handleAreaMouseMove(e) {
+    if (!annotateMode || mouseDownTarget === null) return;
+
+    var dx = e.clientX - areaStartX;
+    var dy = e.clientY - areaStartY;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < 8 && !areaSelecting) return;
+
+    if (!areaSelecting) {
+      areaSelecting = true;
+      // Remove element highlight while dragging
+      if (highlightedElement) {
+        highlightedElement.classList.remove('claude-design-highlight');
+        highlightedElement = null;
+      }
+    }
+
+    var x = Math.min(areaStartX, e.clientX);
+    var y = Math.min(areaStartY, e.clientY);
+    var w = Math.abs(e.clientX - areaStartX);
+    var h = Math.abs(e.clientY - areaStartY);
+
+    if (!areaOverlayElement) {
+      areaOverlayElement = document.createElement('div');
+      areaOverlayElement.className = 'claude-design-area-select';
+      document.body.appendChild(areaOverlayElement);
+    }
+
+    areaOverlayElement.style.left = x + 'px';
+    areaOverlayElement.style.top = y + 'px';
+    areaOverlayElement.style.width = w + 'px';
+    areaOverlayElement.style.height = h + 'px';
+  }
+
+  function handleAreaMouseUp(e) {
+    if (!annotateMode || mouseDownTarget === null) return;
+    mouseDownTarget = null;
+
+    if (!areaSelecting) return;
+
+    var x = Math.min(areaStartX, e.clientX);
+    var y = Math.min(areaStartY, e.clientY);
+    var w = Math.abs(e.clientX - areaStartX);
+    var h = Math.abs(e.clientY - areaStartY);
+
+    // Minimum size check
+    if (w < 20 || h < 20) {
+      areaSelecting = false;
+      return;
+    }
+
+    areaSelectedRect = { x: x, y: y, width: w, height: h };
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    createPopover(null, { rect: { left: x, top: y, right: x + w, bottom: y + h, width: w, height: h }, isAreaSelection: true });
+
+    // Reset areaSelecting after a tick so the click handler can check it
+    setTimeout(function() { areaSelecting = false; }, 0);
+  }
+
+  // Find the best DOM element matching a selected area
+  function findAreaElement(rect) {
+    var cx = rect.x + rect.width / 2;
+    var cy = rect.y + rect.height / 2;
+    var el = document.elementFromPoint(cx, cy);
+    if (!el || el === document.body || el === document.documentElement) return null;
+
+    // Walk up to find the element whose bounds best contain the selection
+    var best = el;
+    var bestScore = Infinity;
+    var cur = el;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      var r = cur.getBoundingClientRect();
+      // Score: how much bigger is the element than the selection (prefer smallest containing element)
+      var overlapX = Math.max(0, Math.min(r.right, rect.x + rect.width) - Math.max(r.left, rect.x));
+      var overlapY = Math.max(0, Math.min(r.bottom, rect.y + rect.height) - Math.max(r.top, rect.y));
+      var overlap = overlapX * overlapY;
+      var selArea = rect.width * rect.height;
+      // Element must contain at least 50% of the selection
+      if (overlap >= selArea * 0.5) {
+        var elArea = r.width * r.height;
+        var score = elArea - selArea;
+        if (score >= 0 && score < bestScore) {
+          bestScore = score;
+          best = cur;
+        }
+      }
+      cur = cur.parentElement;
+    }
+    return best;
+  }
+
+  function removeAreaSelection() {
+    areaSelecting = false;
+    areaSelectedRect = null;
+    mouseDownTarget = null;
+    if (areaOverlayElement) {
+      areaOverlayElement.remove();
+      areaOverlayElement = null;
+    }
+  }
+
   function enableAnnotateMode() {
     if (annotateMode) return;
     annotateMode = true;
@@ -3099,6 +3302,9 @@ export const annotationScript = `
     document.addEventListener('mousemove', handleMouseMoveForRuler, true);
     document.addEventListener('keydown', handleFKey, true);
     document.addEventListener('keydown', handleShiftGKey, true);
+    document.addEventListener('mousedown', handleAreaMouseDown, true);
+    document.addEventListener('mousemove', handleAreaMouseMove, true);
+    document.addEventListener('mouseup', handleAreaMouseUp, true);
 
     showShortcutHints();
   }
@@ -3121,6 +3327,10 @@ export const annotationScript = `
     document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
     document.removeEventListener('keydown', handleFKey, true);
     document.removeEventListener('keydown', handleShiftGKey, true);
+    document.removeEventListener('mousedown', handleAreaMouseDown, true);
+    document.removeEventListener('mousemove', handleAreaMouseMove, true);
+    document.removeEventListener('mouseup', handleAreaMouseUp, true);
+    removeAreaSelection();
     removeRulerGuides();
     removeGridOverlay();
     removeShortcutHints();
@@ -3217,6 +3427,11 @@ export const annotationScript = `
         enableAnnotateMode();
         window.__claudeDesignNotifyModeChange(true);
       }
+    }
+    // Cmd+L / Ctrl+L: toggle terminal
+    if ((e.key === 'l' || e.key === 'L') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      window.postMessage({ type: 'claude-design-toggle-terminal' }, '*');
     }
   }, true);
 

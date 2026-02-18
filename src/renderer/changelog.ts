@@ -6,6 +6,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.10',
+    date: 'February 18, 2026',
+    changes: [
+      'Area selection: click and drag to select a region of the page and annotate it',
+      'Cmd+L toggles the terminal panel open/closed',
+      'Context-aware zoom: Cmd+=/- zooms the browser or terminal depending on which pane has focus',
+      'Terminal zoom: adjust terminal font size (8–24px) with Cmd+=/-, Cmd+0 resets to default',
+      'Shortcut hints moved to bottom-left and now show the Drag hint',
+      'Fix native image drag interfering with area selection in annotate mode',
+      'Fix Alt inspect activating while the annotation prompt is open',
+    ],
+  },
+  {
     version: '1.3.8',
     date: 'February 14, 2026',
     changes: [

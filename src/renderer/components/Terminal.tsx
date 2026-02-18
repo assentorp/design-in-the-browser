@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type MutableRefObject } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -24,6 +24,10 @@ export function scrollTerminalToBottom(tabId: string) {
   }
 }
 
+const DEFAULT_FONT_SIZE = 13;
+const MIN_FONT_SIZE = 8;
+const MAX_FONT_SIZE = 24;
+
 interface TerminalProps {
   sessionId: string;
   collapsed?: boolean;
@@ -37,14 +41,18 @@ interface TerminalProps {
   cliToolTabId?: string | null;
   cliToolRunning?: boolean;
   hasTodoItems?: boolean;
+  onZoom?: MutableRefObject<((direction: string) => void) | null>;
 }
 
-export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath, shell, cliToolTabId, cliToolRunning, hasTodoItems }: TerminalProps) {
+export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath, shell, cliToolTabId, cliToolRunning, hasTodoItems, onZoom }: TerminalProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const projectPathRef = useRef(projectPath);
   const shellRef = useRef(shell);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
   projectPathRef.current = projectPath;
   shellRef.current = shell;
 
@@ -75,7 +83,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
     const terminal = new XTerm({
       cursorBlink: true,
       macOptionIsMeta: true,
-      fontSize: 13,
+      fontSize: fontSizeRef.current,
       fontFamily: '"SF Mono", Monaco, "Cascadia Code", "Consolas", monospace',
       theme: {
         background: '#1a1a1a',
@@ -361,6 +369,43 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       wrapper.removeEventListener('drop', handleDrop, true);
     };
   }, [activeTabId]);
+
+  // Terminal font size zoom
+  const handleTerminalZoom = useCallback((direction: string) => {
+    setFontSize((prev) => {
+      let next: number;
+      if (direction === 'reset') {
+        next = DEFAULT_FONT_SIZE;
+      } else if (direction === 'in') {
+        next = Math.min(MAX_FONT_SIZE, prev + 1);
+      } else {
+        next = Math.max(MIN_FONT_SIZE, prev - 1);
+      }
+      const mainAPI = getMainAPI();
+      for (const [tabId, inst] of terminalInstances) {
+        inst.terminal.options.fontSize = next;
+        try {
+          if (inst.containerEl.offsetWidth > 0 && inst.containerEl.offsetHeight > 0) {
+            inst.fitAddon.fit();
+            if (mainAPI) {
+              mainAPI.resizeTerminal(tabId, inst.terminal.cols, inst.terminal.rows);
+            }
+          }
+        } catch { /* ignore fit errors */ }
+      }
+      return next;
+    });
+  }, []);
+
+  // Expose zoom handler to parent via ref
+  useEffect(() => {
+    if (onZoom) {
+      onZoom.current = handleTerminalZoom;
+    }
+    return () => {
+      if (onZoom) onZoom.current = null;
+    };
+  }, [onZoom, handleTerminalZoom]);
 
   return (
     <div className="terminal-container">

@@ -203,11 +203,12 @@ app.on('web-contents-created', (_, contents) => {
       return;
     }
 
-    // Cmd+=/-, Cmd+0: block native zoom, send to renderer for CSS zoom on webview
+    // Cmd+=/-, Cmd+0: block native zoom, send to renderer for context-aware zoom
     if ((input.key === '=' || input.key === '+' || input.key === '-' || input.key === '0') && mainWindow) {
       _event.preventDefault();
+      const source = contents.getType() === 'webview' ? 'browser' : 'renderer';
       const direction = input.key === '-' ? 'out' : input.key === '0' ? 'reset' : 'in';
-      mainWindow.webContents.send('webview-zoom', direction);
+      mainWindow.webContents.send('pane-zoom', direction, source);
     }
   });
 });

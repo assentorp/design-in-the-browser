@@ -33,6 +33,8 @@ interface UpdateInfo {
   downloaded?: boolean;
 }
 
+export type FocusedPane = 'browser' | 'terminal';
+
 export default function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
@@ -42,6 +44,11 @@ export default function App() {
   const [editActions, setEditActions] = useState<EditActions | null>(null);
   const editActionsRef = useRef<EditActions | null>(null);
   editActionsRef.current = editActions;
+  const [focusedPane, setFocusedPane] = useState<FocusedPane>('browser');
+  const focusedPaneRef = useRef<FocusedPane>('browser');
+  focusedPaneRef.current = focusedPane;
+  const browserZoomRef = useRef<((direction: string) => void) | null>(null);
+  const terminalZoomRef = useRef<((direction: string) => void) | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showWhatsNewModal, setShowWhatsNewModal] = useState(false);
@@ -119,6 +126,32 @@ export default function App() {
       onSendQueuedEdits(() => {
         // Send directly via main process (bypasses fragile editActions ref)
         window.mainAPI?.sendAllEdits();
+      });
+    }
+  }, []);
+
+  // Toggle Terminal shortcut (Cmd+L) — DOM listener (handles renderer focus; webview handled by injected script)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'l' || e.key === 'L') && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        toggleTerminalRef.current();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
+
+  // Context-aware zoom (Cmd+=/-, Cmd+0) — routes to browser or terminal
+  useEffect(() => {
+    const onPaneZoom = (window as unknown as { onPaneZoom?: (cb: (dir: string, source: string) => void) => void }).onPaneZoom;
+    if (onPaneZoom) {
+      onPaneZoom((direction: string, source: string) => {
+        if (source === 'browser' || focusedPaneRef.current === 'browser') {
+          browserZoomRef.current?.(direction);
+        } else {
+          terminalZoomRef.current?.(direction);
+        }
       });
     }
   }, []);
@@ -307,11 +340,14 @@ export default function App() {
 
 
   const toggleTerminal = useCallback(() => {
-    if (!activeSession) return;
-    updateSession(activeSessionId, {
-      terminalCollapsed: !activeSession.terminalCollapsed,
-    });
-  }, [activeSessionId, activeSession, updateSession]);
+    const session = sessionsRef.current.find((s) => s.id === activeSessionId) || sessionsRef.current[0];
+    if (!session) return;
+    setSessions((prev) =>
+      prev.map((s) => (s.id === session.id ? { ...s, terminalCollapsed: !s.terminalCollapsed } : s))
+    );
+  }, [activeSessionId]);
+  const toggleTerminalRef = useRef(toggleTerminal);
+  toggleTerminalRef.current = toggleTerminal;
 
   const handleTerminalTabsChange = useCallback(
     (tabs: Session['terminalTabs'], activeTabId: string, tabCounter: number) => {
@@ -588,6 +624,7 @@ export default function App() {
           style={{
             width: activeSession.terminalCollapsed ? '100%' : `${activeSession.browserWidth}%`,
           }}
+          onMouseDown={() => setFocusedPane('browser')}
         >
           <Browser
             key={activeSessionId}
@@ -602,6 +639,8 @@ export default function App() {
             onAnnotation={handleAnnotation}
             cliRunning={activeSession.cliToolRunning}
             initialEdits={activeSession.pendingEdits}
+            onZoom={browserZoomRef}
+            onToggleTerminal={toggleTerminal}
           />
         </div>
         {!activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}
@@ -610,6 +649,7 @@ export default function App() {
           style={{
             width: activeSession.terminalCollapsed ? '0%' : `${100 - activeSession.browserWidth}%`,
           }}
+          onMouseDown={() => setFocusedPane('terminal')}
         >
           <Terminal
             key={activeSessionId}
@@ -624,6 +664,7 @@ export default function App() {
             cliToolTabId={activeSession.cliToolTabId}
             cliToolRunning={activeSession.cliToolRunning}
             hasTodoItems={pendingEdits.length > 0}
+            onZoom={terminalZoomRef}
           >
             {pendingEdits.length > 0 && (
               <EditQueuePanel edits={pendingEdits} actions={editActions} cliRunning={activeSession.cliToolRunning} />
