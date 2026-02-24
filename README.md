@@ -1,9 +1,11 @@
 # Design In The Browser
 
+![icon](https://github.com/user-attachments/assets/b57c4c81-f109-427f-b6e7-454dea817203)
+
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Contributing](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-<img width="659" height="414" alt="Screenshot 2026-02-24 at 13 18 31" src="https://github.com/user-attachments/assets/25874a3b-4347-4f95-8318-eabaa1a86f72" />
+![mockup](https://github.com/user-attachments/assets/81f81ec8-4fd6-4e5c-8e0c-cdbce3e42824)
 
 No more tab-switching, screenshot-pasting, and explaining which button you mean. Just click it.
 
