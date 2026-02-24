@@ -7,6 +7,9 @@ release/
 .env.local
 .env.*
 
+# Claude Code
+.claude/
+
 # Editor
 .vscode/
 .idea/
