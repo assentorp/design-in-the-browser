@@ -3,6 +3,8 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Contributing](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+<img width="659" height="414" alt="Screenshot 2026-02-24 at 13 18 31" src="https://github.com/user-attachments/assets/25874a3b-4347-4f95-8318-eabaa1a86f72" />
+
 A desktop app for visually annotating elements in a live browser and sending edit instructions directly to an AI coding assistant running in a side-by-side terminal.
 
 Point at what you want changed, describe the change, and let the AI handle the code.
