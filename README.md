@@ -5,28 +5,36 @@
 
 <img width="659" height="414" alt="Screenshot 2026-02-24 at 13 18 31" src="https://github.com/user-attachments/assets/25874a3b-4347-4f95-8318-eabaa1a86f72" />
 
-A desktop app for visually annotating elements in a live browser and sending edit instructions directly to an AI coding assistant running in a side-by-side terminal.
+No more tab-switching, screenshot-pasting, and explaining which button you mean. Just click it.
 
-Point at what you want changed, describe the change, and let the AI handle the code.
+A desktop app for visually annotating elements in a live browser and sending edit instructions directly to an AI coding assistant running in a side-by-side terminal. Point at what you want changed, describe the change, and let the AI handle the code.
+
+**[Download for macOS](https://github.com/assentorp/ditb-releases/releases/download/v1.4.0/Design-In-The-Browser-1.4.0-arm64.dmg)** | **[Download for Windows](https://github.com/assentorp/ditb-releases/releases/download/v1.4.0/Design-In-The-Browser-Setup-1.4.0.exe)**
+
+Requires [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://cursor.sh), [Codex](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli) · v1.4.0 · macOS 13+ / Windows 10+
 
 ## How it works
 
 1. **Open a project** — configure your project path, dev server command, and URL
 2. **Browse your app** — a built-in browser loads your running dev server
-3. **Annotate** — click elements, select text, or multi-select to describe changes
-4. **AI edits** — annotations are sent as prompts to your CLI tool (Claude, Cursor, or Gemini) in the terminal
+3. **Annotate** — click elements, select areas, or multi-select to describe changes
+4. **AI edits** — annotations are sent as prompts to your CLI tool in the integrated terminal
 5. **See results** — the browser reloads with changes applied
 
 ## Features
 
-- **Visual annotations** — click any element, select text, or batch-select multiple elements
-- **Screenshot context** — element screenshots are automatically attached to prompts
-- **Reference images** — drop in a design reference for the AI to match
-- **Multi-terminal tabs** — dev server + AI CLI + extra terminals in one panel
-- **Project presets** — save and switch between project configurations
-- **Session tabs** — work on multiple projects simultaneously
-- **Viewport sizing** — test responsive layouts with custom widths
-- **Update notifications** — automatic check for new releases on startup
+- **Point & Click** — click any element to tell AI what to change, no screenshots needed
+- **Area Select** — drag a box around any area to give AI the visual context it needs
+- **Jump to Code** — click any element and jump straight to its source code
+- **Multi-Edit** — select multiple elements, queue up changes, send them all at once
+- **CSS Inspector** — hold `ALT` to inspect styles and copy values between elements instantly
+- **Reference Images** — drop in a design screenshot and AI matches it
+- **Design Tokens** — reference your CSS variables and Tailwind tokens directly in prompts to stay on-brand
+- **Integrated Terminal** — browser and terminal in one window with multi-tab support
+- **Responsive Testing** — switch between desktop, tablet, and mobile viewports instantly
+- **Project Presets** — save and switch between project configurations
+- **Session Tabs** — work on multiple projects simultaneously
+- **Update Notifications** — automatic check for new releases on startup
 
 ## Getting started
 
@@ -41,7 +49,7 @@ This starts the Vite dev server and Electron concurrently.
 
 - Node.js 20+
 - A running dev server for your project (e.g. `npm run dev` in your project)
-- An AI CLI tool installed: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://cursor.sh), or [Gemini CLI](https://github.com/google-gemini/gemini-cli)
+- An AI CLI tool installed: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://cursor.sh), [Codex](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 
 ## Building
 
