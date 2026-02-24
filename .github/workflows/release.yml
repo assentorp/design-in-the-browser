@@ -28,6 +28,9 @@ jobs:
       - run: npm ci
 
       - run: npm run build:main && npx vite build
+        env:
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
 
       - name: Build Electron app (both architectures)
         run: npx electron-builder --mac --arm64 --x64 --publish never
@@ -66,6 +69,9 @@ jobs:
       - run: npm ci
 
       - run: npm run build:main && npx vite build
+        env:
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
 
       - name: Build Electron app
         run: npx electron-builder --win --publish never

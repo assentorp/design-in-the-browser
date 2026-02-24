@@ -1,9 +1,11 @@
 import posthog from 'posthog-js';
 
-const POSTHOG_KEY = 'phc_GvJ6Ja6MY05KTmtD3Wj7QF3rCbczJwUQhLN8jPU8qqe';
-const POSTHOG_HOST = 'https://eu.i.posthog.com';
+const POSTHOG_KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined;
+const POSTHOG_HOST = import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined;
 
 export function initAnalytics(): void {
+  if (!POSTHOG_KEY || !POSTHOG_HOST) return;
+
   if (posthog.__loaded) {
     posthog.opt_in_capturing();
     return;
