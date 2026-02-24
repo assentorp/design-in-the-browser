@@ -1,5 +1,8 @@
 # Design In The Browser
 
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Contributing](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 A desktop app for visually annotating elements in a live browser and sending edit instructions directly to an AI coding assistant running in a side-by-side terminal.
 
 Point at what you want changed, describe the change, and let the AI handle the code.
@@ -51,14 +54,7 @@ Output goes to the `release/` directory.
 
 ### Releases
 
-Pushing a version tag triggers a GitHub Actions build:
-
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-This creates a GitHub Release with macOS (arm64 + x64) and Windows builds.
+Releases are handled by the maintainer. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute.
 
 ## Project structure
 
@@ -79,4 +75,8 @@ src/
 
 ## License
 
-MIT
+[MIT](LICENSE)
+
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md) for details on analytics and data collection.
