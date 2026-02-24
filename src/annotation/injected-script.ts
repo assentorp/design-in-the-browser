@@ -2986,9 +2986,6 @@ export const annotationScript = `
     if (e.key === 'Escape') {
       if (selectedElement) {
         cancelAnnotation();
-      } else {
-        disableAnnotateMode();
-        window.__claudeDesignNotifyModeChange(false);
       }
     }
     // Cmd+E / Ctrl+E handled by persistent listener (see below)
