@@ -141,7 +141,7 @@ export function createMenu(mainWindow: BrowserWindow) {
           label: 'Learn More',
           click: async () => {
             const { shell } = await import('electron');
-            shell.openExternal('https://github.com/assentorp/ditb');
+            shell.openExternal('https://github.com/assentorp/design-in-the-browser');
           },
         },
       ],

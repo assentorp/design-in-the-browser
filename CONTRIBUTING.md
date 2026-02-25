@@ -13,7 +13,7 @@ Thanks for your interest in contributing! Here's how to get started.
 ### Getting Started
 
 ```bash
-git clone https://github.com/assentorp/ditb.git
+git clone https://github.com/assentorp/design-in-the-browser.git
 cd ditb
 npm install
 npm run dev
