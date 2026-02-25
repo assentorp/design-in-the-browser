@@ -159,7 +159,7 @@ GitHub Actions builds macOS (arm64 + x64) and Windows, uploads:
     "publish": {
       "provider": "github",
       "owner": "assentorp",
-      "repo": "ditb"
+      "repo": "design-in-the-browser"
     },
     "win": {
       "artifactName": "Design-In-The-Browser-Setup-${version}.${ext}"
