@@ -3298,6 +3298,17 @@ export const annotationScript = `
     document.addEventListener('mousemove', handleAreaMouseMove, true);
     document.addEventListener('mouseup', handleAreaMouseUp, true);
 
+    // Restore visual highlights for any surviving pending annotations
+    if (pendingAnnotations.length > 0) {
+      todoMode = true;
+      pendingAnnotations.forEach(function(ann) {
+        if (ann.element && ann.element.isConnected) {
+          ann.element.classList.add('claude-design-multi-selected');
+        }
+      });
+      updatePendingBadges();
+    }
+
     showShortcutHints();
   }
 
@@ -3345,14 +3356,26 @@ export const annotationScript = `
     // Clear class inspector
     removeClassInspectorImmediate();
 
-    // Clear pending annotations
-    clearPendingAnnotations();
+    // Keep pending annotations in the queue — only clear visual highlights
+    pendingAnnotations.forEach(function(ann) {
+      ann.element.classList.remove('claude-design-multi-selected');
+      ann.element.classList.remove('claude-design-selected');
+      var badge = ann.element.querySelector('.claude-design-multi-badge');
+      if (badge) badge.remove();
+    });
+    removeToolbar();
 
     cancelAnnotation();
   }
 
   // Add annotation to todo list programmatically (used when CLI is busy)
   function addToTodoList(note, selector, tagName, text, attributes) {
+    // Skip if an identical item already exists (prevents duplicates during re-injection)
+    var isDupe = pendingAnnotations.some(function(a) {
+      return a.note === note && a.selector === selector;
+    });
+    if (isDupe) return;
+
     // Find element by selector if possible, or create a placeholder
     var el = null;
     try {
@@ -3442,6 +3465,7 @@ export const annotationScript = `
   window.__claudeDesignClearAll = clearPendingAnnotations;
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
   window.__claudeDesignAddToTodo = addToTodoList;
+  window.__claudeDesignNotifyPending = notifyPendingUpdate;
   window.__claudeDesignSetAltKey = setAltKeyState;
   window.__claudeDesignToggleFreeze = toggleAnimationFreeze;
 })();

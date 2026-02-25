@@ -137,6 +137,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         }
       }
 
+      needsEditReinjection.current = true;
       setIsReady(true);
       hasEverLoadedRef.current = true;
       console.log('[Browser] Injection complete, isReady = true');
@@ -194,12 +195,18 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }
   }, []);
 
-  // Re-inject saved pending edits after webview becomes ready (only edits present at mount time)
+  // Re-inject saved pending edits after the annotation script is freshly injected.
+  // injectAndSetup sets this flag; the effect below consumes it once.
+  const needsEditReinjection = useRef(false);
+  // Keep snapshot in sync with latest prop value
   const initialEditsSnapshot = useRef(initialEdits);
-  const initialEditsInjectedRef = useRef(false);
   useEffect(() => {
-    if (!isReady || initialEditsInjectedRef.current) return;
-    initialEditsInjectedRef.current = true;
+    initialEditsSnapshot.current = initialEdits;
+  }, [initialEdits]);
+
+  useEffect(() => {
+    if (!isReady || !needsEditReinjection.current) return;
+    needsEditReinjection.current = false;
 
     const edits = initialEditsSnapshot.current;
     if (!edits?.length) return;
@@ -376,9 +383,14 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     setupMessageBridge();
 
     // Fetch and process queued messages from the webview
+    // Use a pending flag so messages that arrive during a fetch are not lost
     let fetching = false;
+    let fetchAgain = false;
     const fetchMessages = async () => {
-      if (fetching) return;
+      if (fetching) {
+        fetchAgain = true;  // Will re-fetch after current one completes
+        return;
+      }
       fetching = true;
       try {
         const result = await webview.executeJavaScript(`
@@ -493,6 +505,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         // Webview might not be ready or navigating
       } finally {
         fetching = false;
+        // If a message arrived while we were fetching, fetch again to pick it up
+        if (fetchAgain) {
+          fetchAgain = false;
+          fetchMessages();
+        }
       }
     };
 
