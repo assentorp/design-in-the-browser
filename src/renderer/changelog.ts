@@ -6,6 +6,18 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.5.0',
+    date: 'February 25, 2026',
+    changes: [
+      'Open source: Design In The Browser is now open source under the MIT license',
+      'Fix Escape key in annotate mode no longer exits edit mode unexpectedly',
+      'Fix todo items duplicating during webview re-injection',
+      'Fix pending annotations being lost on page navigation — highlights now restore automatically',
+      'Fix webview message bridge dropping messages that arrived during an in-flight fetch',
+      'Fix pending edits not re-injecting after in-page navigation',
+    ],
+  },
+  {
     version: '1.4.0',
     date: 'February 18, 2026',
     changes: [
