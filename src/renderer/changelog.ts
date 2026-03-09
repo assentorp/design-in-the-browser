@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.5.1',
+    date: 'March 9, 2026',
+    changes: [
+      'Clear cache & reload button added to the browser toolbar — clears cache, cookies, and localStorage in one click',
+      'Tooltips on all toolbar buttons for better discoverability',
+      'Fix editor (VS Code, Cursor) failing to open projects with special characters in the path on macOS',
+    ],
+  },
+  {
     version: '1.5.0',
     date: 'February 25, 2026',
     changes: [
