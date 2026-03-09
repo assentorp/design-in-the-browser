@@ -524,27 +524,49 @@ export function setupIPC(mainWindow: BrowserWindow) {
     },
   };
 
-  function resolveEditorCmd(editor: CodeEditor): string {
+  // Electron-based editors (Cursor, VS Code) use shell wrapper scripts that
+  // break on paths with special characters like parentheses (e.g. `(home)`).
+  // The wrappers use `eval` which re-parses arguments through the shell.
+  // To avoid this, resolve to the actual Electron binary + CLI JS on macOS.
+  const electronEditorPaths: Partial<Record<CodeEditor, { electronBin: string; cliJs: string }>> = {
+    cursor: {
+      electronBin: '/Applications/Cursor.app/Contents/MacOS/Cursor',
+      cliJs: '/Applications/Cursor.app/Contents/Resources/app/out/cli.js',
+    },
+    vscode: {
+      electronBin: '/Applications/Visual Studio Code.app/Contents/MacOS/Electron',
+      cliJs: '/Applications/Visual Studio Code.app/Contents/Resources/app/out/cli.js',
+    },
+  };
+
+  function resolveEditorCmd(editor: CodeEditor): { cmd: string; prependArgs: string[]; extraEnv: Record<string, string> } {
+    // On macOS, bypass shell wrappers for Electron-based editors
+    if (process.platform === 'darwin') {
+      const ep = electronEditorPaths[editor];
+      if (ep && fs.existsSync(ep.electronBin) && fs.existsSync(ep.cliJs)) {
+        return { cmd: ep.electronBin, prependArgs: [ep.cliJs], extraEnv: { ELECTRON_RUN_AS_NODE: '1' } };
+      }
+    }
     const config = editorConfigs[editor];
     if (process.platform === 'darwin' && config.macPaths) {
       for (const p of config.macPaths) {
-        if (fs.existsSync(p)) return p;
+        if (fs.existsSync(p)) return { cmd: p, prependArgs: [], extraEnv: {} };
       }
     }
-    return config.cmd;
+    return { cmd: config.cmd, prependArgs: [], extraEnv: {} };
   }
 
   ipcMain.on('editor:open-file', (_, { filePath, line, column, projectPath }: { filePath: string; line?: number; column?: number; projectPath?: string }) => {
     const settings = getSettings();
     const editor = (settings.editor || 'vscode') as CodeEditor;
     const config = editorConfigs[editor];
-    const cmd = resolveEditorCmd(editor);
-    const args = config.buildArgs(filePath, line, column, projectPath);
+    const { cmd, prependArgs, extraEnv } = resolveEditorCmd(editor);
+    const args = [...prependArgs, ...config.buildArgs(filePath, line, column, projectPath)];
     console.log('[IPC] Opening in editor:', editor, cmd, args.join(' '));
     spawn(cmd, args, {
       detached: true,
       stdio: 'ignore',
-      env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
+      env: { ...process.env, ...extraEnv, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
     }).unref();
   });
 
