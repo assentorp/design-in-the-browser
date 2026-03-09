@@ -95,6 +95,7 @@ export function createMenu(mainWindow: BrowserWindow) {
           accelerator: 'CmdOrCtrl+Shift+R',
           click: async () => {
             await session.defaultSession.clearCache();
+            await session.defaultSession.clearStorageData();
             mainWindow.webContents.send('clear-cache-and-reload');
           },
         },

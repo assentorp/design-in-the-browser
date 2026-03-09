@@ -660,6 +660,14 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     webviewRef.current?.reloadIgnoringCache();
   }, []);
 
+  const clearCacheAndReload = useCallback(async () => {
+    const mainAPI = getMainAPI();
+    if (mainAPI) {
+      try { await mainAPI.clearWebviewCache(); } catch (err) { console.error('[Browser] Clear cache error:', err); }
+    }
+    webviewRef.current?.reloadIgnoringCache();
+  }, []);
+
   // Listen for clear cache and reload from menu
   useEffect(() => {
     const onClearCacheReload = (window as unknown as { onClearCacheReload?: (cb: () => void) => void }).onClearCacheReload;
@@ -732,6 +740,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onBack={goBack}
         onForward={goForward}
         onReload={reload}
+        onClearCacheReload={clearCacheAndReload}
         onToggleAnnotate={toggleAnnotate}
         onToggleCodeView={toggleCodeView}
         viewport={viewport}

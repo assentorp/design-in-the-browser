@@ -839,9 +839,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
     }
   });
 
-  // Clear webview session cache
+  // Clear webview session cache and storage data
   ipcMain.handle('webview:clear-cache', async () => {
     await session.defaultSession.clearCache();
+    await session.defaultSession.clearStorageData();
   });
 
   // Send all queued edits — execute directly on webview webContents

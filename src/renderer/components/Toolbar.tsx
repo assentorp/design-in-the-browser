@@ -12,6 +12,7 @@ interface ToolbarProps {
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
+  onClearCacheReload: () => void;
   onToggleAnnotate: () => void;
   onToggleCodeView: () => void;
   viewport: ViewportType | null;
@@ -33,6 +34,7 @@ export default function Toolbar({
   onBack,
   onForward,
   onReload,
+  onClearCacheReload,
   onToggleAnnotate,
   onToggleCodeView,
   viewport,
@@ -119,6 +121,35 @@ export default function Toolbar({
               />
             </svg>
           )}
+        </button>
+        <button
+          className="toolbar-btn"
+          onClick={onClearCacheReload}
+          title="Clear cache & reload (Cmd+Shift+R)"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M2 3V6.5H5.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M2.63 9.5A5.5 5.5 0 1 0 3.53 4.5L2 6.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M8 5V8.5L10 10"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
       </div>
 
