@@ -12,6 +12,7 @@ interface ToolbarProps {
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
+  onClearCacheReload: () => void;
   onToggleAnnotate: () => void;
   onToggleCodeView: () => void;
   viewport: ViewportType | null;
@@ -33,6 +34,7 @@ export default function Toolbar({
   onBack,
   onForward,
   onReload,
+  onClearCacheReload,
   onToggleAnnotate,
   onToggleCodeView,
   viewport,
@@ -89,9 +91,38 @@ export default function Toolbar({
           </svg>
         </button>
         <button
-          className="toolbar-btn"
+          className="toolbar-btn has-tooltip"
+          onClick={onClearCacheReload}
+          data-tooltip="Clear cache & reload (Cmd+Shift+R)"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M2 3V6.5H5.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M2.63 9.5A5.5 5.5 0 1 0 3.53 4.5L2 6.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M8 5V8.5L10 10"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          className="toolbar-btn has-tooltip"
           onClick={onReload}
-          title={isLoading ? 'Stop' : 'Reload'}
+          data-tooltip={isLoading ? 'Stop' : 'Reload'}
         >
           {isLoading ? (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -135,13 +166,13 @@ export default function Toolbar({
 
       <div className="toolbar-viewport">
         <button
-          className={`toolbar-btn toolbar-viewport-btn ${viewport === 'mobile' ? 'active' : ''}`}
+          className={`toolbar-btn toolbar-viewport-btn has-tooltip ${viewport === 'mobile' ? 'active' : ''}`}
           onClick={() => onViewportChange(viewport === 'mobile' ? null : 'mobile')}
           onDoubleClick={() => {
             setEditingViewport('mobile');
             setEditValue(String(viewportSizes.mobile));
           }}
-          title={`Mobile (${viewportSizes.mobile}px) - Double-click to edit`}
+          data-tooltip={`Mobile (${viewportSizes.mobile}px) - Double-click to edit`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect width="14" height="20" x="5" y="2" rx="2" ry="2"/>
@@ -149,13 +180,13 @@ export default function Toolbar({
           </svg>
         </button>
         <button
-          className={`toolbar-btn toolbar-viewport-btn ${viewport === 'tablet' ? 'active' : ''}`}
+          className={`toolbar-btn toolbar-viewport-btn has-tooltip ${viewport === 'tablet' ? 'active' : ''}`}
           onClick={() => onViewportChange(viewport === 'tablet' ? null : 'tablet')}
           onDoubleClick={() => {
             setEditingViewport('tablet');
             setEditValue(String(viewportSizes.tablet));
           }}
-          title={`Tablet (${viewportSizes.tablet}px) - Double-click to edit`}
+          data-tooltip={`Tablet (${viewportSizes.tablet}px) - Double-click to edit`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect width="16" height="20" x="4" y="2" rx="2" ry="2"/>
@@ -163,13 +194,13 @@ export default function Toolbar({
           </svg>
         </button>
         <button
-          className={`toolbar-btn toolbar-viewport-btn ${viewport === 'desktop' ? 'active' : ''}`}
+          className={`toolbar-btn toolbar-viewport-btn has-tooltip ${viewport === 'desktop' ? 'active' : ''}`}
           onClick={() => onViewportChange(viewport === 'desktop' ? null : 'desktop')}
           onDoubleClick={() => {
             setEditingViewport('desktop');
             setEditValue(String(viewportSizes.desktop));
           }}
-          title={`Desktop (${viewportSizes.desktop}px) - Double-click to edit`}
+          data-tooltip={`Desktop (${viewportSizes.desktop}px) - Double-click to edit`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect width="20" height="14" x="2" y="3" rx="2"/>
