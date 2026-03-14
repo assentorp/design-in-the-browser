@@ -79,6 +79,21 @@ export interface Session {
   cliToolRunning: boolean;
   shell: ShellType;
   pendingEdits: SessionPendingEdit[];
+  presetId?: string;
+}
+
+export interface PersistedSession {
+  presetId: string;
+  url: string;
+  browserWidth: number;
+  terminalCollapsed: boolean;
+  terminalTabNames: string[];
+}
+
+export interface PersistedSessionState {
+  sessions: PersistedSession[];
+  activeSessionIndex: number;
+  sessionCounter: number;
 }
 
 export type CliTool = 'claude' | 'cursor' | 'gemini' | 'codex';
@@ -117,6 +132,7 @@ export interface ProjectPreset {
   shell?: ShellType;
   claudeModel?: string;
   dangerouslySkipPermissions?: boolean;
+  lastOpenedAt?: number;
 }
 
 export interface ElementInfo {
@@ -193,6 +209,8 @@ export interface MainAPI {
   getAppVersion: () => Promise<string>;
   clearWebviewCache: () => Promise<void>;
   sendAllEdits: () => void;
+  getSessionState: () => Promise<PersistedSessionState | null>;
+  saveSessionState: (state: PersistedSessionState) => Promise<void>;
 }
 
 export interface ElementSearchInfo {

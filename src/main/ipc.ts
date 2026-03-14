@@ -10,6 +10,7 @@ import type { AnnotationData, ShellType, CodeEditor } from '../shared/types';
 import { formatAnnotationPrompt, formatMultiEditPrompt, type MultiEditAnnotation } from '../shared/format-prompt';
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
 import { getPresets, savePresets } from './presets';
+import { getSessionState, saveSessionState } from './session-store';
 import { getDesignTokens } from './tailwind-tokens';
 
 // Max buffered output chunks before renderer signals ready (~5MB worth)
@@ -794,6 +795,16 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Save project presets
   ipcMain.handle('presets:save', (_, presets) => {
     return savePresets(presets);
+  });
+
+  // Get persisted session state
+  ipcMain.handle('sessions:get', () => {
+    return getSessionState();
+  });
+
+  // Save persisted session state
+  ipcMain.handle('sessions:save', (_, state) => {
+    saveSessionState(state);
   });
 
   // Check if WSL is available on Windows

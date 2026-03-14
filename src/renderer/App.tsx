@@ -9,7 +9,7 @@ import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
 import WhatsNewModal from './components/WhatsNewModal';
 import { changelog } from './changelog';
-import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData } from '../shared/types';
+import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData, PersistedSession } from '../shared/types';
 import { createSession } from '../shared/session';
 
 // Prevent Electron from navigating when files are dragged onto the window
@@ -89,11 +89,108 @@ export default function App() {
     });
   }, []);
 
-  // Show config modal on launch
+  // Restore sessions from disk on launch, or show config modal
+  const [sessionRestoreAttempted, setSessionRestoreAttempted] = useState(false);
   useEffect(() => {
-    if (!presetsLoaded || sessions.length > 0) return;
-    setShowConfigModal(true);
+    if (!presetsLoaded || sessions.length > 0 || sessionRestoreAttempted) return;
+    setSessionRestoreAttempted(true);
+
+    window.mainAPI?.getSessionState().then((state) => {
+      if (!state || state.sessions.length === 0) {
+        setShowConfigModal(true);
+        return;
+      }
+
+      // Load presets to match against
+      window.mainAPI?.getPresets().then((presets) => {
+        const presetMap = new Map(presets.map((p) => [p.id, p]));
+        const restoredSessions: Session[] = [];
+        let counter = state.sessionCounter;
+
+        for (const persisted of state.sessions) {
+          const preset = presetMap.get(persisted.presetId);
+          if (!preset) continue; // Preset was deleted — skip
+
+          counter++;
+          const newSession = createSession(
+            { name: preset.name, path: preset.path, startCommand: preset.startCommand, shell: preset.shell },
+            counter
+          );
+          newSession.url = persisted.url || preset.url || 'http://localhost:3000';
+          newSession.browserWidth = persisted.browserWidth ?? 60;
+          newSession.terminalCollapsed = persisted.terminalCollapsed ?? false;
+          newSession.presetId = persisted.presetId;
+
+          // Set up terminal tabs like handleCreateProject does
+          const devServerTabId = newSession.terminalTabs[0].id;
+          const cliTabId = `${newSession.id}-2`;
+          const cliLabel = preset.cliTool.charAt(0).toUpperCase() + preset.cliTool.slice(1);
+
+          newSession.terminalTabs[0].name = persisted.terminalTabNames?.[0] || 'Dev Server';
+          newSession.terminalTabs.push({ id: cliTabId, name: persisted.terminalTabNames?.[1] || cliLabel });
+          newSession.terminalTabCounter = 2;
+          newSession.devServerTabId = devServerTabId;
+          newSession.cliToolTabId = cliTabId;
+          newSession.cliTool = preset.cliTool;
+          newSession.activeTerminalTabId = cliTabId;
+          newSession.shell = preset.shell || 'default';
+
+          // Queue startup commands
+          const commands: { sessionId: string; tabId: string; command: string }[] = [];
+          if (preset.startCommand) {
+            commands.push({ sessionId: newSession.id, tabId: devServerTabId, command: preset.startCommand });
+          }
+          let cliCommand = CLI_COMMANDS[preset.cliTool];
+          if (preset.cliTool === 'claude') {
+            if (preset.claudeModel) cliCommand += ` --model ${preset.claudeModel}`;
+            if (preset.dangerouslySkipPermissions) cliCommand += ' --dangerously-skip-permissions';
+          }
+          commands.push({ sessionId: newSession.id, tabId: cliTabId, command: cliCommand });
+          pendingCommandsRef.current = [...pendingCommandsRef.current, ...commands];
+
+          restoredSessions.push(newSession);
+        }
+
+        if (restoredSessions.length === 0) {
+          setShowConfigModal(true);
+          return;
+        }
+
+        setSessions(restoredSessions);
+        setSessionCounter(counter);
+        const activeIdx = Math.min(state.activeSessionIndex, restoredSessions.length - 1);
+        setActiveSessionId(restoredSessions[Math.max(0, activeIdx)].id);
+      });
+    });
   }, [presetsLoaded]);
+
+  // Auto-save sessions to disk (debounced)
+  useEffect(() => {
+    if (sessions.length === 0) return;
+
+    const timer = setTimeout(() => {
+      const persisted: PersistedSession[] = sessions
+        .filter((s) => s.presetId) // Only persist sessions linked to a preset
+        .map((s) => ({
+          presetId: s.presetId!,
+          url: s.url,
+          browserWidth: s.browserWidth,
+          terminalCollapsed: s.terminalCollapsed,
+          terminalTabNames: s.terminalTabs.map((t) => t.name),
+        }));
+
+      if (persisted.length === 0) return;
+
+      const activeIndex = sessions.findIndex((s) => s.id === activeSessionId);
+      window.mainAPI?.saveSessionState({
+        sessions: persisted,
+        activeSessionIndex: Math.max(0, activeIndex),
+        sessionCounter,
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [sessions, activeSessionId, sessionCounter]);
 
   // Listen for settings menu trigger
   useEffect(() => {
@@ -375,7 +472,7 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(
-    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean }) => {
+    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; presetId?: string }) => {
       const newIndex = sessionCounter + 1;
       const newSession = createSession(
         { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
@@ -404,15 +501,21 @@ export default function App() {
       newSession.cliTool = config.cliTool;
       newSession.activeTerminalTabId = cliTabId;
 
+      // Link session to preset for persistence
+      if (config.presetId) {
+        newSession.presetId = config.presetId;
+      }
+
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(newSession.id);
       setSessionCounter(newIndex);
       setShowConfigModal(false);
 
-      // Save as preset if requested
+      // Save as preset if requested (and auto-link session to it)
       if (config.saveAsPreset) {
+        const newPresetId = generateId();
         const newPreset: ProjectPreset = {
-          id: generateId(),
+          id: newPresetId,
           name: config.name,
           path: config.path,
           startCommand: config.startCommand,
@@ -421,9 +524,22 @@ export default function App() {
           shell: config.shell,
           claudeModel: config.claudeModel || undefined,
           dangerouslySkipPermissions: config.dangerouslySkipPermissions || undefined,
+          lastOpenedAt: Date.now(),
         };
+        newSession.presetId = newPresetId;
         setProjectPresets((prev) => {
           const updated = [...prev, newPreset];
+          window.mainAPI?.savePresets(updated);
+          return updated;
+        });
+      }
+
+      // Update lastOpenedAt on the preset
+      if (config.presetId) {
+        setProjectPresets((prev) => {
+          const updated = prev.map((p) =>
+            p.id === config.presetId ? { ...p, lastOpenedAt: Date.now() } : p
+          );
           window.mainAPI?.savePresets(updated);
           return updated;
         });
@@ -495,7 +611,8 @@ export default function App() {
       setSessions((prev) => {
         const filtered = prev.filter((s) => s.id !== sessionId);
         if (filtered.length === 0) {
-          // Show modal to create a new project instead of auto-creating
+          // Clear persisted sessions and show modal
+          window.mainAPI?.saveSessionState({ sessions: [], activeSessionIndex: 0, sessionCounter: 0 });
           setShowConfigModal(true);
           return filtered;
         }

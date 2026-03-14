@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { AnnotationData, MainAPI, ShellType, AppSettings, ProjectPreset, DesignToken } from '../shared/types';
+import type { AnnotationData, MainAPI, ShellType, AppSettings, ProjectPreset, DesignToken, PersistedSessionState } from '../shared/types';
 
 console.log('[Preload] Script starting...');
 
@@ -119,6 +119,14 @@ const mainAPI: MainAPI = {
   clearWebviewCache: () => ipcRenderer.invoke('webview:clear-cache'),
 
   sendAllEdits: () => ipcRenderer.send('webview:send-all'),
+
+  getSessionState: (): Promise<PersistedSessionState | null> => {
+    return ipcRenderer.invoke('sessions:get');
+  },
+
+  saveSessionState: (state: PersistedSessionState): Promise<void> => {
+    return ipcRenderer.invoke('sessions:save', state);
+  },
 };
 
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);

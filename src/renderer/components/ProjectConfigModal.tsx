@@ -17,6 +17,7 @@ interface ProjectConfigModalProps {
     saveAsPreset: boolean;
     claudeModel: string;
     dangerouslySkipPermissions: boolean;
+    presetId?: string;
   }) => void;
   onDeletePreset: (presetId: string) => void;
   onUpdatePreset: (preset: ProjectPreset) => void;
@@ -126,9 +127,10 @@ export default function ProjectConfigModal({
   }, []);
 
   const filteredPresets = useMemo(() => {
-    if (!search.trim()) return presets;
+    const sorted = [...presets].sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0));
+    if (!search.trim()) return sorted;
     const q = search.toLowerCase();
-    return presets.filter(
+    return sorted.filter(
       (p) => p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)
     );
   }, [presets, search]);
@@ -144,6 +146,7 @@ export default function ProjectConfigModal({
       saveAsPreset: false,
       claudeModel: preset.claudeModel || '',
       dangerouslySkipPermissions: preset.dangerouslySkipPermissions || false,
+      presetId: preset.id,
     });
   };
 
@@ -223,6 +226,7 @@ export default function ProjectConfigModal({
       saveAsPreset: !editingPresetId && saveAsPreset,
       claudeModel: cliTool === 'claude' ? claudeModel : '',
       dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
+      presetId: editingPresetId || undefined,
     });
   };
 
