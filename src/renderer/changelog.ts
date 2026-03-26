@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.5.2',
+    date: 'March 26, 2026',
+    changes: [
+      'Cmd+R (Ctrl+R on Windows) now reloads the browser — shortcut shown in reload button tooltip',
+      'Shift+Enter inserts a newline in the annotation prompt (previously it submitted)',
+      'Loading spinner stays visible until the page has actually rendered content, instead of briefly flashing',
+    ],
+  },
+  {
     version: '1.5.1',
     date: 'March 9, 2026',
     changes: [
