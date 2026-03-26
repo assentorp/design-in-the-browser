@@ -223,7 +223,10 @@ app.on('web-contents-created', (_, contents) => {
 // Allow navigation in webview
 app.on('web-contents-created', (_, contents) => {
   if (contents.getType() === 'webview') {
-    contents.setWindowOpenHandler(() => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (url && mainWindow) {
+        mainWindow.webContents.send('blocked-new-window', url);
+      }
       return { action: 'deny' };
     });
 

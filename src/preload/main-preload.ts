@@ -77,6 +77,10 @@ const mainAPI: MainAPI = {
     ipcRenderer.send('app:install-update');
   },
 
+  openExternal: (url: string) => {
+    ipcRenderer.send('app:open-external', url);
+  },
+
 
   openInEditor: (filePath: string, line?: number, column?: number, projectPath?: string) => {
     ipcRenderer.send('editor:open-file', { filePath, line, column, projectPath });
@@ -151,6 +155,10 @@ contextBridge.exposeInMainWorld('onClearCacheReload', (callback: () => void) => 
 
 contextBridge.exposeInMainWorld('onReloadWebview', (callback: () => void) => {
   ipcRenderer.on('reload-webview', () => callback());
+});
+
+contextBridge.exposeInMainWorld('onBlockedNewWindow', (callback: (url: string) => void) => {
+  ipcRenderer.on('blocked-new-window', (_event, url: string) => callback(url));
 });
 
 contextBridge.exposeInMainWorld('onPaneZoom', (callback: (direction: string, source: string) => void) => {
