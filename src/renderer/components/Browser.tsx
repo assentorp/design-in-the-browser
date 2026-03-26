@@ -63,6 +63,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const injectedRef = useRef(false);
   const hasEverLoadedRef = useRef(false);
+  const [hasFirstPaint, setHasFirstPaint] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onAnnotationRef = useRef(onAnnotation);
   onAnnotationRef.current = onAnnotation;
@@ -272,6 +273,27 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const handleDidStopLoading = () => {
       setIsLoading(false);
       injectAndSetup();
+      // Wait for the page to actually paint content before hiding spinner.
+      // SPA/React apps load HTML first, then render via JS — did-stop-loading
+      // fires too early. Poll until <body> has visible content, with a fallback.
+      const wv = webviewRef.current;
+      if (wv) {
+        wv.executeJavaScript(`
+          new Promise(function(resolve) {
+            function check() {
+              if (document.body && document.body.offsetHeight > 0 && document.body.innerHTML.length > 200) {
+                requestAnimationFrame(function() { requestAnimationFrame(resolve); });
+              } else {
+                setTimeout(check, 50);
+              }
+            }
+            check();
+            setTimeout(resolve, 5000);
+          })
+        `).then(() => setHasFirstPaint(true)).catch(() => setHasFirstPaint(true));
+      } else {
+        setHasFirstPaint(true);
+      }
     };
 
     const handleDomReady = () => {
@@ -682,6 +704,16 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }
   }, []);
 
+  // Listen for Cmd+R reload webview
+  useEffect(() => {
+    const onReloadWebview = (window as unknown as { onReloadWebview?: (cb: () => void) => void }).onReloadWebview;
+    if (onReloadWebview) {
+      onReloadWebview(() => {
+        webviewRef.current?.reloadIgnoringCache();
+      });
+    }
+  }, []);
+
   // Webview zoom — apply CSS zoom inside the webview page
   const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
   const zoomFactorRef = useRef(1.0);
@@ -752,9 +784,9 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       />
       <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
         {isLoading && <div className="browser-loading-bar" />}
-        {!isReady && !hasEverLoadedRef.current && (
+        {!hasFirstPaint && (
           <div className="browser-loading-placeholder">
-            <div className="app-loading-spinner" />
+            <div className="app-loading-spinner browser-loading-spinner" />
           </div>
         )}
         {hasMainAPI ? (
@@ -762,7 +794,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             className="webview-container"
             style={{
               ...(currentWidth ? { width: currentWidth, maxWidth: '100%' } : {}),
-              visibility: isReady || hasEverLoadedRef.current ? 'visible' : 'hidden',
+              visibility: hasFirstPaint ? 'visible' : 'hidden',
             }}
           >
             <webview
