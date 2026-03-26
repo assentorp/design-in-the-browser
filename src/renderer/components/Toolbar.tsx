@@ -122,7 +122,7 @@ export default function Toolbar({
         <button
           className="toolbar-btn has-tooltip"
           onClick={onReload}
-          data-tooltip={isLoading ? 'Stop' : 'Reload'}
+          data-tooltip={isLoading ? 'Stop' : `Reload (${navigator.platform.includes('Mac') ? 'Cmd' : 'Ctrl'}+R)`}
         >
           {isLoading ? (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

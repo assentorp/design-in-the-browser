@@ -195,6 +195,13 @@ app.on('web-contents-created', (_, contents) => {
       return;
     }
 
+    // Cmd+R: reload webview (not the Electron app)
+    if (!input.shift && !input.alt && (input.key === 'r' || input.key === 'R') && mainWindow) {
+      _event.preventDefault();
+      mainWindow.webContents.send('reload-webview');
+      return;
+    }
+
     if (input.shift || input.alt) return;
     const num = parseInt(input.key, 10);
     if (num >= 1 && num <= 9 && mainWindow) {

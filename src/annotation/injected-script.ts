@@ -2429,7 +2429,7 @@ export const annotationScript = `
 
     // Add another edit button - small circle with dotted border, only show when not in list mode yet
     const addAnotherButton = !inListMode
-      ? '<button class="claude-design-popover-add-another" data-action="enter-list-mode" title="Add to list (⇧↵)">' +
+      ? '<button class="claude-design-popover-add-another" data-action="enter-list-mode" title="Add to list (⌘⇧↵)">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
             '<path d="M16 5H3"/><path d="M16 12H3"/><path d="M9 19H3"/>' +
             '<path d="m16 16-3 3 3 3"/><path d="M21 5v12a2 2 0 0 1-2 2h-6"/>' +
@@ -2657,8 +2657,13 @@ export const annotationScript = `
         }
         return;
       }
-      // Shift+Enter: Add to list (enter list mode and save)
-      if (e.key === 'Enter' && e.shiftKey) {
+      // Shift+Enter: Insert newline
+      if (e.key === 'Enter' && e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        // Allow default textarea behavior (inserts newline)
+        return;
+      }
+      // Cmd/Ctrl+Shift+Enter: Add to list (enter list mode and save)
+      if (e.key === 'Enter' && e.shiftKey && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         var note = expandMentions(textarea.value.trim(), textarea);
         if (!note) {
