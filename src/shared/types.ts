@@ -181,6 +181,7 @@ export interface MainAPI {
   onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
   downloadUpdate: () => void;
   installUpdate: () => void;
+  openExternal: (url: string) => void;
   openInEditor: (filePath: string, line?: number, column?: number, projectPath?: string) => void;
   detectEditors: () => Promise<CodeEditor[]>;
   checkUrl: (url: string) => Promise<boolean>;

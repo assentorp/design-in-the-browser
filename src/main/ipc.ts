@@ -890,6 +890,12 @@ export function setupIPC(mainWindow: BrowserWindow) {
     installUpdate();
   });
 
+  // Open URL in default browser
+  ipcMain.on('app:open-external', async (_, url: string) => {
+    const { shell } = await import('electron');
+    shell.openExternal(url);
+  });
+
   // Clean up on window close
   mainWindow.on('closed', () => {
     for (const [sessionId, session] of sessions) {

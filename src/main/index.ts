@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, session, nativeImage } from 'electron';
+import { app, BrowserWindow, screen, session, nativeImage, Menu, clipboard, shell } from 'electron';
 import * as path from 'path';
 import { setupIPC } from './ipc';
 import { createMenu } from './menu';
@@ -223,8 +223,40 @@ app.on('web-contents-created', (_, contents) => {
 // Allow navigation in webview
 app.on('web-contents-created', (_, contents) => {
   if (contents.getType() === 'webview') {
-    contents.setWindowOpenHandler(() => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (url && mainWindow) {
+        mainWindow.webContents.send('blocked-new-window', url);
+      }
       return { action: 'deny' };
+    });
+
+    // Context menu for webview
+    contents.on('context-menu', (_, params) => {
+      const menuItems: Electron.MenuItemConstructorOptions[] = [];
+
+      // Link actions
+      if (params.linkURL) {
+        menuItems.push(
+          { label: 'Copy Link', click: () => clipboard.writeText(params.linkURL) },
+          { label: 'Open in Browser', click: () => shell.openExternal(params.linkURL) },
+        );
+      }
+
+      // Selected text
+      if (params.selectionText) {
+        if (menuItems.length > 0) menuItems.push({ type: 'separator' });
+        menuItems.push({ label: 'Copy', click: () => clipboard.writeText(params.selectionText) });
+      }
+
+      // Navigation
+      if (menuItems.length > 0) menuItems.push({ type: 'separator' });
+      menuItems.push(
+        { label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() },
+        { label: 'Forward', enabled: contents.canGoForward(), click: () => contents.goForward() },
+        { label: 'Reload', click: () => contents.reloadIgnoringCache() },
+      );
+
+      Menu.buildFromTemplate(menuItems).popup();
     });
 
     // Suppress expected navigation errors

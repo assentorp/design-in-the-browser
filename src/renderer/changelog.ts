@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.5.3',
+    date: 'April 5, 2026',
+    changes: [
+      'Right-click context menu in the browser — copy link, open in external browser, copy text',
+      'External links now open in your default browser with a toast notification',
+    ],
+  },
+  {
     version: '1.5.2',
     date: 'March 26, 2026',
     changes: [

@@ -60,6 +60,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [viewport, setViewport] = useState<ViewportType | null>(null);
   const [viewportSizes, setViewportSizes] = useState<ViewportSizes>(DEFAULT_VIEWPORT_SIZES);
   const [zoomFactor, setZoomFactor] = useState(1.0);
+  const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
+  const blockedUrlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const injectedRef = useRef(false);
   const hasEverLoadedRef = useRef(false);
@@ -714,6 +716,18 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     }
   }, []);
 
+  // Listen for blocked new-window (target="_blank" links)
+  useEffect(() => {
+    const onBlockedNewWindow = (window as unknown as { onBlockedNewWindow?: (cb: (url: string) => void) => void }).onBlockedNewWindow;
+    if (onBlockedNewWindow) {
+      onBlockedNewWindow((url: string) => {
+        if (blockedUrlTimerRef.current) clearTimeout(blockedUrlTimerRef.current);
+        setBlockedUrl(url);
+        blockedUrlTimerRef.current = setTimeout(() => setBlockedUrl(null), 8000);
+      });
+    }
+  }, []);
+
   // Webview zoom — apply CSS zoom inside the webview page
   const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
   const zoomFactorRef = useRef(1.0);
@@ -810,6 +824,31 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
               <h2>Browser Preview</h2>
               <p>Run with Electron to browse websites.</p>
               <code>npm run dev</code>
+            </div>
+          </div>
+        )}
+        {blockedUrl && (
+          <div className="blocked-url-toast">
+            <div className="blocked-url-toast-text">
+              This link opens in a new tab
+            </div>
+            <div className="blocked-url-toast-url">{blockedUrl}</div>
+            <div className="blocked-url-toast-actions">
+              <button onClick={() => {
+                navigator.clipboard.writeText(blockedUrl);
+                setBlockedUrl(null);
+                if (blockedUrlTimerRef.current) clearTimeout(blockedUrlTimerRef.current);
+              }}>Copy URL</button>
+              <button onClick={() => {
+                const mainAPI = getMainAPI();
+                if (mainAPI) mainAPI.openExternal(blockedUrl);
+                setBlockedUrl(null);
+                if (blockedUrlTimerRef.current) clearTimeout(blockedUrlTimerRef.current);
+              }}>Open in Browser</button>
+              <button className="blocked-url-toast-close" onClick={() => {
+                setBlockedUrl(null);
+                if (blockedUrlTimerRef.current) clearTimeout(blockedUrlTimerRef.current);
+              }}>&times;</button>
             </div>
           </div>
         )}
