@@ -23,6 +23,7 @@ const CLI_COMMANDS: Record<CliTool, string> = {
   cursor: 'cursor',
   gemini: 'gemini',
   codex: 'codex',
+  custom: '',
 };
 
 interface UpdateInfo {
@@ -375,7 +376,7 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(
-    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean }) => {
+    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; customCliCommand: string }) => {
       const newIndex = sessionCounter + 1;
       const newSession = createSession(
         { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
@@ -389,7 +390,10 @@ export default function App() {
       // Create two terminal tabs: Dev Server and CLI tool
       const devServerTabId = newSession.terminalTabs[0].id;
       const cliTabId = `${newSession.id}-2`;
-      const cliLabel = config.cliTool.charAt(0).toUpperCase() + config.cliTool.slice(1);
+      const customName = config.customCliCommand.trim().split(/\s+/)[0] || 'Custom';
+      const cliLabel = config.cliTool === 'custom'
+        ? customName.charAt(0).toUpperCase() + customName.slice(1)
+        : config.cliTool.charAt(0).toUpperCase() + config.cliTool.slice(1);
 
       // Rename the first tab to Dev Server
       newSession.terminalTabs[0].name = 'Dev Server';
@@ -421,6 +425,7 @@ export default function App() {
           shell: config.shell,
           claudeModel: config.claudeModel || undefined,
           dangerouslySkipPermissions: config.dangerouslySkipPermissions || undefined,
+          customCliCommand: config.cliTool === 'custom' ? config.customCliCommand : undefined,
         };
         setProjectPresets((prev) => {
           const updated = [...prev, newPreset];
@@ -440,7 +445,9 @@ export default function App() {
         });
       }
 
-      let cliCommand = CLI_COMMANDS[config.cliTool];
+      let cliCommand = config.cliTool === 'custom'
+        ? config.customCliCommand
+        : CLI_COMMANDS[config.cliTool];
       if (config.cliTool === 'claude') {
         if (config.claudeModel) cliCommand += ` --model ${config.claudeModel}`;
         if (config.dangerouslySkipPermissions) cliCommand += ' --dangerously-skip-permissions';

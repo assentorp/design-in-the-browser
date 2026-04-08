@@ -17,6 +17,7 @@ interface ProjectConfigModalProps {
     saveAsPreset: boolean;
     claudeModel: string;
     dangerouslySkipPermissions: boolean;
+    customCliCommand: string;
   }) => void;
   onDeletePreset: (presetId: string) => void;
   onUpdatePreset: (preset: ProjectPreset) => void;
@@ -51,6 +52,7 @@ export default function ProjectConfigModal({
   const [saveAsPreset, setSaveAsPreset] = useState(true);
   const [claudeModel, setClaudeModel] = useState('');
   const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
+  const [customCliCommand, setCustomCliCommand] = useState('');
   const [search, setSearch] = useState('');
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [isWindows, setIsWindows] = useState(false);
@@ -144,6 +146,7 @@ export default function ProjectConfigModal({
       saveAsPreset: false,
       claudeModel: preset.claudeModel || '',
       dangerouslySkipPermissions: preset.dangerouslySkipPermissions || false,
+      customCliCommand: preset.customCliCommand || '',
     });
   };
 
@@ -157,6 +160,7 @@ export default function ProjectConfigModal({
     setShell(preset.shell || 'default');
     setClaudeModel(preset.claudeModel || '');
     setDangerouslySkipPermissions(preset.dangerouslySkipPermissions || false);
+    setCustomCliCommand(preset.customCliCommand || '');
     setView('edit');
   };
 
@@ -170,6 +174,7 @@ export default function ProjectConfigModal({
     setShell('default');
     setClaudeModel('');
     setDangerouslySkipPermissions(false);
+    setCustomCliCommand('');
     setSaveAsPreset(true);
     setView('new');
   };
@@ -197,6 +202,7 @@ export default function ProjectConfigModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !path.trim()) return;
+    if (cliTool === 'custom' && !customCliCommand.trim()) return;
 
     // Update existing preset if editing
     if (editingPresetId) {
@@ -210,6 +216,7 @@ export default function ProjectConfigModal({
         shell,
         claudeModel: cliTool === 'claude' ? claudeModel : undefined,
         dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : undefined,
+        customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : undefined,
       });
     }
 
@@ -223,10 +230,11 @@ export default function ProjectConfigModal({
       saveAsPreset: !editingPresetId && saveAsPreset,
       claudeModel: cliTool === 'claude' ? claudeModel : '',
       dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
+      customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : '',
     });
   };
 
-  const isValid = name.trim() && path.trim();
+  const isValid = name.trim() && path.trim() && (cliTool !== 'custom' || customCliCommand.trim());
   const showSearch = presets.length > 4;
 
   // --- Shared header ---
@@ -395,8 +403,24 @@ export default function ProjectConfigModal({
                 <option value="codex">Codex</option>
                 <option value="cursor">Cursor</option>
                 <option value="gemini">Gemini</option>
+                <option value="custom">Custom</option>
               </select>
             </div>
+            {cliTool === 'custom' && (
+              <div className="form-group">
+                <label>Custom Command</label>
+                <input
+                  type="text"
+                  value={customCliCommand}
+                  onChange={(e) => setCustomCliCommand(e.target.value)}
+                  placeholder="gsd"
+                  className="form-input"
+                />
+                <span className="form-hint">
+                  Command to launch your CLI tool (e.g. <code>gsd</code>).
+                </span>
+              </div>
+            )}
             {cliTool === 'claude' && (
               <div className="form-group">
                 <label>Model</label>
