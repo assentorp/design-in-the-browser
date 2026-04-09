@@ -563,12 +563,21 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   }, [cliRunning, isReady]);
 
   // Toggle annotate mode in webview
+  const prevAnnotateModeRef = useRef<boolean | null>(null);
   useEffect(() => {
     console.log('[Browser] Toggle effect - isReady:', isReady, 'annotateMode:', annotateMode);
     if (!isReady) return;
 
     const webview = webviewRef.current;
     if (!webview) return;
+
+    // Only focus the webview when annotate mode actually transitions
+    // (user explicitly toggled it), not when isReady flips after a
+    // webview re-injection. Otherwise HMR full-reloads (e.g. triggered
+    // by a `git checkout` in the terminal) would steal focus away
+    // from the terminal every time.
+    const annotateModeChanged = prevAnnotateModeRef.current !== annotateMode;
+    prevAnnotateModeRef.current = annotateMode;
 
     const toggle = async () => {
       try {
@@ -577,7 +586,9 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
           const result = await webview.executeJavaScript('window.__claudeDesignEnable && window.__claudeDesignEnable(); true;');
           console.log('[Browser] Enable result:', result);
           // Focus the webview so ALT+hover works immediately
-          webview.focus();
+          if (annotateModeChanged) {
+            webview.focus();
+          }
         } else {
           await webview.executeJavaScript('window.__claudeDesignDisable && window.__claudeDesignDisable(); true;');
         }
