@@ -385,6 +385,75 @@ body,
   border: none;
 }
 
+/* Reserves layout space for the docked DevTools WebContentsView, which is
+   overlaid by the main process. Only the 28px header strip at the top is
+   visible (housing the close button); the rest is covered by the overlay. */
+.browser-devtools {
+  position: relative;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  min-height: 120px;
+  flex-shrink: 0;
+}
+
+.browser-devtools-resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.browser-devtools-resize:hover,
+.browser-devtools-resize:active {
+  background: var(--accent);
+}
+
+.browser-devtools-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 12px;
+  z-index: 11;
+}
+
+.browser-devtools-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.browser-devtools-close {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.browser-devtools-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .browser-placeholder {
   width: 100%;
   height: 100%;
@@ -629,6 +698,11 @@ body,
 }
 
 .toolbar-viewport-btn.active {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+
+.toolbar-devtools-btn.active {
   background: var(--bg-tertiary);
   color: var(--accent);
 }

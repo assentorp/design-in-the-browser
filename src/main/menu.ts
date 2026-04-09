@@ -68,7 +68,28 @@ export function createMenu(mainWindow: BrowserWindow) {
     {
       label: 'View',
       submenu: [
-        { role: 'toggleDevTools' },
+        {
+          label: 'Toggle Inspector',
+          accelerator: isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
+          click: () => {
+            mainWindow.webContents.send('toggle-inspector');
+          },
+        },
+        {
+          // Hidden duplicate so F12 also toggles the inspector — Electron menu
+          // items only accept a single accelerator.
+          label: 'Toggle Inspector (F12)',
+          accelerator: 'F12',
+          visible: false,
+          click: () => {
+            mainWindow.webContents.send('toggle-inspector');
+          },
+        },
+        {
+          // Dev-only shortcut for inspecting the React app shell itself
+          role: 'toggleDevTools',
+          accelerator: isMac ? 'Alt+Shift+Cmd+I' : 'Ctrl+Shift+Alt+I',
+        },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },

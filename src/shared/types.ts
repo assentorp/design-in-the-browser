@@ -194,6 +194,9 @@ export interface MainAPI {
   getAppVersion: () => Promise<string>;
   clearWebviewCache: () => Promise<void>;
   sendAllEdits: () => void;
+  attachDevTools: (targetId: number, bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
+  setDevToolsBounds: (targetId: number, bounds: { x: number; y: number; width: number; height: number }) => Promise<void>;
+  detachDevTools: (targetId: number) => Promise<void>;
 }
 
 export interface ElementSearchInfo {

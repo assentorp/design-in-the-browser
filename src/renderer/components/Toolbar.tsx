@@ -21,6 +21,8 @@ interface ToolbarProps {
   onViewportSizeChange: (sizes: ViewportSizes) => void;
   zoomFactor?: number;
   onZoomReset?: () => void;
+  devToolsOpen?: boolean;
+  onToggleDevTools?: () => void;
 }
 
 export default function Toolbar({
@@ -43,6 +45,8 @@ export default function Toolbar({
   onViewportSizeChange,
   zoomFactor = 1.0,
   onZoomReset,
+  devToolsOpen = false,
+  onToggleDevTools,
 }: ToolbarProps) {
   const [editingViewport, setEditingViewport] = useState<ViewportType | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -240,6 +244,19 @@ export default function Toolbar({
         )}
       </div>
 
+      {onToggleDevTools && (
+        <button
+          className={`toolbar-btn toolbar-devtools-btn has-tooltip ${devToolsOpen ? 'active' : ''}`}
+          onClick={onToggleDevTools}
+          data-tooltip={devToolsOpen ? 'Close inspector' : 'Open inspector'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2"/>
+            <path d="M3 15h18"/>
+          </svg>
+        </button>
+      )}
+
       {Math.abs(zoomFactor - 1.0) > 0.001 && (
         <button
           className="toolbar-btn toolbar-zoom-btn"
@@ -265,7 +282,14 @@ export default function Toolbar({
       <button
         className={`toolbar-btn toolbar-annotate-btn ${annotateMode ? 'active' : ''}`}
         onClick={onToggleAnnotate}
-        title={annotateMode ? 'Exit Edit Mode (Cmd+E)' : 'Enter Edit Mode (Cmd+E)'}
+        disabled={devToolsOpen}
+        title={
+          devToolsOpen
+            ? 'Close inspector to edit'
+            : annotateMode
+              ? 'Exit Edit Mode (Cmd+E)'
+              : 'Enter Edit Mode (Cmd+E)'
+        }
       >
         <kbd className="toolbar-kbd">&#8984;E</kbd>
         <span>{annotateMode ? 'Editing' : 'Edit'}</span>
