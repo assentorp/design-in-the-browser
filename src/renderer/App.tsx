@@ -18,12 +18,11 @@ document.addEventListener('drop', (e) => e.preventDefault());
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-const CLI_COMMANDS: Record<CliTool, string> = {
+const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   claude: 'claude',
   cursor: 'cursor',
   gemini: 'gemini',
   codex: 'codex',
-  custom: '',
 };
 
 interface UpdateInfo {
@@ -390,7 +389,8 @@ export default function App() {
       // Create two terminal tabs: Dev Server and CLI tool
       const devServerTabId = newSession.terminalTabs[0].id;
       const cliTabId = `${newSession.id}-2`;
-      const customName = config.customCliCommand.trim().split(/\s+/)[0] || 'Custom';
+      const firstToken = config.customCliCommand.trim().split(/\s+/)[0] || '';
+      const customName = firstToken.split(/[/\\]/).pop() || 'Custom';
       const cliLabel = config.cliTool === 'custom'
         ? customName.charAt(0).toUpperCase() + customName.slice(1)
         : config.cliTool.charAt(0).toUpperCase() + config.cliTool.slice(1);
