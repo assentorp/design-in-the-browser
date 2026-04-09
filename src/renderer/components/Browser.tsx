@@ -61,8 +61,12 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [viewportSizes, setViewportSizes] = useState<ViewportSizes>(DEFAULT_VIEWPORT_SIZES);
   const [zoomFactor, setZoomFactor] = useState(1.0);
   const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [devToolsHeight, setDevToolsHeight] = useState(300);
   const blockedUrlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const devToolsPlaceholderRef = useRef<HTMLDivElement | null>(null);
+  const browserRef = useRef<HTMLDivElement | null>(null);
   const injectedRef = useRef(false);
   const hasEverLoadedRef = useRef(false);
   const [hasFirstPaint, setHasFirstPaint] = useState(false);
@@ -639,15 +643,141 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E') && !e.shiftKey && !e.altKey) {
         e.preventDefault();
+        if (devToolsOpen) return;
         onAnnotateModeChange(!annotateMode);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [annotateMode, onAnnotateModeChange, devToolsOpen]);
+
+
+
+  const toggleDevTools = useCallback(() => {
+    setDevToolsOpen((open) => {
+      const next = !open;
+      // Edit mode and DevTools are mutually exclusive — annotation captures clicks
+      // that would otherwise reach DevTools' element picker.
+      if (next && annotateMode) onAnnotateModeChange(false);
+      return next;
+    });
   }, [annotateMode, onAnnotateModeChange]);
 
+  // Keep a ref to the latest toggle so the IPC listener (subscribed once below)
+  // always calls the current version without needing to re-subscribe.
+  const toggleDevToolsRef = useRef(toggleDevTools);
+  toggleDevToolsRef.current = toggleDevTools;
 
+  // Listen for the Toggle Inspector menu shortcut (Cmd+Alt+I / Ctrl+Shift+I / F12)
+  useEffect(() => {
+    const onToggleInspector = (window as unknown as { onToggleInspector?: (cb: () => void) => void }).onToggleInspector;
+    if (onToggleInspector) {
+      onToggleInspector(() => toggleDevToolsRef.current());
+    }
+  }, []);
+
+  // Attach DevTools as a top-level WebContentsView in the main process,
+  // overlaid on top of the empty placeholder div (placeholder reserves layout space).
+  useEffect(() => {
+    const mainAPI = getMainAPI();
+    const page = webviewRef.current;
+    const placeholder = devToolsPlaceholderRef.current;
+    if (!devToolsOpen || !isReady || !mainAPI || !page || !placeholder) return;
+
+    let cancelled = false;
+    let attachedTargetId: number | null = null;
+    let rafId: number | null = null;
+
+    const computeBounds = () => {
+      const rect = placeholder.getBoundingClientRect();
+      // Skip the top 28px so the resize handle and close button (in the renderer
+      // DOM) remain clickable above the WebContentsView overlay.
+      const HEADER = 28;
+      return {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y) + HEADER,
+        width: Math.max(0, Math.round(rect.width)),
+        height: Math.max(0, Math.round(rect.height) - HEADER),
+      };
+    };
+
+    const sendBounds = () => {
+      if (rafId !== null || attachedTargetId === null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (cancelled || attachedTargetId === null) return;
+        mainAPI.setDevToolsBounds(attachedTargetId, computeBounds()).catch(() => {});
+      });
+    };
+
+    (async () => {
+      // Capture targetId before the await so that if the effect is cancelled
+      // mid-attach (user rapidly toggles open→close), we can still undo the
+      // attach that raced past our cleanup.
+      const targetId = page.getWebContentsId();
+      try {
+        const ok = await mainAPI.attachDevTools(targetId, computeBounds());
+        if (cancelled) {
+          if (ok) mainAPI.detachDevTools(targetId).catch(() => {});
+          return;
+        }
+        if (ok) {
+          attachedTargetId = targetId;
+          // Resync once after attach in case layout shifted between compute and attach
+          sendBounds();
+        }
+      } catch (err) {
+        console.error('[Browser] attachDevTools error:', err);
+      }
+    })();
+
+    // Recompute bounds whenever the browser pane or placeholder changes size.
+    // ResizeObserver on .browser catches window/sidebar/terminal resizes;
+    // observing the placeholder catches splitter drag (height state change).
+    const observer = new ResizeObserver(() => sendBounds());
+    if (browserRef.current) observer.observe(browserRef.current);
+    observer.observe(placeholder);
+    window.addEventListener('resize', sendBounds);
+
+    return () => {
+      cancelled = true;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      observer.disconnect();
+      window.removeEventListener('resize', sendBounds);
+      if (attachedTargetId !== null) {
+        mainAPI.detachDevTools(attachedTargetId).catch(() => {});
+      }
+    };
+  }, [devToolsOpen, isReady]);
+
+  // Drag handle: resize the docked DevTools panel from the top edge
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = devToolsHeight;
+    const browser = browserRef.current;
+    const browserRect = browser?.getBoundingClientRect();
+    const maxHeight = browserRect ? browserRect.height - 150 : 800;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = startY - ev.clientY;
+      let next = startHeight + delta;
+      if (next < 120) next = 120;
+      if (next > maxHeight) next = maxHeight;
+      setDevToolsHeight(next);
+    };
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [devToolsHeight]);
 
   const navigate = useCallback((targetUrl: string) => {
     const webview = webviewRef.current;
@@ -774,7 +904,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const currentWidth = viewport ? viewportSizes[viewport] : null;
 
   return (
-    <div className="browser">
+    <div className="browser" ref={browserRef}>
       <Toolbar
         url={inputUrl}
         onUrlChange={setInputUrl}
@@ -795,6 +925,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onViewportSizeChange={setViewportSizes}
         zoomFactor={zoomFactor}
         onZoomReset={() => applyZoomToWebview(1.0)}
+        devToolsOpen={devToolsOpen}
+        onToggleDevTools={hasMainAPI ? toggleDevTools : undefined}
       />
       <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
         {isLoading && <div className="browser-loading-bar" />}
@@ -853,6 +985,32 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
           </div>
         )}
       </div>
+      {devToolsOpen && hasMainAPI && (
+        <div
+          className="browser-devtools"
+          ref={devToolsPlaceholderRef}
+          style={{ height: devToolsHeight }}
+        >
+          <div
+            className="browser-devtools-resize"
+            onMouseDown={handleResizeMouseDown}
+          />
+          <div className="browser-devtools-header">
+            <span className="browser-devtools-title">Inspector</span>
+            <button
+              type="button"
+              className="browser-devtools-close"
+              onClick={() => setDevToolsOpen(false)}
+              title="Close inspector"
+              aria-label="Close inspector"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M4 4L12 12M4 12L12 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

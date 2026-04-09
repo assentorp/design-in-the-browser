@@ -123,6 +123,18 @@ const mainAPI: MainAPI = {
   clearWebviewCache: () => ipcRenderer.invoke('webview:clear-cache'),
 
   sendAllEdits: () => ipcRenderer.send('webview:send-all'),
+
+  attachDevTools: (targetId: number, bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> => {
+    return ipcRenderer.invoke('devtools:attach', { targetId, bounds });
+  },
+
+  setDevToolsBounds: (targetId: number, bounds: { x: number; y: number; width: number; height: number }): Promise<void> => {
+    return ipcRenderer.invoke('devtools:set-bounds', { targetId, bounds });
+  },
+
+  detachDevTools: (targetId: number): Promise<void> => {
+    return ipcRenderer.invoke('devtools:detach', { targetId });
+  },
 };
 
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);
@@ -155,6 +167,10 @@ contextBridge.exposeInMainWorld('onClearCacheReload', (callback: () => void) => 
 
 contextBridge.exposeInMainWorld('onReloadWebview', (callback: () => void) => {
   ipcRenderer.on('reload-webview', () => callback());
+});
+
+contextBridge.exposeInMainWorld('onToggleInspector', (callback: () => void) => {
+  ipcRenderer.on('toggle-inspector', () => callback());
 });
 
 contextBridge.exposeInMainWorld('onBlockedNewWindow', (callback: (url: string) => void) => {

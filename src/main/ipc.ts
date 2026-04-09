@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, app, dialog, session, webContents as webContentsModule } from 'electron';
+import { BrowserWindow, ipcMain, app, dialog, session, webContents as webContentsModule, WebContentsView } from 'electron';
 import { downloadUpdate, installUpdate } from './updater';
 import * as pty from 'node-pty';
 import * as path from 'path';
@@ -879,6 +879,82 @@ export function setupIPC(mainWindow: BrowserWindow) {
   ipcMain.handle('webview:clear-cache', async () => {
     await session.defaultSession.clearCache();
     await session.defaultSession.clearStorageData();
+  });
+
+  // Docked Chrome DevTools: hosted by a top-level WebContentsView (NOT a <webview>,
+  // because devToolsWebContents must have no embedders). The renderer reserves
+  // empty layout space and sends bounds to overlay this view on top.
+  //
+  // The view is created once per target webContents and kept alive for the
+  // target's lifetime. Closing the panel just unparents the view (hiding it);
+  // reopening re-parents it. This avoids Electron's stale-binding issue when
+  // setDevToolsWebContents is called twice on the same target.
+  const devToolsViews = new Map<number, WebContentsView>();
+
+  const destroyDevToolsView = (targetId: number) => {
+    const view = devToolsViews.get(targetId);
+    if (!view) return;
+    try {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.contentView.removeChildView(view);
+      }
+    } catch {
+      // already removed
+    }
+    devToolsViews.delete(targetId);
+  };
+
+  ipcMain.handle('devtools:attach', async (_, { targetId, bounds }: { targetId: number; bounds: { x: number; y: number; width: number; height: number } }) => {
+    const target = webContentsModule.fromId(targetId);
+    if (!target) return false;
+    try {
+      let view = devToolsViews.get(targetId);
+      if (!view) {
+        view = new WebContentsView();
+        devToolsViews.set(targetId, view);
+        mainWindow.contentView.addChildView(view);
+        target.setDevToolsWebContents(view.webContents);
+        target.openDevTools({ mode: 'detach' });
+        // Clean up the view automatically when the page is destroyed
+        target.once('destroyed', () => destroyDevToolsView(targetId));
+      } else {
+        // View was unparented on previous close — re-parent it
+        try {
+          mainWindow.contentView.addChildView(view);
+        } catch {
+          // Already a child — fine
+        }
+      }
+      view.setBounds(bounds);
+      return true;
+    } catch (err) {
+      console.error('[IPC] devtools:attach error:', err);
+      return false;
+    }
+  });
+
+  ipcMain.handle('devtools:set-bounds', async (_, { targetId, bounds }: { targetId: number; bounds: { x: number; y: number; width: number; height: number } }) => {
+    const view = devToolsViews.get(targetId);
+    if (!view) return;
+    try {
+      view.setBounds(bounds);
+    } catch (err) {
+      console.error('[IPC] devtools:set-bounds error:', err);
+    }
+  });
+
+  ipcMain.handle('devtools:detach', async (_, { targetId }: { targetId: number }) => {
+    // Just unparent the view (hides it visually). DevTools session stays alive
+    // so reopening is instant and the inspector state is preserved.
+    const view = devToolsViews.get(targetId);
+    if (!view) return;
+    try {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.contentView.removeChildView(view);
+      }
+    } catch (err) {
+      console.error('[IPC] devtools:detach error:', err);
+    }
   });
 
   // Send all queued edits — execute directly on webview webContents
