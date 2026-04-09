@@ -64,7 +64,9 @@ export function setupIPC(mainWindow: BrowserWindow) {
       wslCwd = toWslPath(cwd);
       // Start WSL with bash and cd to the directory
       shellArgs.push('-e', 'bash', '-c', `cd "${wslCwd}" && exec bash`);
-    } else if (!useWsl) {
+    } else if (!useWsl && process.platform !== 'win32') {
+      // Login shell flag for zsh/bash on macOS/Linux. PowerShell doesn't
+      // understand `-l` and would exit immediately with a parse error.
       shellArgs.push('-l');
     }
 
@@ -106,6 +108,12 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
     const exitDisposable = ptyProcess.onExit(() => {
       console.log('[IPC] PTY process exited for session:', sessionId);
+      const s = sessions.get(sessionId);
+      if (!s) return;
+      for (const d of s.disposables) d.dispose();
+      s.disposables.length = 0;
+      s.outputBuffer.length = 0;
+      sessions.delete(sessionId);
     });
 
     session.disposables.push(dataDisposable, exitDisposable);
@@ -150,8 +158,14 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Handle terminal resize
   ipcMain.on('terminal:resize', (_, { sessionId, cols, rows }: { sessionId: string; cols: number; rows: number }) => {
     const session = sessions.get(sessionId);
-    if (session && cols > 0 && rows > 0) {
+    if (!session || cols <= 0 || rows <= 0) return;
+    try {
       session.ptyProcess.resize(cols, rows);
+    } catch (err) {
+      // node-pty throws on Windows if the PTY exited between the renderer
+      // sending resize and us handling it. Safe to ignore — onExit will
+      // clean up the session shortly.
+      console.warn('[IPC] terminal:resize ignored for', sessionId, err instanceof Error ? err.message : err);
     }
   });
 
