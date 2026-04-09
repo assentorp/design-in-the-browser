@@ -81,7 +81,7 @@ export interface Session {
   pendingEdits: SessionPendingEdit[];
 }
 
-export type CliTool = 'claude' | 'cursor' | 'gemini' | 'codex';
+export type CliTool = 'claude' | 'cursor' | 'gemini' | 'codex' | 'custom';
 
 export type ShellType = 'default' | 'wsl';
 
@@ -117,6 +117,7 @@ export interface ProjectPreset {
   shell?: ShellType;
   claudeModel?: string;
   dangerouslySkipPermissions?: boolean;
+  customCliCommand?: string;
 }
 
 export interface ElementInfo {
