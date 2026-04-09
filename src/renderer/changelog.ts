@@ -6,6 +6,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.6.0',
+    date: 'April 9, 2026',
+    changes: [
+      'Web inspector: Chrome DevTools now docks inside the app — toggle with Alt+Cmd+I (Ctrl+Shift+I on Windows) or F12, drag the top edge to resize',
+      'Custom CLI option: launch any CLI tool by command (e.g. `gsd`) from the project config, not just Claude/Cursor/Gemini/Codex',
+      'Fix PowerShell users on Windows: login shell flag (`-l`) is no longer passed to PowerShell, which was causing terminals to exit immediately with a parse error',
+      'Fix terminal losing focus on HMR reloads: switching branches or triggering a hot reload in the dev server no longer steals focus from the terminal back to the browser',
+      'Fix custom CLI tab label when the command is a full path (e.g. `/usr/local/bin/foo` now shows as "Foo" instead of the whole path)',
+      'Fix terminal resize crash on Windows when the PTY has already exited',
+      'Fix session cleanup on PTY exit — disposables and output buffers are now properly released',
+    ],
+  },
+  {
     version: '1.5.3',
     date: 'April 5, 2026',
     changes: [
