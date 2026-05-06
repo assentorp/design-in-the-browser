@@ -466,10 +466,18 @@ export function setupIPC(mainWindow: BrowserWindow) {
 
   // Open file in VS Code desktop app
   // Editor configurations: CLI commands and how to format file:line arguments
-  const editorConfigs: Record<CodeEditor, { cmd: string; macPaths?: string[]; buildArgs: (file: string, line?: number, col?: number, projectPath?: string) => string[] }> = {
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const editorConfigs: Record<CodeEditor, { cmd: string; macPaths?: string[]; winPaths?: string[]; buildArgs: (file: string, line?: number, col?: number, projectPath?: string) => string[] }> = {
     vscode: {
       cmd: 'code',
       macPaths: ['/usr/local/bin/code', '/opt/homebrew/bin/code', '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code'],
+      winPaths: [
+        path.join(localAppData, 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd'),
+        path.join(programFiles, 'Microsoft VS Code', 'bin', 'code.cmd'),
+        path.join(programFilesX86, 'Microsoft VS Code', 'bin', 'code.cmd'),
+      ],
       buildArgs: (file, line, col, projectPath) => {
         const args: string[] = [];
         if (projectPath) args.push(projectPath);
@@ -487,6 +495,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
     cursor: {
       cmd: 'cursor',
       macPaths: ['/usr/local/bin/cursor', '/opt/homebrew/bin/cursor', '/Applications/Cursor.app/Contents/Resources/app/bin/cursor'],
+      winPaths: [
+        path.join(localAppData, 'Programs', 'cursor', 'resources', 'app', 'bin', 'cursor.cmd'),
+        path.join(programFiles, 'Cursor', 'resources', 'app', 'bin', 'cursor.cmd'),
+      ],
       buildArgs: (file, line, col, projectPath) => {
         const args: string[] = [];
         if (projectPath) args.push(projectPath);
@@ -513,6 +525,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
     sublime: {
       cmd: 'subl',
       macPaths: ['/usr/local/bin/subl', '/opt/homebrew/bin/subl', '/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl'],
+      winPaths: [
+        path.join(programFiles, 'Sublime Text', 'subl.exe'),
+        path.join(programFiles, 'Sublime Text 3', 'sublime_text.exe'),
+      ],
       buildArgs: (file, line, col) => {
         let uri = file;
         if (line) { uri += `:${line}`; if (col) uri += `:${col}`; }
@@ -567,6 +583,11 @@ export function setupIPC(mainWindow: BrowserWindow) {
         if (fs.existsSync(p)) return { cmd: p, prependArgs: [], extraEnv: {} };
       }
     }
+    if (process.platform === 'win32' && config.winPaths) {
+      for (const p of config.winPaths) {
+        if (fs.existsSync(p)) return { cmd: p, prependArgs: [], extraEnv: {} };
+      }
+    }
     return { cmd: config.cmd, prependArgs: [], extraEnv: {} };
   }
 
@@ -577,9 +598,14 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const { cmd, prependArgs, extraEnv } = resolveEditorCmd(editor);
     const args = [...prependArgs, ...config.buildArgs(filePath, line, column, projectPath)];
     console.log('[IPC] Opening in editor:', editor, cmd, args.join(' '));
+    // Windows: use shell:true so .cmd/.bat shims (e.g. code.cmd) resolve via PATH
+    // and don't fail with ENOENT when the resolved path is a batch script.
+    const useShell = process.platform === 'win32';
     spawn(cmd, args, {
       detached: true,
       stdio: 'ignore',
+      shell: useShell,
+      windowsHide: true,
       env: { ...process.env, ...extraEnv, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
     }).unref();
   });
@@ -591,6 +617,13 @@ export function setupIPC(mainWindow: BrowserWindow) {
       // Check macOS app paths first
       if (process.platform === 'darwin' && config.macPaths) {
         if (config.macPaths.some(p => fs.existsSync(p))) {
+          detected.push(name);
+          continue;
+        }
+      }
+      // Check Windows install paths
+      if (process.platform === 'win32' && config.winPaths) {
+        if (config.winPaths.some(p => fs.existsSync(p))) {
           detected.push(name);
           continue;
         }
