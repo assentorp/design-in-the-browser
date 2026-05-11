@@ -70,6 +70,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const injectedRef = useRef(false);
   const hasEverLoadedRef = useRef(false);
   const [hasFirstPaint, setHasFirstPaint] = useState(false);
+  const [hasEditor, setHasEditor] = useState(true);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Debounce reload-storm injection triggers: dev-server restarts (e.g. after a
   // git branch switch) can fire did-stop-loading + dom-ready in rapid succession,
@@ -95,6 +96,24 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       }, 100);
       return () => clearTimeout(timer);
     }
+  }, [hasMainAPI]);
+
+  // Detect installed editors so we can disable the Code button when none are
+  // present (otherwise the spawn ENOENTs and macOS surfaces a system dialog).
+  // Re-check on window focus so users who install an editor mid-session don't
+  // need to restart the app.
+  useEffect(() => {
+    const api = getMainAPI();
+    if (!api) return;
+    let cancelled = false;
+    const check = () => {
+      api.detectEditors().then((editors) => {
+        if (!cancelled) setHasEditor(editors.length > 0);
+      }).catch(() => { /* leave previous value */ });
+    };
+    check();
+    window.addEventListener('focus', check);
+    return () => { cancelled = true; window.removeEventListener('focus', check); };
   }, [hasMainAPI]);
 
   // Inject annotation script and setup handlers
@@ -381,11 +400,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
   const openFileInCodeView = useCallback((filePath: string, line?: number) => {
     const mainAPI = getMainAPI();
-    if (!mainAPI) return;
+    if (!mainAPI || !hasEditor) return;
     clearSelection();
     const gotoLine = line && line > 1 ? line : undefined;
     mainAPI.openInEditor(filePath, gotoLine, undefined, projectPath);
-  }, [clearSelection, projectPath]);
+  }, [clearSelection, projectPath, hasEditor]);
 
   // Event-driven message bridge: webview signals via console.log, we fetch on demand
   useEffect(() => {
@@ -920,10 +939,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
   const toggleCodeView = useCallback(() => {
     const mainAPI = getMainAPI();
-    if (!mainAPI) return;
+    if (!mainAPI || !hasEditor) return;
     clearSelection();
     mainAPI.openInEditor(projectPath, undefined, undefined, projectPath);
-  }, [projectPath, clearSelection]);
+  }, [projectPath, clearSelection, hasEditor]);
 
   const currentWidth = viewport ? viewportSizes[viewport] : null;
 
@@ -943,6 +962,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onClearCacheReload={clearCacheAndReload}
         onToggleAnnotate={toggleAnnotate}
         onToggleCodeView={toggleCodeView}
+        hasEditor={hasEditor}
         viewport={viewport}
         viewportSizes={viewportSizes}
         onViewportChange={setViewport}
