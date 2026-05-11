@@ -855,57 +855,112 @@ export function setupIPC(mainWindow: BrowserWindow) {
     });
   });
 
-  // List project files for @-mention autocomplete
-  ipcMain.handle('project:list-files', async (_, { projectPath }: { projectPath: string }) => {
-    const excludeDirs = new Set([
-      'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.output',
-      'coverage', '.cache', '.turbo', '.vercel', '.svelte-kit', '__pycache__',
-      'venv', '.venv', '.idea', '.vscode', '.DS_Store',
-    ]);
-    const includeExts = new Set([
-      '.ts', '.tsx', '.js', '.jsx', '.json', '.css', '.scss', '.html',
-      '.vue', '.svelte', '.md', '.yaml', '.yml', '.env', '.toml',
-      '.py', '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.java',
-    ]);
-    const maxFiles = 10000;
-    const results: { name: string; dir: string }[] = [];
+  // List project files for @-mention autocomplete.
+  // Uses async fs to keep the main-process event loop responsive (sync readdir
+  // on a large tree freezes window dragging, menus, IPC), and caches the result
+  // per projectPath for FILE_LIST_TTL_MS so dev-server reload storms (e.g. after
+  // a git branch switch) don't trigger repeated full-tree walks.
+  type ProjectFile = { name: string; dir: string };
+  const FILE_LIST_TTL_MS = 30_000;
+  const fileListCache = new Map<string, { ts: number; files: ProjectFile[] }>();
+  const fileListInFlight = new Map<string, Promise<ProjectFile[]>>();
+  const FILE_EXCLUDE_DIRS = new Set([
+    'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.output',
+    'coverage', '.cache', '.turbo', '.vercel', '.svelte-kit', '__pycache__',
+    'venv', '.venv', '.idea', '.vscode', '.DS_Store',
+  ]);
+  const FILE_INCLUDE_EXTS = new Set([
+    '.ts', '.tsx', '.js', '.jsx', '.json', '.css', '.scss', '.html',
+    '.vue', '.svelte', '.md', '.yaml', '.yml', '.env', '.toml',
+    '.py', '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.java',
+  ]);
+  const FILE_LIST_MAX = 10000;
 
-    function walk(dir: string) {
-      if (results.length >= maxFiles) return;
+  async function listProjectFiles(projectPath: string): Promise<ProjectFile[]> {
+    const results: ProjectFile[] = [];
+    async function walk(dir: string): Promise<void> {
+      if (results.length >= FILE_LIST_MAX) return;
       let entries: fs.Dirent[];
       try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
       } catch {
         return;
       }
       for (const entry of entries) {
-        if (results.length >= maxFiles) return;
+        if (results.length >= FILE_LIST_MAX) return;
         if (entry.isDirectory()) {
-          if (!excludeDirs.has(entry.name)) {
-            walk(path.join(dir, entry.name));
+          if (!FILE_EXCLUDE_DIRS.has(entry.name)) {
+            await walk(path.join(dir, entry.name));
           }
         } else if (entry.isFile()) {
           const ext = path.extname(entry.name).toLowerCase();
-          if (includeExts.has(ext)) {
+          if (FILE_INCLUDE_EXTS.has(ext)) {
             const relDir = path.relative(projectPath, dir);
             results.push({ name: entry.name, dir: relDir || '.' });
           }
         }
       }
     }
-
-    walk(projectPath);
+    await walk(projectPath);
     return results;
+  }
+
+  ipcMain.handle('project:list-files', async (_, { projectPath }: { projectPath: string }) => {
+    const cached = fileListCache.get(projectPath);
+    if (cached && Date.now() - cached.ts < FILE_LIST_TTL_MS) {
+      return cached.files;
+    }
+    const inFlight = fileListInFlight.get(projectPath);
+    if (inFlight) return inFlight;
+
+    const promise = listProjectFiles(projectPath)
+      .then((files) => {
+        fileListCache.set(projectPath, { ts: Date.now(), files });
+        return files;
+      })
+      .finally(() => {
+        fileListInFlight.delete(projectPath);
+      });
+    fileListInFlight.set(projectPath, promise);
+    return promise;
   });
 
-  // List design tokens for >mention autocomplete
+  // List design tokens for >mention autocomplete (cached + in-flight dedup).
+  // getDesignTokens is sync and reads several CSS files; cache to avoid rerunning
+  // on every webview reload.
+  type DesignTokenList = ReturnType<typeof getDesignTokens>;
+  const TOKEN_TTL_MS = 30_000;
+  const tokenCache = new Map<string, { ts: number; tokens: DesignTokenList }>();
+  const tokenInFlight = new Map<string, Promise<DesignTokenList>>();
+
   ipcMain.handle('project:list-tokens', async (_, { projectPath }: { projectPath: string }) => {
-    try {
-      return getDesignTokens(projectPath);
-    } catch (err) {
-      console.error('[IPC] Failed to get design tokens:', err);
-      return [];
+    const cached = tokenCache.get(projectPath);
+    if (cached && Date.now() - cached.ts < TOKEN_TTL_MS) {
+      return cached.tokens;
     }
+    const inFlight = tokenInFlight.get(projectPath);
+    if (inFlight) return inFlight;
+
+    // getDesignTokens is sync; defer to a microtask so the IPC reply path stays
+    // async-friendly and we can dedupe overlapping calls via the in-flight map.
+    const promise = Promise.resolve()
+      .then(() => {
+        try {
+          return getDesignTokens(projectPath);
+        } catch (err) {
+          console.error('[IPC] Failed to get design tokens:', err);
+          return [] as DesignTokenList;
+        }
+      })
+      .then((tokens) => {
+        tokenCache.set(projectPath, { ts: Date.now(), tokens });
+        return tokens;
+      })
+      .finally(() => {
+        tokenInFlight.delete(projectPath);
+      });
+    tokenInFlight.set(projectPath, promise);
+    return promise;
   });
 
   // Clear webview session cache and storage data

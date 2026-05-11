@@ -71,6 +71,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const hasEverLoadedRef = useRef(false);
   const [hasFirstPaint, setHasFirstPaint] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounce reload-storm injection triggers: dev-server restarts (e.g. after a
+  // git branch switch) can fire did-stop-loading + dom-ready in rapid succession,
+  // each of which would otherwise schedule a full project file walk in main.
+  const injectDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onAnnotationRef = useRef(onAnnotation);
   onAnnotationRef.current = onAnnotation;
   const cliRunningRef = useRef(cliRunning);
@@ -278,7 +282,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
     const handleDidStopLoading = () => {
       setIsLoading(false);
-      injectAndSetup();
+      scheduleInject();
       // Wait for the page to actually paint content before hiding spinner.
       // SPA/React apps load HTML first, then render via JS — did-stop-loading
       // fires too early. Poll until <body> has visible content, with a fallback.
@@ -303,7 +307,15 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     };
 
     const handleDomReady = () => {
-      injectAndSetup();
+      scheduleInject();
+    };
+
+    const scheduleInject = () => {
+      if (injectDebounceRef.current) clearTimeout(injectDebounceRef.current);
+      injectDebounceRef.current = setTimeout(() => {
+        injectDebounceRef.current = null;
+        injectAndSetup();
+      }, 80);
     };
 
     // Suppress expected navigation errors (ERR_ABORTED is normal during navigation)
@@ -347,6 +359,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
     return () => {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (injectDebounceRef.current) clearTimeout(injectDebounceRef.current);
       webview.removeEventListener('did-navigate', handleDidNavigate);
       webview.removeEventListener('did-navigate-in-page', handleDidNavigate);
       webview.removeEventListener('did-start-loading', handleDidStartLoading);
