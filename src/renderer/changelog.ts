@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.6.1',
+    date: 'May 11, 2026',
+    changes: [
+      'Fix Code button on Windows: VS Code, Cursor, and Sublime are now detected in their standard install locations and launch correctly via their `.cmd` shims',
+      'Fix UI freezes after dev-server restarts and git branch switches: the project file walk for @-mention autocomplete is now async, cached for 30s, and debounced so reload storms no longer trigger repeated full-tree scans',
+      'Code button is now disabled with an explanatory tooltip when no supported editor (VS Code, Cursor, Zed, Sublime, WebStorm, Nova) is installed, instead of failing silently or showing a system error dialog',
+    ],
+  },
+  {
     version: '1.6.0',
     date: 'April 9, 2026',
     changes: [
