@@ -97,6 +97,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       if (!s) return;
 
       if (s.ready) {
+        if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
         mainWindow.webContents.send('terminal:data', { sessionId, data });
       } else {
         if (s.outputBuffer.length < MAX_OUTPUT_BUFFER) {
@@ -141,8 +142,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
     session.ready = true;
 
     // Flush buffered output
-    for (const data of session.outputBuffer) {
-      mainWindow.webContents.send('terminal:data', { sessionId, data });
+    if (!mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+      for (const data of session.outputBuffer) {
+        mainWindow.webContents.send('terminal:data', { sessionId, data });
+      }
     }
     session.outputBuffer = [];
   });
