@@ -6,6 +6,17 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.7.0',
+    date: 'May 25, 2026',
+    changes: [
+      'Starter Project: create a new project from a polished boilerplate landing page — no folder, framework, or dev server required. Pick a parent directory, give it a name, and start editing',
+      'Built-in static server for Starter Projects with file-watch hot reload — when Claude Code (or any editor) saves a change, the browser refreshes automatically',
+      'Fix presets being wiped on disk if `presets.json` failed to read once — saves are now atomic (tmp + rename) with an auto-recovering `.bak`, and an empty save is refused while the on-disk file is unreadable',
+      'Fix first character of typed CLI commands occasionally being eaten by shell init banners (e.g. "laude" instead of "claude") — commands now wait for the prompt to stabilise before sending',
+      'Fix crash when terminal output arrived after the window was closed',
+    ],
+  },
+  {
     version: '1.6.1',
     date: 'May 11, 2026',
     changes: [
