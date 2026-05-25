@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { initAnalytics, disableAnalytics } from './analytics';
 import Browser, { type PendingEdit, type EditActions } from './components/Browser';
-import Terminal, { destroyTerminalSession, scrollTerminalToBottom } from './components/Terminal';
+import Terminal, { destroyTerminalSession, scrollTerminalToBottom, writeToTerminal } from './components/Terminal';
 import Resizer from './components/Resizer';
 import TabBar from './components/TabBar';
 import EditQueuePanel from './components/EditQueuePanel';
@@ -375,13 +375,14 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(
-    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; customCliCommand: string }) => {
+    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; customCliCommand: string; usesStaticServer?: boolean }) => {
       const newIndex = sessionCounter + 1;
       const newSession = createSession(
         { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
         newIndex
       );
       newSession.url = config.url || 'http://localhost:3000';
+      newSession.usesStaticServer = config.usesStaticServer;
       if (savedBrowserWidthRef.current != null) {
         newSession.browserWidth = savedBrowserWidthRef.current;
       }
@@ -413,6 +414,22 @@ export default function App() {
       setSessionCounter(newIndex);
       setShowConfigModal(false);
 
+      // Starter Projects don't run anything in the Dev Server tab — print a
+      // banner so the user knows what's serving the page and how it stops.
+      if (config.usesStaticServer) {
+        const banner =
+          '\r\n' +
+          '  \x1b[1;36mDesign In The Browser\x1b[0m  \x1b[2m· Starter Project\x1b[0m\r\n' +
+          '\r\n' +
+          `  \x1b[32m●\x1b[0m Static server  \x1b[2m${config.url}\x1b[0m\r\n` +
+          '  \x1b[32m●\x1b[0m Hot reload    \x1b[2mfile changes auto-refresh the browser\x1b[0m\r\n' +
+          '\r\n' +
+          '  \x1b[2mThis server has no command to run — it lives inside the app and\r\n' +
+          '  stops automatically when you close this project.\x1b[0m\r\n' +
+          '\r\n';
+        writeToTerminal(devServerTabId, banner);
+      }
+
       // Save as preset if requested
       if (config.saveAsPreset) {
         const newPreset: ProjectPreset = {
@@ -426,6 +443,7 @@ export default function App() {
           claudeModel: config.claudeModel || undefined,
           dangerouslySkipPermissions: config.dangerouslySkipPermissions || undefined,
           customCliCommand: config.cliTool === 'custom' ? config.customCliCommand : undefined,
+          usesStaticServer: config.usesStaticServer || undefined,
         };
         setProjectPresets((prev) => {
           const updated = [...prev, newPreset];
@@ -487,6 +505,12 @@ export default function App() {
       if (timer) clearTimeout(timer);
       cliTimersRef.current.delete(sessionId);
       cliRunningRef.current.delete(sessionId);
+
+      // Release the static HTTP server if this is a Starter session
+      const closing = sessions.find((s) => s.id === sessionId);
+      if (closing?.usesStaticServer) {
+        window.mainAPI?.stopStaticServer(closing.projectPath);
+      }
 
       // Clear UI state if closing the active session
       if (sessionId === activeSessionId) {

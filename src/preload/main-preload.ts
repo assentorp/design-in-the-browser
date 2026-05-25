@@ -52,6 +52,18 @@ const mainAPI: MainAPI = {
     return ipcRenderer.invoke('dialog:showOpenDialog');
   },
 
+  createNewWebpage: (name: string) => {
+    return ipcRenderer.invoke('project:create-starter', { name });
+  },
+
+  startStaticServer: (projectPath: string): Promise<number> => {
+    return ipcRenderer.invoke('static-server:start', { projectPath });
+  },
+
+  stopStaticServer: (projectPath: string): Promise<void> => {
+    return ipcRenderer.invoke('static-server:stop', { projectPath });
+  },
+
   runCommand: (sessionId: string, command: string) => {
     ipcRenderer.send('terminal:run-command', { sessionId, command });
   },

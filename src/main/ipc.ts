@@ -15,11 +15,188 @@ import { getDesignTokens } from './tailwind-tokens';
 // Max buffered output chunks before renderer signals ready (~5MB worth)
 const MAX_OUTPUT_BUFFER = 1000;
 
+// Boilerplate landing page used by Starter Project. Self-contained: inline
+// styles, no external assets. __PROJECT_NAME__ is replaced at write time.
+const STARTER_PROJECT_HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>__PROJECT_NAME__</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    .nav {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: saturate(180%) blur(12px);
+      border-bottom: 1px solid #eef2f7;
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; letter-spacing: -0.01em;
+    }
+    .brand-mark {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    }
+    .nav-links { display: flex; gap: 28px; }
+    .nav-links a { color: #475569; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: #0f172a; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px; padding: 10px 18px; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      border: 1px solid transparent; transition: transform .08s ease, background .15s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: #0f172a; color: #ffffff; }
+    .btn-primary:hover { background: #1e293b; }
+    .btn-secondary { background: #ffffff; color: #0f172a; border-color: #e2e8f0; }
+    .btn-secondary:hover { background: #f8fafc; }
+
+    /* Hero */
+    .hero { padding: 96px 0 80px; text-align: center; }
+    .eyebrow {
+      display: inline-block; padding: 6px 12px; border-radius: 999px;
+      background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600;
+      letter-spacing: 0.02em; margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 5.5vw, 64px); line-height: 1.05;
+      letter-spacing: -0.03em; margin: 0 auto 20px; max-width: 820px;
+    }
+    .hero p {
+      font-size: 18px; color: #475569; max-width: 620px;
+      margin: 0 auto 32px;
+    }
+    .hero-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+
+    /* Features */
+    .features { padding: 64px 0 96px; }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px;
+    }
+    .feature {
+      padding: 28px; border-radius: 16px;
+      background: #f8fafc; border: 1px solid #eef2f7;
+    }
+    .feature-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: #eef2ff; display: flex; align-items: center; justify-content: center;
+      color: #4f46e5; font-size: 20px; margin-bottom: 16px;
+    }
+    .feature h3 {
+      font-size: 16px; margin: 0 0 6px; letter-spacing: -0.01em;
+    }
+    .feature p {
+      font-size: 14px; color: #64748b; margin: 0;
+    }
+
+    /* Footer */
+    .footer {
+      border-top: 1px solid #eef2f7; padding: 24px 0;
+      color: #94a3b8; font-size: 13px;
+    }
+    .footer-inner { display: flex; align-items: center; justify-content: space-between; }
+
+    @media (max-width: 720px) {
+      .nav-links { display: none; }
+      .features-grid { grid-template-columns: 1fr; }
+      .hero { padding: 64px 0 48px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="#">
+        <span class="brand-mark"></span>
+        <span>__PROJECT_NAME__</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#about">About</a>
+      </nav>
+      <a class="btn btn-primary" href="#get-started">Get started</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <span class="eyebrow">New · Just launched</span>
+        <h1>Design beautiful interfaces in the browser.</h1>
+        <p>A simple starting point you can shape into anything. Annotate any element on this page and tell the AI what to change.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#get-started">Start building</a>
+          <a class="btn btn-secondary" href="#learn-more">Learn more</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="container">
+        <div class="features-grid">
+          <div class="feature">
+            <div class="feature-icon">✨</div>
+            <h3>Polished by default</h3>
+            <p>Sensible typography, spacing, and color so you can ship without fiddling.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">⚡</div>
+            <h3>Fast to edit</h3>
+            <p>Point at any element and describe the change. The AI handles the markup.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🧩</div>
+            <h3>Yours to extend</h3>
+            <p>Just HTML and CSS. Add sections, drop in components, make it your own.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>© __PROJECT_NAME__</span>
+      <span>Built with Design In The Browser</span>
+    </div>
+  </footer>
+</body>
+</html>
+`;
+
 interface SessionState {
   ptyProcess: pty.IPty;
   ready: boolean;
   outputBuffer: string[];
   disposables: { dispose: () => void }[];
+  // True once the PTY has emitted any output — used as a signal that shell
+  // init is far enough along to accept typed commands without dropping the
+  // first character (e.g. .zshrc banners or screen clears stomping the echo).
+  shellPromptSeen: boolean;
 }
 
 const sessions = new Map<string, SessionState>();
@@ -86,6 +263,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       ready: false,
       outputBuffer: [],
       disposables: [],
+      shellPromptSeen: false,
     };
 
     sessions.set(sessionId, session);
@@ -95,6 +273,8 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const dataDisposable = ptyProcess.onData((data) => {
       const s = sessions.get(sessionId);
       if (!s) return;
+
+      s.shellPromptSeen = true;
 
       if (s.ready) {
         if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
@@ -184,13 +364,292 @@ export function setupIPC(mainWindow: BrowserWindow) {
     return result.filePaths[0];
   });
 
-  // Handle running a command in a terminal
+  // Tiny static HTTP server used by Starter Projects so file-relative URLs,
+  // ES modules, fetch(), service workers, etc. all work. Keyed by projectPath
+  // with a refcount so multiple sessions on the same folder share one server.
+  // Also watches the project tree and broadcasts a "reload" SSE event to all
+  // connected pages whenever a file changes (e.g. when Claude Code edits a
+  // file), so the browser refreshes automatically.
+  interface StaticServerEntry {
+    server: http.Server;
+    port: number;
+    refCount: number;
+    watcher: fs.FSWatcher | null;
+    clients: Set<http.ServerResponse>;
+    notifyTimer: NodeJS.Timeout | null;
+  }
+  const staticServers = new Map<string, StaticServerEntry>();
+
+  const STATIC_MIME: Record<string, string> = {
+    '.html': 'text/html; charset=utf-8',
+    '.htm':  'text/html; charset=utf-8',
+    '.css':  'text/css; charset=utf-8',
+    '.js':   'application/javascript; charset=utf-8',
+    '.mjs':  'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg':  'image/svg+xml',
+    '.png':  'image/png',
+    '.jpg':  'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif':  'image/gif',
+    '.webp': 'image/webp',
+    '.ico':  'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2':'font/woff2',
+    '.ttf':  'font/ttf',
+    '.otf':  'font/otf',
+    '.txt':  'text/plain; charset=utf-8',
+    '.md':   'text/plain; charset=utf-8',
+    '.wasm': 'application/wasm',
+  };
+
+  // Paths we never want to trigger a reload for (build output, VCS, deps).
+  const WATCH_IGNORE = /(^|[\\/])(node_modules|\.git|dist|build|\.next|\.nuxt|\.output|\.cache|\.turbo|\.vercel|\.svelte-kit|\.DS_Store)([\\/]|$)/;
+
+  // Injected into every served HTML response. Opens an EventSource to the
+  // server's /__reload endpoint and triggers a full reload on the "reload"
+  // event. Wrapped in try/catch so a broken EventSource never breaks the page.
+  const RELOAD_SCRIPT = `
+<script>(function(){try{var es=new EventSource('/__reload');es.addEventListener('reload',function(){location.reload();});}catch(e){}})();</script>
+`;
+
+  function injectReloadScript(html: Buffer): Buffer {
+    const text = html.toString('utf8');
+    const lower = text.toLowerCase();
+    const idx = lower.lastIndexOf('</body>');
+    const injected = idx >= 0
+      ? text.slice(0, idx) + RELOAD_SCRIPT + text.slice(idx)
+      : text + RELOAD_SCRIPT;
+    return Buffer.from(injected, 'utf8');
+  }
+
+  function broadcastReload(entry: StaticServerEntry) {
+    for (const client of entry.clients) {
+      try { client.write('event: reload\ndata: {}\n\n'); }
+      catch { /* will be cleaned up on next 'close' */ }
+    }
+  }
+
+  function createStaticServer(projectPath: string, getEntry: () => StaticServerEntry | undefined): http.Server {
+    const root = path.resolve(projectPath);
+    return http.createServer((req, res) => {
+      try {
+        const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+
+        // SSE reload channel — keep the response open and register the client.
+        if (urlPath === '/__reload') {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          });
+          res.write(': connected\n\n');
+          const entry = getEntry();
+          if (!entry) { res.end(); return; }
+          entry.clients.add(res);
+          // Keep-alive ping every 25s so intermediaries don't drop the stream.
+          const ping = setInterval(() => {
+            try { res.write(': ping\n\n'); } catch { /* ignore */ }
+          }, 25_000);
+          req.on('close', () => {
+            clearInterval(ping);
+            entry.clients.delete(res);
+          });
+          return;
+        }
+
+        let rel = urlPath.replace(/^\/+/, '');
+        let target = path.resolve(root, rel);
+
+        // Reject path traversal — must stay inside project root.
+        if (target !== root && !target.startsWith(root + path.sep)) {
+          res.writeHead(403); res.end('Forbidden'); return;
+        }
+
+        let stat: fs.Stats;
+        try { stat = fs.statSync(target); }
+        catch { res.writeHead(404); res.end('Not found'); return; }
+
+        if (stat.isDirectory()) {
+          // Redirect /foo → /foo/ so relative links resolve correctly.
+          if (!urlPath.endsWith('/')) {
+            res.writeHead(301, { Location: urlPath + '/' });
+            res.end();
+            return;
+          }
+          target = path.join(target, 'index.html');
+          try { stat = fs.statSync(target); }
+          catch { res.writeHead(404); res.end('Not found'); return; }
+        }
+
+        const ext = path.extname(target).toLowerCase();
+        const contentType = STATIC_MIME[ext] || 'application/octet-stream';
+
+        // For HTML, read into memory and inject the reload script so the page
+        // refreshes when project files change. For everything else, stream.
+        if (ext === '.html' || ext === '.htm') {
+          const body = injectReloadScript(fs.readFileSync(target));
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': body.length,
+            'Cache-Control': 'no-store',
+          });
+          res.end(body);
+          return;
+        }
+
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': stat.size,
+          'Cache-Control': 'no-store',
+        });
+        fs.createReadStream(target).pipe(res);
+      } catch (err) {
+        console.error('[StaticServer] error:', err);
+        if (!res.headersSent) res.writeHead(500);
+        res.end('Server error');
+      }
+    });
+  }
+
+  function startWatcher(root: string, entry: StaticServerEntry): fs.FSWatcher | null {
+    try {
+      const watcher = fs.watch(root, { recursive: true }, (_event, filename) => {
+        if (filename && WATCH_IGNORE.test(filename.toString())) return;
+        // Coalesce rapid bursts (editors often emit multiple events per save).
+        if (entry.notifyTimer) clearTimeout(entry.notifyTimer);
+        entry.notifyTimer = setTimeout(() => {
+          entry.notifyTimer = null;
+          broadcastReload(entry);
+        }, 80);
+      });
+      watcher.on('error', (err) => console.error('[StaticServer] watcher error:', err));
+      return watcher;
+    } catch (err) {
+      // Recursive fs.watch isn't supported on every platform/Node combo.
+      // Fall back to no hot-reload rather than failing the whole server.
+      console.warn('[StaticServer] file watcher unavailable, hot reload disabled:', err);
+      return null;
+    }
+  }
+
+  ipcMain.handle('static-server:start', async (_, { projectPath }: { projectPath: string }) => {
+    const key = path.resolve(projectPath);
+    const existing = staticServers.get(key);
+    if (existing) {
+      existing.refCount += 1;
+      return existing.port;
+    }
+
+    const entry: StaticServerEntry = {
+      server: null as unknown as http.Server,
+      port: 0,
+      refCount: 1,
+      watcher: null,
+      clients: new Set(),
+      notifyTimer: null,
+    };
+    entry.server = createStaticServer(key, () => staticServers.get(key));
+
+    const port: number = await new Promise((resolve, reject) => {
+      entry.server.once('error', reject);
+      // 127.0.0.1 (not 0.0.0.0) so the dev server is never exposed on the LAN.
+      entry.server.listen(0, '127.0.0.1', () => {
+        const addr = entry.server.address();
+        if (addr && typeof addr === 'object') resolve(addr.port);
+        else reject(new Error('Failed to obtain server port'));
+      });
+    });
+    entry.port = port;
+    entry.watcher = startWatcher(key, entry);
+
+    staticServers.set(key, entry);
+    console.log('[StaticServer] started, port:', port, 'path:', key, 'hot-reload:', entry.watcher ? 'on' : 'off');
+    return port;
+  });
+
+  ipcMain.handle('static-server:stop', async (_, { projectPath }: { projectPath: string }) => {
+    const key = path.resolve(projectPath);
+    const entry = staticServers.get(key);
+    if (!entry) return;
+    entry.refCount -= 1;
+    if (entry.refCount > 0) return;
+    console.log('[StaticServer] stopping, port:', entry.port, 'path:', key);
+    if (entry.notifyTimer) clearTimeout(entry.notifyTimer);
+    entry.watcher?.close();
+    for (const client of entry.clients) {
+      try { client.end(); } catch { /* ignore */ }
+    }
+    entry.clients.clear();
+    entry.server.close();
+    staticServers.delete(key);
+  });
+
+  // Starter Project: pick a parent dir, write a boilerplate index.html.
+  // Returns { path } on success, { cancelled: true } if the user closed the
+  // folder picker, or throws if the target folder already exists.
+  ipcMain.handle('project:create-starter', async (_, { name }: { name: string }) => {
+    const safeName = name.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/^\.+/, '');
+    if (!safeName) throw new Error('Invalid project name');
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Choose where to create the project folder',
+      buttonLabel: 'Create Here',
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { cancelled: true as const };
+    }
+
+    const parentDir = result.filePaths[0];
+    const projectPath = path.join(parentDir, safeName);
+    if (fs.existsSync(projectPath)) {
+      throw new Error(`A folder named "${safeName}" already exists in ${parentDir}`);
+    }
+
+    fs.mkdirSync(projectPath, { recursive: true });
+    fs.writeFileSync(path.join(projectPath, 'index.html'), STARTER_PROJECT_HTML.replace(/__PROJECT_NAME__/g, safeName), 'utf8');
+    return { path: projectPath };
+  });
+
+  // Handle running a command in a terminal. We defer the write until the
+  // shell has produced its first output (a sign that .zshrc has finished
+  // sourcing and the prompt has been drawn) plus a short stabilisation
+  // delay, otherwise a banner or screen-clear from shell init can eat the
+  // first character of the typed command (e.g. "laude" instead of "claude").
   ipcMain.on('terminal:run-command', (_, { sessionId, command }: { sessionId: string; command: string }) => {
     const session = sessions.get(sessionId);
-    if (session) {
+    if (!session) return;
+
+    const STABILISE_MS = 300;
+    const POLL_MS = 50;
+    const MAX_WAIT_MS = 3000;
+
+    const write = () => {
+      const s = sessions.get(sessionId);
+      if (!s) return;
       console.log('[IPC] Running command in session:', sessionId, 'command:', command);
-      session.ptyProcess.write(command + '\r');
+      s.ptyProcess.write(command + '\r');
+    };
+
+    if (session.shellPromptSeen) {
+      setTimeout(write, STABILISE_MS);
+      return;
     }
+
+    const startedAt = Date.now();
+    const poll = setInterval(() => {
+      const s = sessions.get(sessionId);
+      if (!s) {
+        clearInterval(poll);
+        return;
+      }
+      if (s.shellPromptSeen || Date.now() - startedAt >= MAX_WAIT_MS) {
+        clearInterval(poll);
+        setTimeout(write, STABILISE_MS);
+      }
+    }, POLL_MS);
   });
 
   // Check if a URL is reachable (used for retry logic)
@@ -1094,6 +1553,19 @@ export function setupIPC(mainWindow: BrowserWindow) {
       server.process.kill();
     }
     vscodeServers.clear();
+
+    // Stop all Starter Project static servers
+    for (const [key, entry] of staticServers) {
+      console.log('[IPC] Stopping static server:', key);
+      if (entry.notifyTimer) clearTimeout(entry.notifyTimer);
+      entry.watcher?.close();
+      for (const client of entry.clients) {
+        try { client.end(); } catch { /* ignore */ }
+      }
+      entry.clients.clear();
+      entry.server.close();
+    }
+    staticServers.clear();
   });
 }
 

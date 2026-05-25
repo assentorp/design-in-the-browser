@@ -17,11 +17,28 @@ const terminalInstances = new Map<string, TerminalInstance>();
 const createdTabs = new Set<string>();
 let dataListenerSetup = false;
 
+// Writes queued before the xterm instance is created — flushed on creation.
+const pendingTerminalWrites = new Map<string, string[]>();
+
 export function scrollTerminalToBottom(tabId: string) {
   const instance = terminalInstances.get(tabId);
   if (instance) {
     instance.terminal.scrollToBottom();
   }
+}
+
+// Write text directly into a terminal tab's xterm.js instance (bypassing the
+// PTY). Used for informational banners. If the terminal hasn't been created
+// yet the write is queued and flushed when the instance is ready.
+export function writeToTerminal(tabId: string, text: string) {
+  const instance = terminalInstances.get(tabId);
+  if (instance) {
+    instance.terminal.write(text);
+    return;
+  }
+  const queue = pendingTerminalWrites.get(tabId) || [];
+  queue.push(text);
+  pendingTerminalWrites.set(tabId, queue);
 }
 
 const DEFAULT_FONT_SIZE = 13;
@@ -121,6 +138,13 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
     terminalInstances.set(tabId, { terminal, fitAddon, containerEl });
     terminal.open(containerEl);
+
+    // Flush any text queued via writeToTerminal() before the instance existed.
+    const pending = pendingTerminalWrites.get(tabId);
+    if (pending) {
+      for (const text of pending) terminal.write(text);
+      pendingTerminalWrites.delete(tabId);
+    }
 
     if (mainAPI && !createdTabs.has(tabId)) {
       createdTabs.add(tabId);
