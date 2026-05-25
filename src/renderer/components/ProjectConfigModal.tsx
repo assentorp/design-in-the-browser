@@ -18,12 +18,14 @@ interface ProjectConfigModalProps {
     claudeModel: string;
     dangerouslySkipPermissions: boolean;
     customCliCommand: string;
+    usesStaticServer?: boolean;
   }) => void;
   onDeletePreset: (presetId: string) => void;
   onUpdatePreset: (preset: ProjectPreset) => void;
 }
 
 type View = 'list' | 'new' | 'edit';
+type ProjectType = 'existing' | 'starter';
 
 export default function ProjectConfigModal({
   presets,
@@ -135,18 +137,28 @@ export default function ProjectConfigModal({
     );
   }, [presets, search]);
 
-  const handleOpenPreset = (preset: ProjectPreset) => {
+  const handleOpenPreset = async (preset: ProjectPreset) => {
+    let url = preset.url || 'http://localhost:3000';
+    if (preset.usesStaticServer) {
+      try {
+        const port = await window.mainAPI.startStaticServer(preset.path);
+        url = `http://localhost:${port}/`;
+      } catch (err) {
+        console.error('Failed to start static server for preset:', err);
+      }
+    }
     onCreate({
       name: preset.name,
       path: preset.path,
       startCommand: preset.startCommand,
-      url: preset.url || 'http://localhost:3000',
+      url,
       cliTool: preset.cliTool || 'claude',
       shell: preset.shell || 'default',
       saveAsPreset: false,
       claudeModel: preset.claudeModel || '',
       dangerouslySkipPermissions: preset.dangerouslySkipPermissions || false,
       customCliCommand: preset.customCliCommand || '',
+      usesStaticServer: preset.usesStaticServer,
     });
   };
 
@@ -176,8 +188,15 @@ export default function ProjectConfigModal({
     setDangerouslySkipPermissions(false);
     setCustomCliCommand('');
     setSaveAsPreset(true);
+    setProjectType('existing');
+    setStarterError(null);
+    setStarterBusy(false);
     setView('new');
   };
+
+  const [projectType, setProjectType] = useState<ProjectType>('existing');
+  const [starterError, setStarterError] = useState<string | null>(null);
+  const [starterBusy, setStarterBusy] = useState(false);
 
   const handleBack = () => {
     setView('list');
@@ -199,10 +218,45 @@ export default function ProjectConfigModal({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !path.trim()) return;
+    if (!name.trim()) return;
     if (cliTool === 'custom' && !customCliCommand.trim()) return;
+
+    // Starter Project (only available when creating, not editing)
+    if (view === 'new' && projectType === 'starter') {
+      if (starterBusy) return;
+      setStarterError(null);
+      setStarterBusy(true);
+      try {
+        const result = await window.mainAPI.createNewWebpage(name.trim());
+        if ('cancelled' in result) {
+          setStarterBusy(false);
+          return;
+        }
+        const port = await window.mainAPI.startStaticServer(result.path);
+        onCreate({
+          name: name.trim(),
+          path: result.path,
+          startCommand: '',
+          url: `http://localhost:${port}/`,
+          cliTool,
+          shell,
+          saveAsPreset,
+          claudeModel: cliTool === 'claude' ? claudeModel : '',
+          dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
+          customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : '',
+          usesStaticServer: true,
+        });
+      } catch (err) {
+        setStarterError(err instanceof Error ? err.message : String(err));
+        setStarterBusy(false);
+      }
+      return;
+    }
+
+    // Existing Project flow (requires path)
+    if (!path.trim()) return;
 
     // Update existing preset if editing
     if (editingPresetId) {
@@ -234,7 +288,10 @@ export default function ProjectConfigModal({
     });
   };
 
-  const isValid = name.trim() && path.trim() && (cliTool !== 'custom' || customCliCommand.trim());
+  const isStarter = view === 'new' && projectType === 'starter';
+  const isValid = name.trim()
+    && (isStarter || path.trim())
+    && (cliTool !== 'custom' || customCliCommand.trim());
   const showSearch = presets.length > 4;
 
   // --- Shared header ---
@@ -344,54 +401,95 @@ export default function ProjectConfigModal({
       <div className="project-config-section">
         <form onSubmit={handleSubmit}>
           <div className="project-config-form">
+            {view === 'new' && (
+              <div className="form-group">
+                <label>Type</label>
+                <div className="project-type-toggle" role="radiogroup" aria-label="Project type">
+                  <label className={`project-type-option${projectType === 'existing' ? ' active' : ''}`}>
+                    <input
+                      type="radio"
+                      name="project-type"
+                      value="existing"
+                      checked={projectType === 'existing'}
+                      onChange={() => setProjectType('existing')}
+                    />
+                    <span className="project-type-option-title">Existing Project</span>
+                    <span className="project-type-option-desc">Point at a folder you already have.</span>
+                  </label>
+                  <label className={`project-type-option${projectType === 'starter' ? ' active' : ''}`}>
+                    <input
+                      type="radio"
+                      name="project-type"
+                      value="starter"
+                      checked={projectType === 'starter'}
+                      onChange={() => setProjectType('starter')}
+                    />
+                    <span className="project-type-option-title">Starter Project</span>
+                    <span className="project-type-option-desc">Create a new folder with a ready-to-edit webpage.</span>
+                  </label>
+                </div>
+              </div>
+            )}
             <div className="form-group">
               <label>Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My Project"
+                placeholder={isStarter ? 'my-first-page' : 'My Project'}
                 className="form-input"
                 autoFocus
+                disabled={starterBusy}
               />
+              {isStarter && (
+                <span className="form-hint">
+                  We'll ask where to save it, then create a folder with this name.
+                </span>
+              )}
             </div>
-            <div className="form-group">
-              <label>Path</label>
-              <div className="path-input-wrapper">
+            {!isStarter && (
+              <div className="form-group">
+                <label>Path</label>
+                <div className="path-input-wrapper">
+                  <input
+                    type="text"
+                    value={path}
+                    onChange={(e) => setPath(e.target.value)}
+                    placeholder="/path/to/project"
+                    className="form-input"
+                  />
+                  <button type="button" className="browse-btn" onClick={handleBrowse}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+            {!isStarter && (
+              <div className="form-group">
+                <label>Start Command</label>
                 <input
                   type="text"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="/path/to/project"
+                  value={startCommand}
+                  onChange={(e) => setStartCommand(e.target.value)}
+                  placeholder="npm run dev"
                   className="form-input"
                 />
-                <button type="button" className="browse-btn" onClick={handleBrowse}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                </button>
               </div>
-            </div>
-            <div className="form-group">
-              <label>Start Command</label>
-              <input
-                type="text"
-                value={startCommand}
-                onChange={(e) => setStartCommand(e.target.value)}
-                placeholder="npm run dev"
-                className="form-input"
-              />
-            </div>
-            <div className="form-group">
-              <label>URL</label>
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="http://localhost:3000"
-                className="form-input"
-              />
-            </div>
+            )}
+            {!isStarter && (
+              <div className="form-group">
+                <label>URL</label>
+                <input
+                  type="text"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="http://localhost:3000"
+                  className="form-input"
+                />
+              </div>
+            )}
             <div className="form-group">
               <label>CLI Tool</label>
               <select
@@ -466,9 +564,18 @@ export default function ProjectConfigModal({
                 </select>
               </div>
             )}
+            {starterError && (
+              <span className="form-hint form-hint-warning">{starterError}</span>
+            )}
             <div className="project-config-actions">
-              <button type="submit" className="btn btn-primary" disabled={!isValid}>
-                {view === 'edit' ? 'Open Project' : 'Create Project'}
+              <button type="submit" className="btn btn-primary" disabled={!isValid || starterBusy}>
+                {starterBusy
+                  ? 'Creating…'
+                  : view === 'edit'
+                    ? 'Open Project'
+                    : isStarter
+                      ? 'Choose Location & Create'
+                      : 'Create Project'}
               </button>
             </div>
           </div>

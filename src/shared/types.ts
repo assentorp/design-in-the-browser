@@ -79,6 +79,9 @@ export interface Session {
   cliToolRunning: boolean;
   shell: ShellType;
   pendingEdits: SessionPendingEdit[];
+  // True when this session is served by the built-in static HTTP server
+  // (Starter Projects). Used to release the server on session close.
+  usesStaticServer?: boolean;
 }
 
 export type CliTool = 'claude' | 'cursor' | 'gemini' | 'codex' | 'custom';
@@ -118,6 +121,9 @@ export interface ProjectPreset {
   claudeModel?: string;
   dangerouslySkipPermissions?: boolean;
   customCliCommand?: string;
+  // True for Starter Project presets — when opened, the built-in static
+  // HTTP server is restarted and the URL is rewritten to the fresh port.
+  usesStaticServer?: boolean;
 }
 
 export interface ElementInfo {
@@ -176,6 +182,9 @@ export interface MainAPI {
   toggleAnnotateMode: () => void;
   onAnnotateModeChanged: (callback: (enabled: boolean) => void) => void;
   showOpenDialog: () => Promise<string | null>;
+  createNewWebpage: (name: string) => Promise<{ path: string } | { cancelled: true }>;
+  startStaticServer: (projectPath: string) => Promise<number>;
+  stopStaticServer: (projectPath: string) => Promise<void>;
   runCommand: (sessionId: string, command: string) => void;
   onUpdateAvailable: (callback: (info: { version: string; url: string }) => void) => void;
   onUpdateProgress: (callback: (info: { percent: number; transferred: number; total: number }) => void) => void;

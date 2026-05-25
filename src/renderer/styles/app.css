@@ -1398,6 +1398,54 @@ body,
   color: var(--text-primary);
 }
 
+.project-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.project-type-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.project-type-option:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.project-type-option.active {
+  border-color: var(--accent);
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
+}
+
+.project-type-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.project-type-option-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.project-type-option-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 .btn-back {
   display: inline-flex;
   align-items: center;
