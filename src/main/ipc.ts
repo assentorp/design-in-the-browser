@@ -15,8 +15,10 @@ import { getDesignTokens } from './tailwind-tokens';
 // Max buffered output chunks before renderer signals ready (~5MB worth)
 const MAX_OUTPUT_BUFFER = 1000;
 
-// Boilerplate landing page used by Starter Project. Self-contained: inline
-// styles, no external assets. __PROJECT_NAME__ is replaced at write time.
+// Blank starter page used by Starter Project. Intentionally empty — a single
+// centered prompt invites the user to click and describe what to build.
+// Self-contained: inline styles, no external assets. __PROJECT_NAME__ is
+// replaced at write time.
 const STARTER_PROJECT_HTML = `<!doctype html>
 <html lang="en">
 <head>
@@ -25,165 +27,40 @@ const STARTER_PROJECT_HTML = `<!doctype html>
   <title>__PROJECT_NAME__</title>
   <style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
+    html, body { margin: 0; padding: 0; height: 100%; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
       color: #0f172a;
       background: #ffffff;
-      line-height: 1.55;
       -webkit-font-smoothing: antialiased;
+      min-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px;
     }
-    a { color: inherit; text-decoration: none; }
-    img { max-width: 100%; display: block; }
-    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
-
-    /* Nav */
-    .nav {
-      position: sticky; top: 0; z-index: 10;
-      background: rgba(255,255,255,0.85);
-      backdrop-filter: saturate(180%) blur(12px);
-      border-bottom: 1px solid #eef2f7;
+    .canvas { max-width: 520px; }
+    h1 {
+      font-size: clamp(26px, 4vw, 36px);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0 0 14px;
     }
-    .nav-inner {
-      display: flex; align-items: center; justify-content: space-between;
-      height: 64px;
-    }
-    .brand {
-      display: flex; align-items: center; gap: 10px;
-      font-weight: 700; letter-spacing: -0.01em;
-    }
-    .brand-mark {
-      width: 28px; height: 28px; border-radius: 8px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    }
-    .nav-links { display: flex; gap: 28px; }
-    .nav-links a { color: #475569; font-size: 14px; font-weight: 500; }
-    .nav-links a:hover { color: #0f172a; }
-
-    /* Buttons */
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center;
-      gap: 8px; padding: 10px 18px; border-radius: 10px;
-      font-size: 14px; font-weight: 600; cursor: pointer;
-      border: 1px solid transparent; transition: transform .08s ease, background .15s ease;
-    }
-    .btn:active { transform: translateY(1px); }
-    .btn-primary { background: #0f172a; color: #ffffff; }
-    .btn-primary:hover { background: #1e293b; }
-    .btn-secondary { background: #ffffff; color: #0f172a; border-color: #e2e8f0; }
-    .btn-secondary:hover { background: #f8fafc; }
-
-    /* Hero */
-    .hero { padding: 96px 0 80px; text-align: center; }
-    .eyebrow {
-      display: inline-block; padding: 6px 12px; border-radius: 999px;
-      background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600;
-      letter-spacing: 0.02em; margin-bottom: 20px;
-    }
-    .hero h1 {
-      font-size: clamp(36px, 5.5vw, 64px); line-height: 1.05;
-      letter-spacing: -0.03em; margin: 0 auto 20px; max-width: 820px;
-    }
-    .hero p {
-      font-size: 18px; color: #475569; max-width: 620px;
-      margin: 0 auto 32px;
-    }
-    .hero-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
-
-    /* Features */
-    .features { padding: 64px 0 96px; }
-    .features-grid {
-      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 20px;
-    }
-    .feature {
-      padding: 28px; border-radius: 16px;
-      background: #f8fafc; border: 1px solid #eef2f7;
-    }
-    .feature-icon {
-      width: 40px; height: 40px; border-radius: 10px;
-      background: #eef2ff; display: flex; align-items: center; justify-content: center;
-      color: #4f46e5; font-size: 20px; margin-bottom: 16px;
-    }
-    .feature h3 {
-      font-size: 16px; margin: 0 0 6px; letter-spacing: -0.01em;
-    }
-    .feature p {
-      font-size: 14px; color: #64748b; margin: 0;
-    }
-
-    /* Footer */
-    .footer {
-      border-top: 1px solid #eef2f7; padding: 24px 0;
-      color: #94a3b8; font-size: 13px;
-    }
-    .footer-inner { display: flex; align-items: center; justify-content: space-between; }
-
-    @media (max-width: 720px) {
-      .nav-links { display: none; }
-      .features-grid { grid-template-columns: 1fr; }
-      .hero { padding: 64px 0 48px; }
+    p {
+      font-size: 17px;
+      line-height: 1.6;
+      color: #64748b;
+      margin: 0 auto;
+      max-width: 420px;
     }
   </style>
 </head>
 <body>
-  <header class="nav">
-    <div class="container nav-inner">
-      <a class="brand" href="#">
-        <span class="brand-mark"></span>
-        <span>__PROJECT_NAME__</span>
-      </a>
-      <nav class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#pricing">Pricing</a>
-        <a href="#about">About</a>
-      </nav>
-      <a class="btn btn-primary" href="#get-started">Get started</a>
-    </div>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div class="container">
-        <span class="eyebrow">New · Just launched</span>
-        <h1>Design beautiful interfaces in the browser.</h1>
-        <p>A simple starting point you can shape into anything. Annotate any element on this page and tell the AI what to change.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="#get-started">Start building</a>
-          <a class="btn btn-secondary" href="#learn-more">Learn more</a>
-        </div>
-      </div>
-    </section>
-
-    <section class="features" id="features">
-      <div class="container">
-        <div class="features-grid">
-          <div class="feature">
-            <div class="feature-icon">✨</div>
-            <h3>Polished by default</h3>
-            <p>Sensible typography, spacing, and color so you can ship without fiddling.</p>
-          </div>
-          <div class="feature">
-            <div class="feature-icon">⚡</div>
-            <h3>Fast to edit</h3>
-            <p>Point at any element and describe the change. The AI handles the markup.</p>
-          </div>
-          <div class="feature">
-            <div class="feature-icon">🧩</div>
-            <h3>Yours to extend</h3>
-            <p>Just HTML and CSS. Add sections, drop in components, make it your own.</p>
-          </div>
-        </div>
-      </div>
-    </section>
+  <main class="canvas">
+    <h1>This is your blank canvas.</h1>
+    <p>Click anywhere on the page and tell the AI what you'd like here.</p>
   </main>
-
-  <footer class="footer">
-    <div class="container footer-inner">
-      <span>© __PROJECT_NAME__</span>
-      <span>Built with Design In The Browser</span>
-    </div>
-  </footer>
 </body>
 </html>
 `;
