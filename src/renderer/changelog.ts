@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.7.1',
+    date: 'June 15, 2026',
+    changes: [
+      'Fix local HTML files (and HTMX pages) not loading in the built-in browser on Windows — a path like `C:\\Users\\you\\index.html` was being rewritten to an `https://` URL and never loaded. Local file paths now open as proper `file://` URLs (framework dev servers were unaffected)',
+      'Antigravity CLI replaces Gemini CLI as a built-in tool option — Google is retiring Gemini CLI for unpaid and Google One users on June 18 in favour of Antigravity CLI. Existing Gemini presets are migrated to Antigravity automatically',
+      'Qwen added as a CLI tool option, alongside Claude, Cursor, Antigravity, and Codex',
+      'Updated the Starter Project template',
+    ],
+  },
+  {
     version: '1.7.0',
     date: 'May 25, 2026',
     changes: [
