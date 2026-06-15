@@ -21,7 +21,7 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   claude: 'claude',
   cursor: 'cursor',
-  gemini: 'gemini',
+  antigravity: 'antigravity',
   codex: 'codex',
 };
 

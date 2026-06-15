@@ -84,7 +84,11 @@ export interface Session {
   usesStaticServer?: boolean;
 }
 
+<<<<<<< Updated upstream
 export type CliTool = 'claude' | 'cursor' | 'gemini' | 'codex' | 'custom';
+=======
+export type CliTool = 'claude' | 'cursor' | 'antigravity' | 'codex' | 'qwen' | 'custom';
+>>>>>>> Stashed changes
 
 export type ShellType = 'default' | 'wsl';
 
