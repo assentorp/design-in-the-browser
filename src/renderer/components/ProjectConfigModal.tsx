@@ -500,7 +500,8 @@ export default function ProjectConfigModal({
                 <option value="claude">Claude</option>
                 <option value="codex">Codex</option>
                 <option value="cursor">Cursor</option>
-                <option value="gemini">Gemini</option>
+                <option value="antigravity">Antigravity</option>
+                <option value="qwen">Qwen</option>
                 <option value="custom">Custom</option>
               </select>
             </div>
@@ -623,7 +624,7 @@ export default function ProjectConfigModal({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  <span>Claude Code, Cursor, or Gemini CLI</span>
+                  <span>Claude Code, Cursor, or Antigravity CLI</span>
                 </div>
               </div>
               <button className="btn btn-primary onboarding-continue" onClick={handleOnboardingContinue}>

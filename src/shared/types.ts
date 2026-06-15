@@ -84,7 +84,7 @@ export interface Session {
   usesStaticServer?: boolean;
 }
 
-export type CliTool = 'claude' | 'cursor' | 'gemini' | 'codex' | 'custom';
+export type CliTool = 'claude' | 'cursor' | 'antigravity' | 'codex' | 'qwen' | 'custom';
 
 export type ShellType = 'default' | 'wsl';
 
