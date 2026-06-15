@@ -50,7 +50,9 @@ jobs:
             release/*.blockmap
 
   build-windows:
-    runs-on: windows-latest
+    # Pinned to windows-2022: the windows-latest image's Visual Studio layout
+    # breaks node-gyp's VS detection when electron-rebuild compiles node-pty.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
