@@ -26,6 +26,21 @@ const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   qwen: 'qwen',
 };
 
+// Gemini CLI was replaced by Antigravity CLI (Google retired it for unpaid /
+// Google One users on June 18, 2026). Rewrite any stored 'gemini' preset so it
+// keeps launching. Returns a new array only if something changed.
+const migratePresetCliTools = (presets: ProjectPreset[]): { presets: ProjectPreset[]; changed: boolean } => {
+  let changed = false;
+  const migrated = presets.map((p) => {
+    if ((p.cliTool as string) === 'gemini') {
+      changed = true;
+      return { ...p, cliTool: 'antigravity' as CliTool };
+    }
+    return p;
+  });
+  return { presets: changed ? migrated : presets, changed };
+};
+
 interface UpdateInfo {
   version: string;
   url: string;
@@ -75,16 +90,20 @@ export default function App() {
         try {
           const legacyPresets = JSON.parse(legacyData) as ProjectPreset[];
           if (legacyPresets.length > 0) {
-            window.mainAPI?.savePresets(legacyPresets);
-            setProjectPresets(legacyPresets);
+            const { presets: migrated } = migratePresetCliTools(legacyPresets);
+            window.mainAPI?.savePresets(migrated);
+            setProjectPresets(migrated);
             localStorage.removeItem(LEGACY_KEY);
-            console.log('[App] Migrated', legacyPresets.length, 'presets from localStorage');
+            console.log('[App] Migrated', migrated.length, 'presets from localStorage');
           }
         } catch {
           // Ignore parse errors
         }
       } else {
-        setProjectPresets(presets);
+        const { presets: migrated, changed } = migratePresetCliTools(presets);
+        // Persist the gemini → antigravity rewrite back to disk so it's permanent.
+        if (changed) window.mainAPI?.savePresets(migrated);
+        setProjectPresets(migrated);
       }
       setPresetsLoaded(true);
     });

@@ -618,13 +618,13 @@ export default function ProjectConfigModal({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  <span>A local dev server for your project</span>
+                  <span>A local dev server for your project — or start from a built-in Starter Project</span>
                 </div>
                 <div className="onboarding-checklist-item">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  <span>Claude Code, Cursor, or Antigravity CLI</span>
+                  <span>An AI coding CLI — Claude Code, Cursor, Codex, Antigravity, or Qwen</span>
                 </div>
               </div>
               <button className="btn btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
