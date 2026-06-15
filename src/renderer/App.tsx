@@ -23,6 +23,7 @@ const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   cursor: 'cursor',
   gemini: 'gemini',
   codex: 'codex',
+  qwen: 'qwen',
 };
 
 interface UpdateInfo {

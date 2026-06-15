@@ -501,6 +501,7 @@ export default function ProjectConfigModal({
                 <option value="codex">Codex</option>
                 <option value="cursor">Cursor</option>
                 <option value="gemini">Gemini</option>
+                <option value="qwen">Qwen</option>
                 <option value="custom">Custom</option>
               </select>
             </div>
