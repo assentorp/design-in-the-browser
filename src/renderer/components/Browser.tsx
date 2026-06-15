@@ -6,6 +6,42 @@ import { annotationScript } from '../../annotation/injected-script';
 // Check if running in Electron (must be called at runtime)
 const getMainAPI = () => typeof window !== 'undefined' ? window.mainAPI : undefined;
 
+// Windows drive path, e.g. "C:\foo" or "C:/foo"
+const WINDOWS_PATH_RE = /^[a-zA-Z]:[\\/]/;
+
+// Convert an absolute local filesystem path into a file:// URL the webview can load.
+// Handles Windows backslashes/drive letters and encodes spaces & other unsafe chars,
+// while preserving path separators and the drive colon.
+const pathToFileUrl = (p: string): string => {
+  let normalized = p.replace(/\\/g, '/'); // backslashes → forward slashes
+  if (!normalized.startsWith('/')) normalized = '/' + normalized; // file:///C:/...
+  // encodeURI keeps "/" and ":" intact; additionally escape chars that would
+  // otherwise be parsed as query/fragment in a real filename.
+  const encoded = encodeURI(normalized).replace(/\?/g, '%3F').replace(/#/g, '%23');
+  return 'file://' + encoded;
+};
+
+// Turn whatever the user typed (or a project default) into a loadable URL.
+const normalizeUrl = (raw: string): string => {
+  const targetUrl = raw.trim();
+
+  // Already a fully-qualified scheme we pass through untouched.
+  if (/^(https?|file|about|data|blob):/i.test(targetUrl)) {
+    return targetUrl;
+  }
+
+  // Local filesystem paths → file:// URLs.
+  //  - Windows absolute:  C:\path\index.html  /  C:/path/index.html
+  //  - Unix absolute:     /path/to/index.html
+  if (WINDOWS_PATH_RE.test(targetUrl) || targetUrl.startsWith('/')) {
+    return pathToFileUrl(targetUrl);
+  }
+
+  // Bare host/URL: http for localhost, https for everything else.
+  const isLocal = targetUrl.startsWith('localhost') || targetUrl.startsWith('127.0.0.1');
+  return (isLocal ? 'http://' : 'https://') + targetUrl;
+};
+
 export interface PendingEdit {
   note: string;
   selector: string;
@@ -265,7 +301,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     // Wait for next frame to ensure webview is fully in DOM
     const frameId = requestAnimationFrame(() => {
       console.log('[Browser] Loading initial URL after mount');
-      webview.src = url;
+      webview.src = normalizeUrl(url);
     });
 
     return () => cancelAnimationFrame(frameId);
@@ -826,12 +862,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const webview = webviewRef.current;
     if (!webview) return;
 
-    let finalUrl = targetUrl;
-    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-      // Use http:// for localhost/127.0.0.1, https:// for everything else
-      const isLocal = targetUrl.startsWith('localhost') || targetUrl.startsWith('127.0.0.1');
-      finalUrl = (isLocal ? 'http://' : 'https://') + targetUrl;
-    }
+    const finalUrl = normalizeUrl(targetUrl);
 
     webview.src = finalUrl;
     onUrlChange(finalUrl);
