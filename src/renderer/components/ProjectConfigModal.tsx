@@ -500,12 +500,8 @@ export default function ProjectConfigModal({
                 <option value="claude">Claude</option>
                 <option value="codex">Codex</option>
                 <option value="cursor">Cursor</option>
-<<<<<<< Updated upstream
-                <option value="gemini">Gemini</option>
-=======
                 <option value="antigravity">Antigravity</option>
                 <option value="qwen">Qwen</option>
->>>>>>> Stashed changes
                 <option value="custom">Custom</option>
               </select>
             </div>
