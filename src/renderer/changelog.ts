@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.7.2',
+    date: 'June 18, 2026',
+    changes: [
+      'Dragging an image file into the terminal now attaches it as an image (e.g. "[Image #1]") in Claude Code, Cursor, and other CLI tools, instead of pasting the raw file path — the image is written to the clipboard and pasted with Ctrl+V automatically. Non-image files still paste their path as before',
+    ],
+  },
+  {
     version: '1.7.1',
     date: 'June 15, 2026',
     changes: [
