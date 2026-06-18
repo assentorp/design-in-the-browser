@@ -175,6 +175,7 @@ export interface MainAPI {
   listDesignTokens: (projectPath: string) => Promise<DesignToken[]>;
   destroyTerminal: (sessionId: string) => void;
   sendTerminalInput: (sessionId: string, data: string) => void;
+  pasteImageToTerminal: (sessionId: string, filePath: string) => Promise<boolean>;
   resizeTerminal: (sessionId: string, cols: number, rows: number) => void;
   terminalReady: (sessionId: string) => void;
   sendAnnotation: (data: AnnotationData) => void;
