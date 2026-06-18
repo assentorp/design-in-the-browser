@@ -24,6 +24,10 @@ const mainAPI: MainAPI = {
     ipcRenderer.send('terminal:input', { sessionId, data });
   },
 
+  pasteImageToTerminal: (sessionId: string, filePath: string): Promise<boolean> => {
+    return ipcRenderer.invoke('terminal:paste-image', { sessionId, filePath });
+  },
+
   resizeTerminal: (sessionId: string, cols: number, rows: number) => {
     ipcRenderer.send('terminal:resize', { sessionId, cols, rows });
   },

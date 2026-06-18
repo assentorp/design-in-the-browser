@@ -366,18 +366,33 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       const mainAPI = getMainAPI();
       if (!mainAPI || !e.dataTransfer?.files.length) return;
 
-      const paths: string[] = [];
+      const imagePaths: string[] = [];
+      const otherPaths: string[] = [];
       for (let i = 0; i < e.dataTransfer.files.length; i++) {
         const file = e.dataTransfer.files[i];
         const filePath = mainAPI.getPathForFile?.(file);
-        if (filePath) {
-          paths.push(filePath);
+        if (!filePath) continue;
+        if (file.type.startsWith('image/')) {
+          imagePaths.push(filePath);
+        } else {
+          otherPaths.push(filePath);
         }
       }
 
-      if (paths.length > 0) {
-        // Paste file paths into the terminal, space-separated and shell-escaped
-        const escaped = paths.map(p => p.includes(' ') ? `"${p}"` : p).join(' ');
+      // Image files: write each to the OS clipboard and trigger the CLI's
+      // Ctrl+V image paste so it attaches as "[Image #N]" instead of a raw
+      // path. Run sequentially so each Ctrl+V reads its own clipboard image.
+      if (imagePaths.length > 0) {
+        (async () => {
+          for (const p of imagePaths) {
+            await mainAPI.pasteImageToTerminal?.(activeTabId, p);
+          }
+        })();
+      }
+
+      // Non-image files: paste paths as text, space-separated and shell-escaped.
+      if (otherPaths.length > 0) {
+        const escaped = otherPaths.map(p => p.includes(' ') ? `"${p}"` : p).join(' ');
         mainAPI.sendTerminalInput(activeTabId, escaped);
       }
     };

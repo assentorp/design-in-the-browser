@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, app, dialog, session, webContents as webContentsModule, WebContentsView } from 'electron';
+import { BrowserWindow, ipcMain, app, dialog, session, webContents as webContentsModule, WebContentsView, clipboard, nativeImage } from 'electron';
 import { downloadUpdate, installUpdate } from './updater';
 import * as pty from 'node-pty';
 import * as path from 'path';
@@ -212,6 +212,29 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const session = sessions.get(sessionId);
     if (session) {
       session.ptyProcess.write(data);
+    }
+  });
+
+  // Handle image paste into terminal.
+  //
+  // CLI tools (Claude Code, Cursor, Gemini) only render an attached image
+  // (e.g. "[Image #1]") when they receive actual image data from the OS
+  // clipboard, triggered by Ctrl+V. Pasting a file path as text — what a plain
+  // drag-and-drop does — just inserts the literal path. So for dropped image
+  // files we load the image, write it to the OS clipboard, and send Ctrl+V
+  // (0x16) to the PTY so the CLI reads the clipboard and attaches the image.
+  ipcMain.handle('terminal:paste-image', (_, { sessionId, filePath }: { sessionId: string; filePath: string }) => {
+    const session = sessions.get(sessionId);
+    if (!session) return false;
+    try {
+      const image = nativeImage.createFromPath(filePath);
+      if (image.isEmpty()) return false;
+      clipboard.writeImage(image);
+      session.ptyProcess.write('\x16'); // Ctrl+V
+      return true;
+    } catch (err) {
+      console.warn('[IPC] terminal:paste-image failed for', filePath, err instanceof Error ? err.message : err);
+      return false;
     }
   });
 
