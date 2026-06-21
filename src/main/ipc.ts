@@ -960,15 +960,29 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const { cmd, prependArgs, extraEnv } = resolveEditorCmd(editor);
     const args = [...prependArgs, ...config.buildArgs(filePath, line, column, projectPath)];
     console.log('[IPC] Opening in editor:', editor, cmd, args.join(' '));
-    // Windows: use shell:true so .cmd/.bat shims (e.g. code.cmd) resolve via PATH
-    // and don't fail with ENOENT when the resolved path is a batch script.
+    // Windows: use shell:true so .cmd/.bat shims (e.g. code.cmd) resolve and run
+    // (Node can't spawn a .cmd directly without a shell).
     const useShell = process.platform === 'win32';
-    spawn(cmd, args, {
+    // With shell:true, Node does NOT quote the command or arguments — it joins
+    // them into a single string for cmd.exe. The resolved editor path (e.g.
+    // "...\Microsoft VS Code\bin\code.cmd") and the project path usually contain
+    // spaces, so without quoting cmd.exe splits them into separate tokens and the
+    // launch fails silently. Quote them ourselves on Windows.
+    const quoteForShell = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const spawnCmd = useShell ? quoteForShell(cmd) : cmd;
+    const spawnArgs = useShell ? args.map(quoteForShell) : args;
+    // Append common editor install dirs to PATH using the platform separator.
+    // On Windows the extra Unix dirs don't apply and using ':' would corrupt the
+    // existing PATH, so only extend PATH on non-Windows platforms.
+    const launchPath = process.platform === 'win32'
+      ? process.env.PATH
+      : `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin`;
+    spawn(spawnCmd, spawnArgs, {
       detached: true,
       stdio: 'ignore',
       shell: useShell,
       windowsHide: true,
-      env: { ...process.env, ...extraEnv, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
+      env: { ...process.env, ...extraEnv, PATH: launchPath },
     }).unref();
   });
 
