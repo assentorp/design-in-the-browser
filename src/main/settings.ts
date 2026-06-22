@@ -20,6 +20,8 @@ export interface AppSettings {
   discordDismissed: boolean;
   windowBounds?: WindowBounds;
   browserWidthPercent?: number;
+  gridSpatialSize: number;
+  gridBaselineSize: number;
 }
 
 const defaultSettings: AppSettings = {
@@ -30,6 +32,8 @@ const defaultSettings: AppSettings = {
   analyticsConsentGiven: false,
   onboardingCompleted: false,
   discordDismissed: false,
+  gridSpatialSize: 8,
+  gridBaselineSize: 4,
 };
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');

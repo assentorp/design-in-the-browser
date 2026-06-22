@@ -108,6 +108,9 @@ export interface AppSettings {
   discordDismissed: boolean;
   windowBounds?: WindowBounds;
   browserWidthPercent?: number;
+  // Grid overlay sizes (px) toggled with Shift+G in the browser
+  gridSpatialSize: number;
+  gridBaselineSize: number;
 }
 
 export interface ProjectPreset {

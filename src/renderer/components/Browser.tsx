@@ -178,8 +178,20 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       // Then inject the main script
       await webview.executeJavaScript(annotationScript + '\ntrue;');
 
-      // Inject project files for @-mention autocomplete
+      // Inject configured grid overlay sizes (Shift+G grid)
       const mainAPI = getMainAPI();
+      try {
+        const settings = await mainAPI?.getSettings();
+        if (settings) {
+          await webview.executeJavaScript(
+            `window.__claudeDesignSetGridSizes && window.__claudeDesignSetGridSizes(${Number(settings.gridSpatialSize) || 8}, ${Number(settings.gridBaselineSize) || 4}); true;`
+          );
+        }
+      } catch (err) {
+        console.error('[Browser] Failed to inject grid sizes:', err);
+      }
+
+      // Inject project files for @-mention autocomplete
       if (mainAPI && projectPath) {
         try {
           const files = await mainAPI.listProjectFiles(projectPath);
@@ -629,6 +641,23 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     if (!webview || !isReady) return;
     webview.executeJavaScript(`window.__claudeDesignCliRunning = ${!!cliRunning}; true;`).catch(() => {});
   }, [cliRunning, isReady]);
+
+  // Apply grid size changes from Settings to the webview live (no reload needed)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const webview = webviewRef.current;
+      if (!webview || !isReady) return;
+      const detail = (e as CustomEvent<{ spatial: number; baseline: number }>).detail;
+      if (!detail) return;
+      webview
+        .executeJavaScript(
+          `window.__claudeDesignSetGridSizes && window.__claudeDesignSetGridSizes(${Number(detail.spatial) || 8}, ${Number(detail.baseline) || 4}); true;`
+        )
+        .catch(() => {});
+    };
+    window.addEventListener('claude-design-grid-sizes', handler);
+    return () => window.removeEventListener('claude-design-grid-sizes', handler);
+  }, [isReady]);
 
   // Toggle annotate mode in webview
   const prevAnnotateModeRef = useRef<boolean | null>(null);

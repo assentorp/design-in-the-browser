@@ -14,6 +14,12 @@ const CLEANUP_OPTIONS = [
   { value: 60, label: '1 hour' },
 ];
 
+function clampGridSize(raw: string, fallback: number): number {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(n, 200);
+}
+
 const EDITOR_LABELS: Record<CodeEditor, string> = {
   vscode: 'VS Code',
   cursor: 'Cursor',
@@ -40,6 +46,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     const updated = await window.mainAPI?.saveSettings({ [key]: value });
     if (updated) {
       setSettings(updated);
+
+      // Push grid sizes to any open browser webview so the change applies live
+      if (key === 'gridSpatialSize' || key === 'gridBaselineSize') {
+        window.dispatchEvent(
+          new CustomEvent('claude-design-grid-sizes', {
+            detail: {
+              spatial: updated.gridSpatialSize,
+              baseline: updated.gridBaselineSize,
+            },
+          })
+        );
+      }
     }
 
     // Toggle PostHog capturing at runtime
@@ -131,6 +149,50 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               <span className="settings-hint">
                 Screenshots are stored in your system's temp folder and won't fill up your disk. They're cleaned up automatically by the OS even if the app closes before the timer runs.
               </span>
+            </div>
+            <div className="settings-group">
+              <label className="settings-label">
+                Grid Overlay Size
+                <span className="settings-description">
+                  Pixel sizes for the grid you toggle with Shift+G in the browser
+                </span>
+              </label>
+              <div className="settings-grid-sizes">
+                <label className="settings-number-field">
+                  <span>Spatial grid</span>
+                  <div className="settings-number-input">
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={settings.gridSpatialSize ?? 8}
+                      onChange={(e) =>
+                        handleChange('gridSpatialSize', clampGridSize(e.target.value, 8))
+                      }
+                      className="form-input"
+                      disabled={saving}
+                    />
+                    <span className="settings-unit">px</span>
+                  </div>
+                </label>
+                <label className="settings-number-field">
+                  <span>Baseline grid</span>
+                  <div className="settings-number-input">
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={settings.gridBaselineSize ?? 4}
+                      onChange={(e) =>
+                        handleChange('gridBaselineSize', clampGridSize(e.target.value, 4))
+                      }
+                      className="form-input"
+                      disabled={saving}
+                    />
+                    <span className="settings-unit">px</span>
+                  </div>
+                </label>
+              </div>
             </div>
             <div className="settings-group">
               <label className="settings-label settings-label-row">
