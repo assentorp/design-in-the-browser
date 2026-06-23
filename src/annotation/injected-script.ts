@@ -40,6 +40,9 @@ export const annotationScript = `
   // Pixel grid overlay state: 'off' | 'grid' | 'baseline'
   let gridMode = 'off';
   let gridOverlayElement = null;
+  // Grid sizes (px), configurable via Settings; defaults match the classic 8/4 toggle
+  let gridSpatialSize = 8;
+  let gridBaselineSize = 4;
 
   // Shortcut hints state
   let shortcutHintsElement = null;
@@ -3086,10 +3089,10 @@ export const annotationScript = `
     // Cycle: off → grid → baseline → off
     if (gridMode === 'off') {
       gridMode = 'grid';
-      showGridToast('8px Spatial Grid', 'Check spacing and alignment consistency');
+      showGridToast(gridSpatialSize + 'px Spatial Grid', 'Check spacing and alignment consistency');
     } else if (gridMode === 'grid') {
       gridMode = 'baseline';
-      showGridToast('4px Baseline Grid', 'Check vertical rhythm and typography alignment');
+      showGridToast(gridBaselineSize + 'px Baseline Grid', 'Check vertical rhythm and typography alignment');
     } else {
       gridMode = 'off';
       showGridToast('Grid Off', '');
@@ -3112,6 +3115,19 @@ export const annotationScript = `
     }
     gridOverlayElement.classList.remove('grid-spatial', 'grid-baseline');
     gridOverlayElement.classList.add(gridMode === 'grid' ? 'grid-spatial' : 'grid-baseline');
+    // Override the class default with the configured size
+    if (gridMode === 'grid') {
+      gridOverlayElement.style.backgroundSize = gridSpatialSize + 'px ' + gridSpatialSize + 'px';
+    } else {
+      gridOverlayElement.style.backgroundSize = '100% ' + gridBaselineSize + 'px';
+    }
+  }
+
+  function setGridSizes(spatial, baseline) {
+    if (typeof spatial === 'number' && spatial > 0) gridSpatialSize = spatial;
+    if (typeof baseline === 'number' && baseline > 0) gridBaselineSize = baseline;
+    // Re-apply live so an open grid updates immediately
+    if (gridMode !== 'off') applyGridOverlay();
   }
 
   function removeGridOverlay() {
@@ -3473,5 +3489,6 @@ export const annotationScript = `
   window.__claudeDesignNotifyPending = notifyPendingUpdate;
   window.__claudeDesignSetAltKey = setAltKeyState;
   window.__claudeDesignToggleFreeze = toggleAnimationFreeze;
+  window.__claudeDesignSetGridSizes = setGridSizes;
 })();
 `;

@@ -1614,6 +1614,42 @@ body,
   color: var(--text-secondary);
 }
 
+.settings-grid-sizes {
+  display: flex;
+  gap: 16px;
+}
+
+.settings-number-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.settings-number-field > span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-number-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.settings-number-input .form-input {
+  width: 100%;
+  padding-right: 32px;
+}
+
+.settings-number-input .settings-unit {
+  position: absolute;
+  right: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
 /* Form elements */
 .form-group {
   display: flex;
