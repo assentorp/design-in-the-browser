@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.7.3',
+    date: 'June 23, 2026',
+    changes: [
+      'Set custom pixel sizes for the spatial and baseline grid overlays (toggled with Shift+G in the browser) under Settings — defaults stay 8px and 4px. Changes apply live to an open browser without a reload',
+      'Fix the Code button on Windows not opening the editor when VS Code, Cursor, or Sublime is installed in a path containing spaces (e.g. "Microsoft VS Code") — the editor and project paths are now quoted correctly for the shell',
+    ],
+  },
+  {
     version: '1.7.2',
     date: 'June 18, 2026',
     changes: [

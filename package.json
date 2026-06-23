@@ -1,6 +1,6 @@
 {
   "name": "designinthebrowser",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Visual annotation tool for designing in the browser",
   "main": "dist/main/index.js",
   "scripts": {
