@@ -70,6 +70,12 @@ interface CodeEditorPanelProps {
   // Other likely source locations (fuzzy resolution) for the "wrong file?" picker.
   candidates?: ElementCandidate[];
   onPickCandidate?: (candidate: ElementCandidate) => void;
+  // Project file tree toggle (built-in editor browse mode).
+  treeOpen?: boolean;
+  onToggleTree?: () => void;
+  // Full-window toggle (hide the browser preview, editor takes the whole window).
+  full?: boolean;
+  onToggleFull?: () => void;
   // Bumped by the parent each time the same file is re-opened, so we re-scroll.
   nonce: number;
   onSave: (content: string) => Promise<FileWriteResult>;
@@ -85,6 +91,10 @@ export default function CodeEditorPanel({
   projectPath,
   candidates,
   onPickCandidate,
+  treeOpen,
+  onToggleTree,
+  full,
+  onToggleFull,
   nonce,
   onSave,
   onClose,
@@ -258,6 +268,38 @@ export default function CodeEditorPanel({
           </div>
         )}
         <div className="code-editor-header-actions">
+          {onToggleFull && (
+            <button
+              type="button"
+              className={`code-editor-tree-toggle ${full ? 'is-active' : ''}`}
+              onClick={onToggleFull}
+              title={full ? 'Exit full width' : 'Expand to full width'}
+              aria-label="Toggle full width"
+            >
+              {full ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 4v4a1 1 0 0 1-1 1H4M20 9h-4a1 1 0 0 1-1-1V4M15 20v-4a1 1 0 0 1 1-1h4M4 15h4a1 1 0 0 1 1 1v4" />
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                </svg>
+              )}
+            </button>
+          )}
+          {onToggleTree && (
+            <button
+              type="button"
+              className={`code-editor-tree-toggle ${treeOpen ? 'is-active' : ''}`}
+              onClick={onToggleTree}
+              title={treeOpen ? 'Hide file tree' : 'Show file tree'}
+              aria-label="Toggle file tree"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h5l2 2h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             className="code-editor-save"

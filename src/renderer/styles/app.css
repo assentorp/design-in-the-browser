@@ -466,6 +466,18 @@ body,
   min-width: 0;
 }
 
+/* Full-window built-in editor (project / file-tree mode): hide the web preview
+   so code editing takes over the entire window. */
+.browser-content.is-hidden {
+  display: none;
+}
+
+.browser-code-side.is-full {
+  flex: 1;
+  width: auto !important;
+  border-left: none;
+}
+
 /* In-app code editor: docks on the right of the web preview. */
 .browser-code-side {
   position: relative;
@@ -492,6 +504,128 @@ body,
 .browser-code-resize:hover,
 .browser-code-resize:active {
   background: var(--accent);
+}
+
+.browser-code-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.browser-code-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Project file tree (built-in editor browse mode) */
+.code-tree {
+  flex-shrink: 0;
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+}
+
+.code-tree-header {
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.code-tree-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 8px;
+}
+
+.code-tree-status {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.code-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.code-tree-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.code-tree-file.is-active {
+  background: rgba(198, 97, 63, 0.18);
+  color: #fff;
+}
+
+.code-tree-dir {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.code-tree-caret {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.12s ease;
+}
+
+.code-tree-caret.open {
+  transform: rotate(90deg);
+}
+
+.code-tree-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.code-editor-tree-toggle {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.code-editor-tree-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.code-editor-tree-toggle.is-active {
+  color: var(--accent);
 }
 
 .code-editor-panel {

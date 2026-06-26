@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { spawn, exec, type ChildProcess } from 'child_process';
-import type { AnnotationData, ShellType, CodeEditor } from '../shared/types';
+import type { AnnotationData, ShellType, CodeEditor, ExternalEditor } from '../shared/types';
 import { formatAnnotationPrompt, formatMultiEditPrompt, type MultiEditAnnotation } from '../shared/format-prompt';
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
 import { getPresets, savePresets } from './presets';
@@ -831,7 +831,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
   const localAppData = process.env.LOCALAPPDATA || '';
   const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
   const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
-  const editorConfigs: Record<CodeEditor, { cmd: string; macPaths?: string[]; winPaths?: string[]; buildArgs: (file: string, line?: number, col?: number, projectPath?: string) => string[] }> = {
+  const editorConfigs: Record<ExternalEditor, { cmd: string; macPaths?: string[]; winPaths?: string[]; buildArgs: (file: string, line?: number, col?: number, projectPath?: string) => string[] }> = {
     vscode: {
       cmd: 'code',
       macPaths: ['/usr/local/bin/code', '/opt/homebrew/bin/code', '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code'],
@@ -931,7 +931,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
     },
   };
 
-  function resolveEditorCmd(editor: CodeEditor): { cmd: string; prependArgs: string[]; extraEnv: Record<string, string> } {
+  function resolveEditorCmd(editor: ExternalEditor): { cmd: string; prependArgs: string[]; extraEnv: Record<string, string> } {
     // On macOS, bypass shell wrappers for Electron-based editors
     if (process.platform === 'darwin') {
       const ep = electronEditorPaths[editor];
@@ -956,6 +956,8 @@ export function setupIPC(mainWindow: BrowserWindow) {
   ipcMain.on('editor:open-file', (_, { filePath, line, column, projectPath }: { filePath: string; line?: number; column?: number; projectPath?: string }) => {
     const settings = getSettings();
     const editor = (settings.editor || 'vscode') as CodeEditor;
+    // The built-in editor is handled entirely in the renderer; never spawn for it.
+    if (editor === 'builtin') return;
     const config = editorConfigs[editor];
     const { cmd, prependArgs, extraEnv } = resolveEditorCmd(editor);
     const args = [...prependArgs, ...config.buildArgs(filePath, line, column, projectPath)];
@@ -987,9 +989,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
   });
 
   ipcMain.handle('editor:detect', async () => {
-    const detected: CodeEditor[] = [];
+    // The built-in editor is always available — list it first.
+    const detected: CodeEditor[] = ['builtin'];
     const envPath = `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin`;
-    for (const [name, config] of Object.entries(editorConfigs) as [CodeEditor, typeof editorConfigs[CodeEditor]][]) {
+    for (const [name, config] of Object.entries(editorConfigs) as [ExternalEditor, typeof editorConfigs[ExternalEditor]][]) {
       // Check macOS app paths first
       if (process.platform === 'darwin' && config.macPaths) {
         if (config.macPaths.some(p => fs.existsSync(p))) {

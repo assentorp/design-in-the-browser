@@ -26,7 +26,7 @@ export interface AppSettings {
 
 const defaultSettings: AppSettings = {
   screenshotCleanupMinutes: 5,
-  editor: 'vscode',
+  editor: 'builtin',
   editorChosen: false,
   analyticsEnabled: false,
   analyticsConsentGiven: false,

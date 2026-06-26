@@ -90,9 +90,10 @@ export default function ProjectConfigModal({
   // Editor selection during onboarding
   const [editorChosen, setEditorChosen] = useState<boolean | null>(null);
   const [availableEditors, setAvailableEditors] = useState<CodeEditor[]>([]);
-  const [selectedEditor, setSelectedEditor] = useState<CodeEditor>('vscode');
+  const [selectedEditor, setSelectedEditor] = useState<CodeEditor>('builtin');
 
   const EDITOR_LABELS: Record<CodeEditor, string> = {
+    builtin: 'Built In (Recommended)',
     vscode: 'VS Code',
     cursor: 'Cursor',
     zed: 'Zed',
@@ -649,7 +650,7 @@ export default function ProjectConfigModal({
               </svg>
               <h2 className="onboarding-gate-title">Code Editor</h2>
               <p className="onboarding-gate-text">
-                Choose your preferred editor. This is used when opening files from the element inspector.
+                Choose what the Code button opens. <strong>Built In</strong> lets you browse and edit your project right inside this app — no external editor needed. Or pick one you already have installed.
               </p>
               <div className="onboarding-editor-list">
                 {availableEditors.map((editor) => (

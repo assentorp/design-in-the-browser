@@ -21,6 +21,7 @@ function clampGridSize(raw: string, fallback: number): number {
 }
 
 const EDITOR_LABELS: Record<CodeEditor, string> = {
+  builtin: 'Built In (Recommended)',
   vscode: 'VS Code',
   cursor: 'Cursor',
   zed: 'Zed',
@@ -111,11 +112,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               <label className="settings-label">
                 Code Editor
                 <span className="settings-description">
-                  Which editor to open when clicking the Code button
+                  Which editor the Code button opens. "Built In" edits files inside this app; the others launch your installed editor.
                 </span>
               </label>
               <select
-                value={settings.editor || 'vscode'}
+                value={settings.editor || 'builtin'}
                 onChange={(e) => handleChange('editor', e.target.value)}
                 className="form-select"
                 disabled={saving}

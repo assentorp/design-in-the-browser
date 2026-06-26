@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 'react';
 import Toolbar from './Toolbar';
 import CodeEditorPanel from './CodeEditorPanel';
-import type { AnnotationData, MultiEditData, SessionPendingEdit, ElementCandidate } from '../../shared/types';
+import CodeFileTree from './CodeFileTree';
+import type { AnnotationData, MultiEditData, SessionPendingEdit, ElementCandidate, CodeEditor } from '../../shared/types';
 import { annotationScript } from '../../annotation/injected-script';
 
 // Check if running in Electron (must be called at runtime)
@@ -105,6 +106,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [codePanelWidth, setCodePanelWidth] = useState(480);
   const [codePanelLoading, setCodePanelLoading] = useState(false);
   const [codePanelError, setCodePanelError] = useState<string | null>(null);
+  // When the built-in editor is opened from the toolbar "Code" button it shows a
+  // project file tree alongside the editor.
+  const [codeTreeOpen, setCodeTreeOpen] = useState(false);
+  // Full-window editor: hides the browser preview so the editor takes the whole
+  // window. Always on in project/tree mode; toggleable for the element side panel.
+  const [codeFull, setCodeFull] = useState(false);
+  const [editorPref, setEditorPref] = useState<CodeEditor>('builtin');
   const blockedUrlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const devToolsPlaceholderRef = useRef<HTMLDivElement | null>(null);
@@ -151,6 +159,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const check = () => {
       api.detectEditors().then((editors) => {
         if (!cancelled) setHasEditor(editors.length > 0);
+      }).catch(() => { /* leave previous value */ });
+      // Keep the selected-editor preference fresh (it can change in Settings).
+      api.getSettings().then((s) => {
+        if (!cancelled) setEditorPref((s.editor as CodeEditor) || 'builtin');
       }).catch(() => { /* leave previous value */ });
     };
     check();
@@ -618,6 +630,9 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
               } else if (msg.type === 'claude-design-edit-code') {
                 const mainAPI = getMainAPI();
                 if (mainAPI) {
+                  // Element clicks open the side panel beside the page (not full).
+                  setCodeTreeOpen(false);
+                  setCodeFull(false);
                   if (msg.fileName) {
                     // Exact source (data-source attribute or React 18 _debugSource)
                     let filePath = msg.fileName as string;
@@ -1078,10 +1093,21 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
   const toggleCodeView = useCallback(() => {
     const mainAPI = getMainAPI();
-    if (!mainAPI || !hasEditor) return;
+    if (!mainAPI) return;
     clearSelection();
-    mainAPI.openInEditor(projectPath, undefined, undefined, projectPath);
-  }, [projectPath, clearSelection, hasEditor]);
+    if (editorPref === 'builtin') {
+      // Open the in-app editor with the project file tree (toggle it off if the
+      // tree is already showing and nothing is being edited). Project mode is
+      // full-window.
+      setCodeTreeOpen((open) => {
+        if (open && !codePanel) { setCodePanelError(null); setCodeFull(false); return false; }
+        setCodeFull(true);
+        return true;
+      });
+    } else {
+      mainAPI.openInEditor(projectPath, undefined, undefined, projectPath);
+    }
+  }, [projectPath, clearSelection, editorPref, codePanel]);
 
   const currentWidth = viewport ? viewportSizes[viewport] : null;
 
@@ -1112,7 +1138,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onToggleDevTools={hasMainAPI ? toggleDevTools : undefined}
       />
       <div className="browser-body">
-      <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
+      <div className={`browser-content ${currentWidth ? 'has-viewport' : ''} ${codeFull ? 'is-hidden' : ''}`}>
         {isLoading && <div className="browser-loading-bar" />}
         {!hasFirstPaint && (
           <div className="browser-loading-placeholder">
@@ -1169,54 +1195,76 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
           </div>
         )}
       </div>
-      {(codePanel || codePanelLoading || codePanelError) && (
-        <div className="browser-code-side" style={{ width: codePanelWidth }}>
-          <div
-            className="browser-code-resize"
-            onMouseDown={handleCodePanelResizeMouseDown}
-          />
-          {codePanel ? (
-            <CodeEditorPanel
-              key={codePanel.path}
-              filePath={codePanel.path}
-              fileName={codePanel.fileName}
-              initialContent={codePanel.content}
-              gotoLine={codePanel.gotoLine}
-              method={codePanel.method}
-              projectPath={projectPath}
-              candidates={codePanel.candidates}
-              onPickCandidate={(c) => openInlineEditor(c.file, c.line, c.strategy, codePanel.candidates)}
-              nonce={codePanel.nonce}
-              onSave={saveInlineEdit}
-              onClose={() => { setCodePanel(null); setCodePanelError(null); }}
+      {(codePanel || codePanelLoading || codePanelError || codeTreeOpen) && (
+        <div
+          className={`browser-code-side ${codeFull ? 'is-full' : ''}`}
+          style={codeFull ? undefined : { width: codePanelWidth }}
+        >
+          {!codeFull && (
+            <div
+              className="browser-code-resize"
+              onMouseDown={handleCodePanelResizeMouseDown}
             />
-          ) : (
-            <div className="code-editor-panel">
-              <div className="code-editor-header">
-                <span className="code-editor-filename">
-                  {codePanelLoading ? 'Opening…' : 'Code'}
-                </span>
-                <button
-                  type="button"
-                  className="code-editor-close"
-                  onClick={() => { setCodePanel(null); setCodePanelError(null); }}
-                  title="Close editor"
-                  aria-label="Close editor"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 4L12 12M4 12L12 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
-              {codePanelLoading ? (
-                <div className="code-editor-status">
-                  <div className="app-loading-spinner" />
-                </div>
+          )}
+          <div className="browser-code-inner">
+            {codeTreeOpen && (
+              <CodeFileTree
+                projectPath={projectPath}
+                activeRel={codePanel ? codePanel.path.replace(projectPath.replace(/[\\/]+$/, '') + '/', '') : undefined}
+                onSelect={(rel) => openInlineEditor(projectPath.replace(/[\\/]+$/, '') + '/' + rel, 1, 'file tree')}
+              />
+            )}
+            <div className="browser-code-main">
+              {codePanel ? (
+                <CodeEditorPanel
+                  key={codePanel.path}
+                  filePath={codePanel.path}
+                  fileName={codePanel.fileName}
+                  initialContent={codePanel.content}
+                  gotoLine={codePanel.gotoLine}
+                  method={codePanel.method}
+                  projectPath={projectPath}
+                  candidates={codePanel.candidates}
+                  onPickCandidate={(c) => openInlineEditor(c.file, c.line, c.strategy, codePanel.candidates)}
+                  treeOpen={codeTreeOpen}
+                  onToggleTree={() => setCodeTreeOpen((o) => !o)}
+                  full={codeFull}
+                  onToggleFull={() => setCodeFull((f) => !f)}
+                  nonce={codePanel.nonce}
+                  onSave={saveInlineEdit}
+                  onClose={() => { setCodePanel(null); setCodePanelError(null); setCodeTreeOpen(false); setCodeFull(false); }}
+                />
               ) : (
-                <div className="code-editor-status code-editor-status-error">{codePanelError}</div>
+                <div className="code-editor-panel">
+                  <div className="code-editor-header">
+                    <span className="code-editor-filename">
+                      {codePanelLoading ? 'Opening…' : codePanelError ? 'Code' : 'Select a file'}
+                    </span>
+                    <button
+                      type="button"
+                      className="code-editor-close"
+                      onClick={() => { setCodePanel(null); setCodePanelError(null); setCodeTreeOpen(false); setCodeFull(false); }}
+                      title="Close editor"
+                      aria-label="Close editor"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path d="M4 4L12 12M4 12L12 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+                  {codePanelLoading ? (
+                    <div className="code-editor-status">
+                      <div className="app-loading-spinner" />
+                    </div>
+                  ) : codePanelError ? (
+                    <div className="code-editor-status code-editor-status-error">{codePanelError}</div>
+                  ) : (
+                    <div className="code-editor-status">Pick a file from the tree to edit it.</div>
+                  )}
+                </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
       </div>

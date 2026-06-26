@@ -88,7 +88,9 @@ export type CliTool = 'claude' | 'cursor' | 'antigravity' | 'codex' | 'qwen' | '
 
 export type ShellType = 'default' | 'wsl';
 
-export type CodeEditor = 'vscode' | 'cursor' | 'zed' | 'sublime' | 'webstorm' | 'nova';
+// 'builtin' is the in-app CodeMirror editor; the rest launch external editors.
+export type CodeEditor = 'builtin' | 'vscode' | 'cursor' | 'zed' | 'sublime' | 'webstorm' | 'nova';
+export type ExternalEditor = Exclude<CodeEditor, 'builtin'>;
 
 export interface WindowBounds {
   x: number;
