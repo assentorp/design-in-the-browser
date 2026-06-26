@@ -1016,8 +1016,46 @@ export function setupIPC(mainWindow: BrowserWindow) {
     return detected;
   });
 
+  // Read a project file's text for the in-app code editor. The path must resolve
+  // inside projectPath — this guards against the webview tricking us into reading
+  // arbitrary files on disk.
+  ipcMain.handle('file:read', async (_, { filePath, projectPath }: { filePath: string; projectPath: string }) => {
+    try {
+      const root = path.resolve(projectPath);
+      const target = path.resolve(filePath);
+      const rel = path.relative(root, target);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return { ok: false as const, error: 'Path is outside the project.' };
+      }
+      const stat = fs.statSync(target);
+      if (!stat.isFile()) return { ok: false as const, error: 'Not a file.' };
+      // Refuse oversized files — the editor is meant for source, not binaries/blobs.
+      if (stat.size > 2 * 1024 * 1024) return { ok: false as const, error: 'File is too large to edit here.' };
+      const content = fs.readFileSync(target, 'utf8');
+      return { ok: true as const, content, path: target };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  // Write edited text back to a project file (same in-project safety check as read).
+  ipcMain.handle('file:write', async (_, { filePath, content, projectPath }: { filePath: string; content: string; projectPath: string }) => {
+    try {
+      const root = path.resolve(projectPath);
+      const target = path.resolve(filePath);
+      const rel = path.relative(root, target);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return { ok: false as const, error: 'Path is outside the project.' };
+      }
+      fs.writeFileSync(target, content, 'utf8');
+      return { ok: true as const };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
   // Search for element in project and open in VS Code
-  ipcMain.handle('vscode:search-element', async (_, { projectPath, info }: { projectPath: string; info: { componentNames: string[]; id: string | null; textContent: string; dataAttrs: Record<string, string>; pageUrl: string } }) => {
+  ipcMain.handle('vscode:search-element', async (_, { projectPath, info }: { projectPath: string; info: { componentNames: string[]; id: string | null; textContent: string; ownText?: string; headingText?: string; tagName?: string; dataAttrs: Record<string, string>; pageUrl: string } }) => {
     const excludeDirs = ['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.output', 'coverage', '.cache'];
     const excludeArgs = excludeDirs.flatMap(d => ['--exclude-dir', d]);
     const includeArgs = ['--include=*.tsx', '--include=*.jsx', '--include=*.ts', '--include=*.js',
@@ -1026,7 +1064,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
     console.log('[IPC] Searching for element:', {
       componentNames: info.componentNames?.slice(0, 5),
       id: info.id,
+      ownText: (info.ownText || '').substring(0, 40),
+      headingText: (info.headingText || '').substring(0, 40),
       text: (info.textContent || '').substring(0, 40),
+      tagName: info.tagName,
       dataAttrs: info.dataAttrs,
       pageUrl: info.pageUrl,
     });
@@ -1062,136 +1103,169 @@ export function setupIPC(mainWindow: BrowserWindow) {
       });
     }
 
-    function openResult(result: { file: string; line: number }, strategy: string): { file: string; line: number } {
-      console.log(`[IPC] Found element via ${strategy}:`, `${result.file}:${result.line}`);
-      return result;
-    }
-
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    // Strategy 1: React component name → find its definition file
-    // The closest component in the fiber tree is the one that renders this element
-    for (const name of (info.componentNames || []).slice(0, 5)) {
-      // Search for component definition: function Name, const Name, export default Name, etc.
+    // --- Route-aware scoring -------------------------------------------------
+    // The clicked element lives on a page; files under that page's route folder
+    // are far more likely than shared root files (layout.tsx, providers, etc.).
+    const urlPath = (info.pageUrl || '/').replace(/\/$/, '') || '/';
+    const urlSegments = urlPath.split('/').filter(Boolean).map(s => s.toLowerCase());
+    const rootishPattern = /(^|\/)(layout|template|_app|_document|providers?|globals?|root)\.[jt]sx?$/i;
+    const uiPathPattern = /(component|page|section|view|screen|app|ui|feature|module|widget)\b/i;
+    const nonUiPathPattern = /(_?scripts?|utils?|helpers?|\/lib\/|config|migrations?|seeds?|\/cli\/|test|spec|__tests?__|\.config\.|\.setup\.)/i;
+
+    function scoreFile(file: string): number {
+      const rel = path.relative(projectPath, file).toLowerCase();
+      let s = 0;
+      // Files under (or named like) a URL segment are strongly preferred.
+      if (urlSegments.some(seg => rel.includes('/' + seg + '/') || rel.includes('/' + seg + '.'))) s += 30;
+      if (rootishPattern.test(rel)) s -= 40; // demote layout.tsx & friends
+      if (uiPathPattern.test(rel)) s += 8;
+      if (nonUiPathPattern.test(rel)) s -= 25;
+      return s;
+    }
+
+    // Accumulate scored candidates from every signal, then rank.
+    const scored = new Map<string, { file: string; line: number; strategy: string; score: number }>();
+    function add(results: { file: string; line: number }[], strategy: string, base: number, perFile = 1) {
+      const seenFile = new Map<string, number>();
+      for (const r of results) {
+        const used = seenFile.get(r.file) || 0;
+        if (used >= perFile) continue; // avoid one file flooding the list
+        seenFile.set(r.file, used + 1);
+        const key = `${r.file}:${r.line}`;
+        const score = base + scoreFile(r.file);
+        const existing = scored.get(key);
+        if (!existing || score > existing.score) scored.set(key, { ...r, strategy, score });
+      }
+    }
+
+    // Strategy: React component name → its definition file (closest first).
+    const names = (info.componentNames || []).slice(0, 5);
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
       const pattern = `(function|const|let|var|export default|export)\\s+${esc(name)}`;
       const results = await grepAll(pattern, 5);
-      if (results.length === 1) return openResult(results[0], `component "${name}"`);
-      if (results.length > 1) {
-        // Prefer files whose name matches the component name
-        const byFilename = results.find(r => {
-          const base = path.basename(r.file).replace(/\.(tsx?|jsx?|vue|svelte)$/, '');
-          return base === name || base === name.replace(/^[a-z]/, c => c.toUpperCase());
-        });
-        if (byFilename) return openResult(byFilename, `component "${name}" (filename match)`);
-        // Otherwise use first result
-        return openResult(results[0], `component "${name}"`);
+      // Closer components (lower i) score higher; filename match is best.
+      for (const r of results) {
+        const base = path.basename(r.file).replace(/\.(tsx?|jsx?|vue|svelte)$/, '');
+        const filenameMatch = base === name || base === name.replace(/^[a-z]/, c => c.toUpperCase());
+        add([r], `component "${name}"${filenameMatch ? ' (file match)' : ''}`, (filenameMatch ? 95 : 70) - i * 5);
       }
     }
 
-    // Strategy 2: data-testid or data-component
+    // Strategy: data-testid / data-component / etc.
     for (const [attr, value] of Object.entries(info.dataAttrs || {})) {
       if (!value) continue;
-      const results = await grepAll(`${esc(attr)}=.*${esc(value)}`, 3);
-      if (results.length > 0) return openResult(results[0], `data attr ${attr}="${value}"`);
+      add(await grepAll(`${esc(attr)}=.*${esc(value)}`, 3), `${attr}="${value}"`, 90);
     }
 
-    // Strategy 3: Search by id
+    // Strategy: element id
     if (info.id) {
-      const results = await grepAll(`id=["'{].*${esc(info.id)}`, 3);
-      if (results.length > 0) return openResult(results[0], `id="${info.id}"`);
+      add(await grepAll(`id=["'{].*${esc(info.id)}`, 3), `id="${info.id}"`, 88);
     }
 
-    // Strategy 4: Search for text content in source
-    if (info.textContent) {
-      const fullText = info.textContent.trim();
+    // Strip decorative wrapping punctuation (curly/straight quotes, dashes,
+    // colons, whitespace) so a leading "“" in the rendered text doesn't break
+    // the match against source that doesn't include it.
+    const stripWrap = (s: string) => (s || '').trim()
+      .replace(/^[\s"'“”‘’«»\-–—:.,]+/, '')
+      .replace(/[\s"'“”‘’«»\-–—:.,]+$/, '');
 
-      // Rank results: prefer component/UI files over scripts, configs, etc.
-      const uiPathPattern = /(component|page|section|view|screen|layout|template|app|ui|feature|module|widget)\b/i;
-      const nonUiPathPattern = /(_?scripts?|utils?|helpers?|lib|config|migrations?|seeds?|cli|test|spec|__test__|__spec__|\.config\.|\.setup\.)/i;
-      function rankResults(results: { file: string; line: number }[]): { file: string; line: number }[] {
-        return results.sort((a, b) => {
-          const aIsUi = uiPathPattern.test(a.file) ? 0 : 1;
-          const bIsUi = uiPathPattern.test(b.file) ? 0 : 1;
-          const aIsNon = nonUiPathPattern.test(a.file) ? 1 : 0;
-          const bIsNon = nonUiPathPattern.test(b.file) ? 1 : 0;
-          return (aIsUi + aIsNon) - (bIsUi + bIsNon);
-        });
-      }
+    const headingText = stripWrap(info.headingText || '');
+    const ownText = stripWrap(info.ownText || '');
+    const fullText = stripWrap(info.textContent || '');
 
-      // Try the full text first (short texts like "$69/mo")
-      if (fullText.length >= 3 && fullText.length <= 60) {
-        const results = rankResults(await grepAll(esc(fullText), 5));
-        if (results.length > 0) return openResult(results[0], `text "${fullText.substring(0, 30)}"`);
-      }
+    // Build a grep pattern from a string's alphanumeric tokens joined by a loose
+    // gap. This tolerates whatever sits between words in source — HTML entities
+    // (&apos;), quote chars, JSX expressions, extra whitespace — as long as the
+    // run is on one line (grep is line-based). Far more robust than exact text.
+    const loosePattern = (s: string, maxTokens = 8): string | null => {
+      const tokens = (s.match(/[\p{L}\p{N}]+/gu) || []).filter(t => t.length >= 2).slice(0, maxTokens);
+      if (tokens.length < 1) return null;
+      return tokens.map(esc).join('.{0,16}');
+    };
 
-      // Try first 40 chars (for longer texts)
-      if (fullText.length > 10) {
-        const sub = fullText.substring(0, 40);
-        const results = rankResults(await grepAll(esc(sub), 5));
-        if (results.length > 0) return openResult(results[0], `text "${sub.substring(0, 30)}..."`);
-      }
+    // Strategy: nearest heading text (very distinctive).
+    const headingPat = loosePattern(headingText);
+    if (headingPat) {
+      add(await grepAll(headingPat, 5), `heading "${headingText.substring(0, 24)}"`, 84, 2);
+    }
 
-      // Try splitting into words and searching for distinctive multi-word phrases
-      const words = fullText.split(/\s+/).filter(w => w.length >= 3);
-      // Try pairs of consecutive words
+    // Strategy: the element's own (direct) text — sharper than the whole subtree.
+    const ownPat = loosePattern(ownText);
+    if (ownPat) {
+      add(await grepAll(ownPat, 5), `text "${ownText.substring(0, 24)}"`, 80, 2);
+    }
+
+    // Strategy: full subtree text (when it differs from the element's own text).
+    if (fullText && fullText !== ownText) {
+      const fullPat = loosePattern(fullText);
+      if (fullPat) add(await grepAll(fullPat, 5), `text "${fullText.substring(0, 24)}…"`, 56, 2);
+    }
+
+    // Strategy: distinctive word phrases / single long words as a final net,
+    // in case the loose pattern's run is broken across multiple source lines.
+    const phraseSource = ownText || fullText || headingText;
+    if (phraseSource) {
+      const commonWords = /^(about|these|those|there|their|which|where|while|would|should|could|because|through|using|since)$/i;
+      const words = (phraseSource.match(/[\p{L}\p{N}]+/gu) || []).filter(w => w.length >= 5 && !commonWords.test(w));
       for (let i = 0; i < Math.min(words.length - 1, 5); i++) {
-        const phrase = words[i] + '.*' + esc(words[i + 1]);
-        const results = rankResults(await grepAll(phrase, 5));
-        if (results.length > 0) return openResult(results[0], `phrase "${words[i]} ${words[i + 1]}"`);
+        add(await grepAll(esc(words[i]) + '.{0,40}' + esc(words[i + 1]), 5), `phrase "${words[i]} ${words[i + 1]}"`, 46, 1);
       }
-      // Try individual distinctive words (skip common ones)
-      const commonWords = /^(the|and|or|a|an|is|are|was|were|be|to|of|in|for|on|with|at|by|from|this|that|our|your|you|we|all|can|get|has|have|not|but|its|more|out|than|them|then|way|will|about|also|been|come|each|just|like|make|many|most|new|now|only|other|over|some|such|take|time|very|when|who|how|per|into|one|two|Start|Free|Pro|Plan)$/i;
-      for (const word of words.slice(0, 8)) {
-        if (word.length < 5 || commonWords.test(word)) continue;
-        const results = rankResults(await grepAll(esc(word), 5));
-        if (results.length === 1) return openResult(results[0], `word "${word}"`);
+      const longWords = words.filter(w => w.length >= 8).slice(0, 3);
+      for (const w of longWords) {
+        add(await grepAll(esc(w), 5), `word "${w}"`, 34, 1);
       }
     }
 
-    // Strategy 5: Fallback — find page file from URL path (e.g. /pricing → src/app/pricing/page.tsx)
-    if (info.pageUrl) {
-      const urlPath = info.pageUrl.replace(/\/$/, '') || '/';
-      // Common framework page file patterns
-      const candidates = [
-        path.join(projectPath, 'src', 'app', urlPath, 'page.tsx'),
-        path.join(projectPath, 'src', 'app', urlPath, 'page.jsx'),
-        path.join(projectPath, 'src', 'app', urlPath, 'page.ts'),
-        path.join(projectPath, 'src', 'app', urlPath, 'page.js'),
-        path.join(projectPath, 'src', 'pages', urlPath + '.tsx'),
-        path.join(projectPath, 'src', 'pages', urlPath + '.jsx'),
-        path.join(projectPath, 'src', 'pages', urlPath, 'index.tsx'),
-        path.join(projectPath, 'src', 'pages', urlPath, 'index.jsx'),
-        path.join(projectPath, 'app', urlPath, 'page.tsx'),
-        path.join(projectPath, 'pages', urlPath + '.tsx'),
-        path.join(projectPath, 'pages', urlPath, 'index.tsx'),
-      ];
-      for (const candidate of candidates) {
-        if (fs.existsSync(candidate)) {
-          return openResult({ file: candidate, line: 1 }, `URL path "${urlPath}"`);
-        }
-      }
-      // Also try route groups: src/app/(group)/urlPath/page.tsx
-      const urlSegments = urlPath.split('/').filter(Boolean);
-      if (urlSegments.length > 0) {
-        const appDir = path.join(projectPath, 'src', 'app');
-        if (fs.existsSync(appDir)) {
-          try {
-            const entries = fs.readdirSync(appDir);
-            for (const entry of entries) {
-              if (entry.startsWith('(') && entry.endsWith(')')) {
-                const candidate = path.join(appDir, entry, ...urlSegments, 'page.tsx');
-                if (fs.existsSync(candidate)) {
-                  return openResult({ file: candidate, line: 1 }, `route group "${entry}/${urlPath}"`);
-                }
-              }
+    // Strategy: URL → page file. Always added as a sensible baseline candidate.
+    {
+      const pageCandidates = [
+        path.join('src', 'app', urlPath, 'page.tsx'),
+        path.join('src', 'app', urlPath, 'page.jsx'),
+        path.join('src', 'app', urlPath, 'page.ts'),
+        path.join('src', 'app', urlPath, 'page.js'),
+        path.join('src', 'pages', urlPath + '.tsx'),
+        path.join('src', 'pages', urlPath + '.jsx'),
+        path.join('src', 'pages', urlPath, 'index.tsx'),
+        path.join('app', urlPath, 'page.tsx'),
+        path.join('pages', urlPath + '.tsx'),
+        path.join('pages', urlPath, 'index.tsx'),
+      ].map(p => path.join(projectPath, p));
+      // Route groups: src/app/(group)/urlPath/page.tsx
+      const appDir = path.join(projectPath, 'src', 'app');
+      if (urlSegments.length > 0 && fs.existsSync(appDir)) {
+        try {
+          for (const entry of fs.readdirSync(appDir)) {
+            if (entry.startsWith('(') && entry.endsWith(')')) {
+              pageCandidates.push(path.join(appDir, entry, ...urlSegments, 'page.tsx'));
             }
-          } catch { /* ignore */ }
-        }
+          }
+        } catch { /* ignore */ }
       }
+      const pageFile = pageCandidates.find(c => fs.existsSync(c));
+      if (pageFile) add([{ file: pageFile, line: 1 }], `page for "${urlPath}"`, 60);
     }
 
-    console.log('[IPC] Could not find element source');
-    return null;
+    // Rank, dedupe, cap. Keep at most 2 entries per file so the list stays varied.
+    const ranked = Array.from(scored.values()).sort((a, b) => b.score - a.score);
+    const perFileCount = new Map<string, number>();
+    const candidates: { file: string; line: number; strategy: string }[] = [];
+    for (const c of ranked) {
+      const n = perFileCount.get(c.file) || 0;
+      if (n >= 2) continue;
+      perFileCount.set(c.file, n + 1);
+      candidates.push({ file: c.file, line: c.line, strategy: c.strategy });
+      if (candidates.length >= 6) break;
+    }
+
+    if (candidates.length === 0) {
+      console.log('[IPC] Could not find element source');
+      return null;
+    }
+    console.log('[IPC] Element candidates:', candidates.map(c => `${path.relative(projectPath, c.file)}:${c.line} (${c.strategy})`));
+    return { candidates };
   });
 
   // Get app version

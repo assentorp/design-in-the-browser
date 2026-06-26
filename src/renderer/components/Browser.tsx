@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 'react';
 import Toolbar from './Toolbar';
-import type { AnnotationData, MultiEditData, SessionPendingEdit } from '../../shared/types';
+import CodeEditorPanel from './CodeEditorPanel';
+import type { AnnotationData, MultiEditData, SessionPendingEdit, ElementCandidate } from '../../shared/types';
 import { annotationScript } from '../../annotation/injected-script';
 
 // Check if running in Electron (must be called at runtime)
@@ -99,6 +100,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [devToolsHeight, setDevToolsHeight] = useState(300);
+  // In-app code editor: opened from an element's "Edit code" popover button.
+  const [codePanel, setCodePanel] = useState<{ path: string; fileName: string; content: string; gotoLine?: number; method: string; candidates?: ElementCandidate[]; nonce: number } | null>(null);
+  const [codePanelWidth, setCodePanelWidth] = useState(480);
+  const [codePanelLoading, setCodePanelLoading] = useState(false);
+  const [codePanelError, setCodePanelError] = useState<string | null>(null);
   const blockedUrlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const devToolsPlaceholderRef = useRef<HTMLDivElement | null>(null);
@@ -446,13 +452,47 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     } catch { /* ignore */ }
   }, []);
 
-  const openFileInCodeView = useCallback((filePath: string, line?: number) => {
+  // Open a project file in the in-app code editor panel, scrolled to `line`.
+  // `candidates` (when resolution was fuzzy) populates the "wrong file?" picker.
+  const openInlineEditor = useCallback(async (filePath: string, line?: number, method = '', candidates?: ElementCandidate[]) => {
     const mainAPI = getMainAPI();
-    if (!mainAPI || !hasEditor) return;
+    if (!mainAPI) return;
     clearSelection();
     const gotoLine = line && line > 1 ? line : undefined;
-    mainAPI.openInEditor(filePath, gotoLine, undefined, projectPath);
-  }, [clearSelection, projectPath, hasEditor]);
+    console.log('[Browser] openInlineEditor:', { filePath, line, method });
+    setCodePanelError(null);
+    setCodePanelLoading(true);
+    const result = await mainAPI.readProjectFile(filePath, projectPath);
+    setCodePanelLoading(false);
+    if (!result.ok) {
+      setCodePanelError(result.error);
+      return;
+    }
+    const fileName = result.path.split(/[\\/]/).pop() || result.path;
+    setCodePanel((prev) => ({
+      path: result.path,
+      fileName,
+      content: result.content,
+      gotoLine,
+      method,
+      candidates,
+      // Bump the nonce so the panel re-scrolls even if the same file reopens.
+      nonce: (prev && prev.path === result.path ? prev.nonce : 0) + 1,
+    }));
+  }, [clearSelection, projectPath]);
+
+  const saveInlineEdit = useCallback((content: string) => {
+    const mainAPI = getMainAPI();
+    if (!mainAPI || !codePanel) return Promise.resolve({ ok: false as const, error: 'Editor not ready.' });
+    return mainAPI.writeProjectFile(codePanel.path, content, projectPath);
+  }, [codePanel, projectPath]);
+
+  // Close the editor when switching projects so we never edit a stale file.
+  useEffect(() => {
+    setCodePanel(null);
+    setCodePanelError(null);
+    setCodePanelLoading(false);
+  }, [projectPath]);
 
   // Event-driven message bridge: webview signals via console.log, we fetch on demand
   useEffect(() => {
@@ -473,7 +513,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             var __claudeSignal = console.log.bind(console);
 
             window.addEventListener('message', function(e) {
-              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-open-source' || e.data.type === 'claude-design-toggle-terminal')) {
+              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-edit-code' || e.data.type === 'claude-design-toggle-terminal')) {
                 window.__claudeDesignMessages.push(e.data);
                 __claudeSignal('__claude_msg__');
               }
@@ -575,27 +615,38 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                     }
                   }
                 }
-              } else if (msg.type === 'claude-design-open-source') {
+              } else if (msg.type === 'claude-design-edit-code') {
                 const mainAPI = getMainAPI();
                 if (mainAPI) {
                   if (msg.fileName) {
-                    // Exact React source — open in embedded VS Code
+                    // Exact source (data-source attribute or React 18 _debugSource)
                     let filePath = msg.fileName as string;
                     if (filePath && !filePath.startsWith('/')) {
                       filePath = projectPath + '/' + filePath;
                     }
-                    openFileInCodeView(filePath, msg.lineNumber);
+                    openInlineEditor(filePath, msg.lineNumber, msg.sourceMethod || 'React source');
                   } else {
-                    // No exact source — search project, then open result in embedded VS Code
+                    // No exact source — search the project for the best match first
+                    console.log('[Browser] No React source; searching project for element', {
+                      componentNames: msg.componentNames,
+                      searchId: msg.searchId,
+                      searchText: msg.searchText,
+                    });
                     const result = await mainAPI.searchAndOpenInEditor(projectPath, {
                       componentNames: msg.componentNames || [],
                       id: msg.searchId || null,
                       textContent: msg.searchText || '',
+                      ownText: msg.ownText || '',
+                      headingText: msg.headingText || '',
+                      tagName: msg.tagName || '',
                       dataAttrs: msg.searchDataAttrs || {},
                       pageUrl: msg.pageUrl || '',
                     });
-                    if (result) {
-                      openFileInCodeView(result.file, result.line);
+                    if (result && result.candidates.length > 0) {
+                      const best = result.candidates[0];
+                      openInlineEditor(best.file, best.line, best.strategy, result.candidates);
+                    } else {
+                      setCodePanelError('Could not locate the source file for this element.');
                     }
                   }
                 }
@@ -633,7 +684,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     return () => {
       webview.removeEventListener('console-message', handleConsoleMessage);
     };
-  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, addToTodoList, projectPath, openFileInCodeView]);
+  }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, addToTodoList, projectPath, openInlineEditor]);
 
   // Sync CLI running state to webview so it can auto-queue annotations
   useEffect(() => {
@@ -887,6 +938,34 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     document.addEventListener('mouseup', onMouseUp);
   }, [devToolsHeight]);
 
+  // Drag handle: resize the in-app code editor panel from its left edge.
+  const handleCodePanelResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = codePanelWidth;
+    const browser = browserRef.current;
+    const browserRect = browser?.getBoundingClientRect();
+    const maxWidth = browserRect ? browserRect.width - 320 : 1200;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = startX - ev.clientX;
+      let next = startWidth + delta;
+      if (next < 320) next = 320;
+      if (next > maxWidth) next = maxWidth;
+      setCodePanelWidth(next);
+    };
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [codePanelWidth]);
+
   const navigate = useCallback((targetUrl: string) => {
     const webview = webviewRef.current;
     if (!webview) return;
@@ -1032,6 +1111,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         devToolsOpen={devToolsOpen}
         onToggleDevTools={hasMainAPI ? toggleDevTools : undefined}
       />
+      <div className="browser-body">
       <div className={`browser-content ${currentWidth ? 'has-viewport' : ''}`}>
         {isLoading && <div className="browser-loading-bar" />}
         {!hasFirstPaint && (
@@ -1088,6 +1168,57 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             </div>
           </div>
         )}
+      </div>
+      {(codePanel || codePanelLoading || codePanelError) && (
+        <div className="browser-code-side" style={{ width: codePanelWidth }}>
+          <div
+            className="browser-code-resize"
+            onMouseDown={handleCodePanelResizeMouseDown}
+          />
+          {codePanel ? (
+            <CodeEditorPanel
+              key={codePanel.path}
+              filePath={codePanel.path}
+              fileName={codePanel.fileName}
+              initialContent={codePanel.content}
+              gotoLine={codePanel.gotoLine}
+              method={codePanel.method}
+              projectPath={projectPath}
+              candidates={codePanel.candidates}
+              onPickCandidate={(c) => openInlineEditor(c.file, c.line, c.strategy, codePanel.candidates)}
+              nonce={codePanel.nonce}
+              onSave={saveInlineEdit}
+              onClose={() => { setCodePanel(null); setCodePanelError(null); }}
+            />
+          ) : (
+            <div className="code-editor-panel">
+              <div className="code-editor-header">
+                <span className="code-editor-filename">
+                  {codePanelLoading ? 'Opening…' : 'Code'}
+                </span>
+                <button
+                  type="button"
+                  className="code-editor-close"
+                  onClick={() => { setCodePanel(null); setCodePanelError(null); }}
+                  title="Close editor"
+                  aria-label="Close editor"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 4L12 12M4 12L12 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              {codePanelLoading ? (
+                <div className="code-editor-status">
+                  <div className="app-loading-spinner" />
+                </div>
+              ) : (
+                <div className="code-editor-status code-editor-status-error">{codePanelError}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       </div>
       {devToolsOpen && hasMainAPI && (
         <div

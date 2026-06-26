@@ -199,7 +199,9 @@ export interface MainAPI {
   openInEditor: (filePath: string, line?: number, column?: number, projectPath?: string) => void;
   detectEditors: () => Promise<CodeEditor[]>;
   checkUrl: (url: string) => Promise<boolean>;
-  searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ file: string; line: number } | null>;
+  searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ candidates: ElementCandidate[] } | null>;
+  readProjectFile: (filePath: string, projectPath: string) => Promise<FileReadResult>;
+  writeProjectFile: (filePath: string, content: string, projectPath: string) => Promise<FileWriteResult>;
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
   getPresets: () => Promise<ProjectPreset[]>;
@@ -213,12 +215,29 @@ export interface MainAPI {
   detachDevTools: (targetId: number) => Promise<void>;
 }
 
+export type FileReadResult =
+  | { ok: true; content: string; path: string }
+  | { ok: false; error: string };
+
+export type FileWriteResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 export interface ElementSearchInfo {
   componentNames: string[];
   id: string | null;
   textContent: string;
+  ownText?: string;
+  headingText?: string;
+  tagName?: string;
   dataAttrs: Record<string, string>;
   pageUrl: string;
+}
+
+export interface ElementCandidate {
+  file: string;
+  line: number;
+  strategy: string;
 }
 
 declare global {

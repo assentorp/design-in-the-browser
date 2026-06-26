@@ -110,8 +110,16 @@ const mainAPI: MainAPI = {
     return ipcRenderer.invoke('url:check', { url });
   },
 
-  searchAndOpenInEditor: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ file: string; line: number } | null> => {
+  searchAndOpenInEditor: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ candidates: import('../shared/types').ElementCandidate[] } | null> => {
     return ipcRenderer.invoke('vscode:search-element', { projectPath, info });
+  },
+
+  readProjectFile: (filePath: string, projectPath: string) => {
+    return ipcRenderer.invoke('file:read', { filePath, projectPath });
+  },
+
+  writeProjectFile: (filePath: string, content: string, projectPath: string) => {
+    return ipcRenderer.invoke('file:write', { filePath, content, projectPath });
   },
 
   getSettings: (): Promise<AppSettings> => {

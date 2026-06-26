@@ -1732,6 +1732,58 @@ export const annotationScript = `
     cancelAnnotation();
   }
 
+  // Find an exact source location stamped onto the DOM by a build-time plugin.
+  // Supports our own convention (data-dib-source="relative/path.tsx:line:col")
+  // and the react-dev-inspector convention (data-inspector-* attributes).
+  // Walks up a few ancestors since the clicked node may be an untagged child.
+  function findDataSource(el) {
+    var node = el;
+    var depth = 0;
+    while (node && node.getAttribute && depth++ < 12) {
+      var dib = node.getAttribute('data-dib-source');
+      if (dib) {
+        var parts = dib.split(':');
+        var col = parseInt(parts.pop(), 10);
+        var ln = parseInt(parts.pop(), 10);
+        var fp = parts.join(':');
+        if (fp && !isNaN(ln)) {
+          return { fileName: fp, lineNumber: ln, columnNumber: isNaN(col) ? 0 : col };
+        }
+      }
+      var relPath = node.getAttribute('data-inspector-relative-path');
+      var relLine = node.getAttribute('data-inspector-line');
+      if (relPath && relLine) {
+        return {
+          fileName: relPath,
+          lineNumber: parseInt(relLine, 10),
+          columnNumber: parseInt(node.getAttribute('data-inspector-column') || '0', 10),
+        };
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  // The element's own (direct) text, ignoring nested children — more specific
+  // for grep than the whole subtree's text.
+  function getOwnText(el) {
+    if (!el || !el.childNodes) return '';
+    var t = '';
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var n = el.childNodes[i];
+      if (n.nodeType === 3) t += n.textContent;
+    }
+    return t.trim().substring(0, 80);
+  }
+
+  // The nearest heading text in or under the element — a distinctive anchor.
+  function getHeadingText(el) {
+    if (!el) return '';
+    if (/^H[1-6]$/.test(el.tagName || '')) return (el.textContent || '').trim().substring(0, 80);
+    var h = el.querySelector && el.querySelector('h1,h2,h3,h4,h5,h6');
+    return h ? (h.textContent || '').trim().substring(0, 80) : '';
+  }
+
   // Find React source file for an element (via _debugSource)
   function findReactSource(el) {
     if (!el) return null;
@@ -2479,15 +2531,17 @@ export const annotationScript = `
     // Reposition now that we know the actual height
     positionPopover();
 
-    // Create floating code button at top-right of the selected element
+    // Floating code button at the top-right of the selected element. Clicking it
+    // resolves the element's source and asks the renderer to open the in-app
+    // code editor (NOT an external editor).
     if (el && !textSelection) {
       removeCodeButton();
       codeButtonAnchor = el;
       codeButtonElement = document.createElement('button');
       codeButtonElement.className = 'claude-design-code-btn';
       codeButtonElement.title = reactSource
-        ? 'Open in editor (' + (reactSource.fileName || '').split('/').pop() + ':' + (reactSource.lineNumber || '') + ')'
-        : 'Open in editor';
+        ? 'Edit code (' + (reactSource.fileName || '').split('/').pop() + ':' + (reactSource.lineNumber || '') + ')'
+        : 'Edit code';
       codeButtonElement.innerHTML =
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>' +
@@ -2499,16 +2553,30 @@ export const annotationScript = `
         e.stopPropagation();
         // Hide inspector on click
         removeClassInspector();
-        // Show spinner
+        // Show spinner while the renderer resolves + loads the file
         codeButtonElement.innerHTML = '<div class="claude-design-code-spinner"></div>';
-        if (reactSource) {
+        var dataSource = findDataSource(el);
+        if (dataSource) {
+          // Exact: a build-time plugin stamped the source location onto the DOM.
           window.postMessage({
-            type: 'claude-design-open-source',
+            type: 'claude-design-edit-code',
+            fileName: dataSource.fileName,
+            lineNumber: dataSource.lineNumber,
+            columnNumber: dataSource.columnNumber,
+            sourceMethod: 'data-source',
+          }, '*');
+        } else if (reactSource) {
+          // Exact: React 18 _debugSource (absent on React 19 / server components).
+          window.postMessage({
+            type: 'claude-design-edit-code',
             fileName: reactSource.fileName,
             lineNumber: reactSource.lineNumber,
             columnNumber: reactSource.columnNumber,
+            sourceMethod: 'React source',
           }, '*');
         } else {
+          // Heuristic: send every signal we can scrape so the main process can
+          // rank candidate files (component name, own text, heading, attrs, URL).
           var componentNames = findReactComponentName(el) || [];
           var elTextContent = (el.textContent || '').trim().substring(0, 80);
           var dataAttrs = {};
@@ -2521,14 +2589,20 @@ export const annotationScript = `
             }
           }
           window.postMessage({
-            type: 'claude-design-open-source',
+            type: 'claude-design-edit-code',
             componentNames: componentNames,
             searchText: elTextContent,
+            ownText: getOwnText(el),
+            headingText: getHeadingText(el),
+            tagName: (el.tagName || '').toLowerCase(),
             searchDataAttrs: dataAttrs,
             searchId: el.id || null,
             pageUrl: window.location.pathname,
           }, '*');
         }
+        // The editor opens in the app's side panel — dismiss the in-page popover
+        // and this button (the panel shows its own loading state).
+        cancelAnnotation();
       });
 
       document.body.appendChild(codeButtonElement);
