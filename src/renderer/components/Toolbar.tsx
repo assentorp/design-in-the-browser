@@ -15,6 +15,7 @@ interface ToolbarProps {
   onClearCacheReload: () => void;
   onToggleAnnotate: () => void;
   onToggleCodeView: () => void;
+  codeViewActive?: boolean;
   hasEditor?: boolean;
   viewport: ViewportType | null;
   viewportSizes: ViewportSizes;
@@ -40,6 +41,7 @@ export default function Toolbar({
   onClearCacheReload,
   onToggleAnnotate,
   onToggleCodeView,
+  codeViewActive = false,
   hasEditor = true,
   viewport,
   viewportSizes,
@@ -269,7 +271,7 @@ export default function Toolbar({
       )}
 
       <button
-        className="toolbar-btn toolbar-code-btn"
+        className={`toolbar-btn toolbar-code-btn ${codeViewActive ? 'active' : ''}`}
         onClick={onToggleCodeView}
         disabled={!hasEditor}
         title={hasEditor ? 'Open in editor' : 'Install a code editor (VS Code, Cursor, Zed, Sublime, WebStorm, or Nova) to enable'}

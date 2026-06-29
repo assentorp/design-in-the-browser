@@ -1088,6 +1088,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   }, [onZoom, stepZoom]);
 
   const toggleAnnotate = useCallback(() => {
+    // Entering Edit mode closes the in-app project code view so the two
+    // toolbar toggles never appear active at the same time.
+    if (!annotateMode) {
+      setCodeTreeOpen(false);
+      setCodeFull(false);
+      setCodePanelError(null);
+    }
     onAnnotateModeChange(!annotateMode);
   }, [annotateMode, onAnnotateModeChange]);
 
@@ -1101,13 +1108,16 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       // full-window.
       setCodeTreeOpen((open) => {
         if (open && !codePanel) { setCodePanelError(null); setCodeFull(false); return false; }
+        // Opening the code view turns off Edit mode so the "Editing" button
+        // reverts to "Edit" while "Code" is highlighted.
+        if (annotateMode) onAnnotateModeChange(false);
         setCodeFull(true);
         return true;
       });
     } else {
       mainAPI.openInEditor(projectPath, undefined, undefined, projectPath);
     }
-  }, [projectPath, clearSelection, editorPref, codePanel]);
+  }, [projectPath, clearSelection, editorPref, codePanel, annotateMode, onAnnotateModeChange]);
 
   const currentWidth = viewport ? viewportSizes[viewport] : null;
 
@@ -1127,6 +1137,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onClearCacheReload={clearCacheAndReload}
         onToggleAnnotate={toggleAnnotate}
         onToggleCodeView={toggleCodeView}
+        codeViewActive={codeTreeOpen}
         hasEditor={hasEditor}
         viewport={viewport}
         viewportSizes={viewportSizes}
