@@ -110,7 +110,7 @@ const mainAPI: MainAPI = {
     return ipcRenderer.invoke('url:check', { url });
   },
 
-  searchAndOpenInEditor: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ candidates: import('../shared/types').ElementCandidate[] } | null> => {
+  searchAndOpenInEditor: (projectPath: string, info: import('../shared/types').ElementSearchInfo): Promise<{ candidates: import('../shared/types').ElementCandidate[]; confidence?: import('../shared/types').ElementSearchConfidence } | null> => {
     return ipcRenderer.invoke('vscode:search-element', { projectPath, info });
   },
 

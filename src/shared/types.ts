@@ -201,7 +201,7 @@ export interface MainAPI {
   openInEditor: (filePath: string, line?: number, column?: number, projectPath?: string) => void;
   detectEditors: () => Promise<CodeEditor[]>;
   checkUrl: (url: string) => Promise<boolean>;
-  searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ candidates: ElementCandidate[] } | null>;
+  searchAndOpenInEditor: (projectPath: string, info: ElementSearchInfo) => Promise<{ candidates: ElementCandidate[]; confidence?: ElementSearchConfidence } | null>;
   readProjectFile: (filePath: string, projectPath: string) => Promise<FileReadResult>;
   writeProjectFile: (filePath: string, content: string, projectPath: string) => Promise<FileWriteResult>;
   getSettings: () => Promise<AppSettings>;
@@ -240,6 +240,15 @@ export interface ElementCandidate {
   file: string;
   line: number;
   strategy: string;
+}
+
+export interface ElementSearchConfidence {
+  // Score gap between the winning file and the next different file. A large gap
+  // means independent signals converged on one file; a small gap was near a tie.
+  gap: number;
+  // How many distinct signal classes (component name / attrs / text / route)
+  // agreed on the winning file. 2+ is strong corroboration.
+  agreeingSignals: number;
 }
 
 declare global {

@@ -69,6 +69,8 @@ interface CodeEditorPanelProps {
   projectPath: string;
   // Other likely source locations (fuzzy resolution) for the "wrong file?" picker.
   candidates?: ElementCandidate[];
+  // Resolution was a thin-margin guess — open the candidate picker up-front.
+  uncertain?: boolean;
   onPickCandidate?: (candidate: ElementCandidate) => void;
   // Project file tree toggle (built-in editor browse mode).
   treeOpen?: boolean;
@@ -90,6 +92,7 @@ export default function CodeEditorPanel({
   method,
   projectPath,
   candidates,
+  uncertain,
   onPickCandidate,
   treeOpen,
   onToggleTree,
@@ -104,8 +107,10 @@ export default function CodeEditorPanel({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const hasCandidates = !!(candidates && candidates.length > 1);
+  // Open the "wrong file?" picker automatically when the source was a low-
+  // confidence guess, so alternatives are visible without hunting for them.
+  const [pickerOpen, setPickerOpen] = useState(!!uncertain && hasCandidates);
   // Show a candidate path relative to the project root (e.g. src/app/page.tsx).
   const relPath = (p: string) => {
     const root = projectPath.replace(/[\\/]+$/, '');
@@ -190,15 +195,15 @@ export default function CodeEditorPanel({
           // Darken oneDark to match the app's surfaces (oneDark ships #282c34).
           EditorView.theme(
             {
-              '&': { height: '100%', fontSize: '13px', backgroundColor: '#161616' },
+              '&': { height: '100%', fontSize: '13px', backgroundColor: '#0d0d0d' },
               '.cm-scroller': {
                 fontFamily:
                   "'SF Mono', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace",
               },
-              '.cm-gutters': { backgroundColor: '#161616', border: 'none' },
+              '.cm-gutters': { backgroundColor: '#0d0d0d', border: 'none' },
               '.cm-activeLine': { backgroundColor: 'rgba(255, 255, 255, 0.035)' },
               '.cm-activeLineGutter': { backgroundColor: 'rgba(255, 255, 255, 0.035)' },
-              '.cm-foldGutter': { backgroundColor: '#161616' },
+              '.cm-foldGutter': { backgroundColor: '#0d0d0d' },
             },
             { dark: true },
           ),
@@ -248,7 +253,6 @@ export default function CodeEditorPanel({
               {gotoLine ? <span className="code-editor-line">:{gotoLine}</span> : null}
             </>
           )}
-          {method ? <span className="code-editor-method" title={`Source resolved via ${method}`}>{method}</span> : null}
           {dirty && <span className="code-editor-dot" aria-label="Unsaved changes" />}
         </span>
         {hasCandidates && pickerOpen && (

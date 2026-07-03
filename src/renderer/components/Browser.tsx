@@ -102,7 +102,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [devToolsHeight, setDevToolsHeight] = useState(300);
   // In-app code editor: opened from an element's "Edit code" popover button.
-  const [codePanel, setCodePanel] = useState<{ path: string; fileName: string; content: string; gotoLine?: number; method: string; candidates?: ElementCandidate[]; nonce: number } | null>(null);
+  const [codePanel, setCodePanel] = useState<{ path: string; fileName: string; content: string; gotoLine?: number; method: string; candidates?: ElementCandidate[]; uncertain?: boolean; nonce: number } | null>(null);
   const [codePanelWidth, setCodePanelWidth] = useState(480);
   const [codePanelLoading, setCodePanelLoading] = useState(false);
   const [codePanelError, setCodePanelError] = useState<string | null>(null);
@@ -466,12 +466,14 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
   // Open a project file in the in-app code editor panel, scrolled to `line`.
   // `candidates` (when resolution was fuzzy) populates the "wrong file?" picker.
-  const openInlineEditor = useCallback(async (filePath: string, line?: number, method = '', candidates?: ElementCandidate[]) => {
+  // `uncertain` (fuzzy resolution with a thin margin) makes the panel open its
+  // "wrong file?" picker up-front so alternatives are one glance away.
+  const openInlineEditor = useCallback(async (filePath: string, line?: number, method = '', candidates?: ElementCandidate[], uncertain = false) => {
     const mainAPI = getMainAPI();
     if (!mainAPI) return;
     clearSelection();
     const gotoLine = line && line > 1 ? line : undefined;
-    console.log('[Browser] openInlineEditor:', { filePath, line, method });
+    console.log('[Browser] openInlineEditor:', { filePath, line, method, uncertain });
     setCodePanelError(null);
     setCodePanelLoading(true);
     const result = await mainAPI.readProjectFile(filePath, projectPath);
@@ -488,6 +490,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       gotoLine,
       method,
       candidates,
+      uncertain,
       // Bump the nonce so the panel re-scrolls even if the same file reopens.
       nonce: (prev && prev.path === result.path ? prev.nonce : 0) + 1,
     }));
@@ -633,6 +636,12 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                   // Element clicks open the side panel beside the page (not full).
                   setCodeTreeOpen(false);
                   setCodeFull(false);
+                  // Show the panel with a spinner immediately — resolving the
+                  // source (project search below) can take a moment, and without
+                  // instant feedback users think the click did nothing and keep
+                  // clicking.
+                  setCodePanelError(null);
+                  setCodePanelLoading(true);
                   if (msg.fileName) {
                     // Exact source (data-source attribute or React 18 _debugSource)
                     let filePath = msg.fileName as string;
@@ -659,8 +668,15 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                     });
                     if (result && result.candidates.length > 0) {
                       const best = result.candidates[0];
-                      openInlineEditor(best.file, best.line, best.strategy, result.candidates);
+                      // Low confidence = signals didn't strongly converge on one
+                      // file and there are other plausible files. Surface the
+                      // picker so a wrong guess is trivially correctable.
+                      const conf = result.confidence;
+                      const otherFiles = new Set(result.candidates.map(c => c.file)).size > 1;
+                      const uncertain = otherFiles && (!conf || (conf.agreeingSignals < 2 && conf.gap < 30));
+                      openInlineEditor(best.file, best.line, best.strategy, result.candidates, uncertain);
                     } else {
+                      setCodePanelLoading(false);
                       setCodePanelError('Could not locate the source file for this element.');
                     }
                   }
@@ -1236,6 +1252,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                   method={codePanel.method}
                   projectPath={projectPath}
                   candidates={codePanel.candidates}
+                  uncertain={codePanel.uncertain}
                   onPickCandidate={(c) => openInlineEditor(c.file, c.line, c.strategy, codePanel.candidates)}
                   treeOpen={codeTreeOpen}
                   onToggleTree={() => setCodeTreeOpen((o) => !o)}
@@ -1268,7 +1285,16 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                       <div className="app-loading-spinner" />
                     </div>
                   ) : codePanelError ? (
-                    <div className="code-editor-status code-editor-status-error">{codePanelError}</div>
+                    <div className="code-editor-status code-editor-empty">
+                      <p className="code-editor-empty-text">{codePanelError}</p>
+                      <button
+                        type="button"
+                        className="code-editor-openall"
+                        onClick={() => { setCodePanelError(null); toggleCodeView(); }}
+                      >
+                        Open the entire project
+                      </button>
+                    </div>
                   ) : (
                     <div className="code-editor-status">Pick a file from the tree to edit it.</div>
                   )}

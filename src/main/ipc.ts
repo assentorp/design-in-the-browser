@@ -1143,29 +1143,40 @@ export function setupIPC(mainWindow: BrowserWindow) {
       }
     }
 
+    // Every strategy below spawns an independent `grep` over the project tree.
+    // They don't depend on each other, so we collect them as tasks, fire them
+    // all off concurrently, then process the results in push order (which keeps
+    // scoring deterministic — equal scores keep the first-added candidate).
+    // Running sequentially meant ~18 full-tree greps end to end (multi-second
+    // stall before the editor opens); concurrently it's ~one grep's wall-clock.
+    const tasks: { results: Promise<{ file: string; line: number }[]>; handle: (r: { file: string; line: number }[]) => void }[] = [];
+
     // Strategy: React component name → its definition file (closest first).
     const names = (info.componentNames || []).slice(0, 5);
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i];
+    for (const [i, name] of names.entries()) {
       const pattern = `(function|const|let|var|export default|export)\\s+${esc(name)}`;
-      const results = await grepAll(pattern, 5);
-      // Closer components (lower i) score higher; filename match is best.
-      for (const r of results) {
-        const base = path.basename(r.file).replace(/\.(tsx?|jsx?|vue|svelte)$/, '');
-        const filenameMatch = base === name || base === name.replace(/^[a-z]/, c => c.toUpperCase());
-        add([r], `component "${name}"${filenameMatch ? ' (file match)' : ''}`, (filenameMatch ? 95 : 70) - i * 5);
-      }
+      tasks.push({
+        results: grepAll(pattern, 5),
+        handle: (results) => {
+          // Closer components (lower i) score higher; filename match is best.
+          for (const r of results) {
+            const base = path.basename(r.file).replace(/\.(tsx?|jsx?|vue|svelte)$/, '');
+            const filenameMatch = base === name || base === name.replace(/^[a-z]/, c => c.toUpperCase());
+            add([r], `component "${name}"${filenameMatch ? ' (file match)' : ''}`, (filenameMatch ? 95 : 70) - i * 5);
+          }
+        },
+      });
     }
 
     // Strategy: data-testid / data-component / etc.
     for (const [attr, value] of Object.entries(info.dataAttrs || {})) {
       if (!value) continue;
-      add(await grepAll(`${esc(attr)}=.*${esc(value)}`, 3), `${attr}="${value}"`, 90);
+      tasks.push({ results: grepAll(`${esc(attr)}=.*${esc(value)}`, 3), handle: (r) => add(r, `${attr}="${value}"`, 90) });
     }
 
     // Strategy: element id
     if (info.id) {
-      add(await grepAll(`id=["'{].*${esc(info.id)}`, 3), `id="${info.id}"`, 88);
+      tasks.push({ results: grepAll(`id=["'{].*${esc(info.id)}`, 3), handle: (r) => add(r, `id="${info.id}"`, 88) });
     }
 
     // Strip decorative wrapping punctuation (curly/straight quotes, dashes,
@@ -1192,19 +1203,19 @@ export function setupIPC(mainWindow: BrowserWindow) {
     // Strategy: nearest heading text (very distinctive).
     const headingPat = loosePattern(headingText);
     if (headingPat) {
-      add(await grepAll(headingPat, 5), `heading "${headingText.substring(0, 24)}"`, 84, 2);
+      tasks.push({ results: grepAll(headingPat, 5), handle: (r) => add(r, `heading "${headingText.substring(0, 24)}"`, 84, 2) });
     }
 
     // Strategy: the element's own (direct) text — sharper than the whole subtree.
     const ownPat = loosePattern(ownText);
     if (ownPat) {
-      add(await grepAll(ownPat, 5), `text "${ownText.substring(0, 24)}"`, 80, 2);
+      tasks.push({ results: grepAll(ownPat, 5), handle: (r) => add(r, `text "${ownText.substring(0, 24)}"`, 80, 2) });
     }
 
     // Strategy: full subtree text (when it differs from the element's own text).
     if (fullText && fullText !== ownText) {
       const fullPat = loosePattern(fullText);
-      if (fullPat) add(await grepAll(fullPat, 5), `text "${fullText.substring(0, 24)}…"`, 56, 2);
+      if (fullPat) tasks.push({ results: grepAll(fullPat, 5), handle: (r) => add(r, `text "${fullText.substring(0, 24)}…"`, 56, 2) });
     }
 
     // Strategy: distinctive word phrases / single long words as a final net,
@@ -1214,13 +1225,19 @@ export function setupIPC(mainWindow: BrowserWindow) {
       const commonWords = /^(about|these|those|there|their|which|where|while|would|should|could|because|through|using|since)$/i;
       const words = (phraseSource.match(/[\p{L}\p{N}]+/gu) || []).filter(w => w.length >= 5 && !commonWords.test(w));
       for (let i = 0; i < Math.min(words.length - 1, 5); i++) {
-        add(await grepAll(esc(words[i]) + '.{0,40}' + esc(words[i + 1]), 5), `phrase "${words[i]} ${words[i + 1]}"`, 46, 1);
+        const w0 = words[i], w1 = words[i + 1];
+        tasks.push({ results: grepAll(esc(w0) + '.{0,40}' + esc(w1), 5), handle: (r) => add(r, `phrase "${w0} ${w1}"`, 46, 1) });
       }
       const longWords = words.filter(w => w.length >= 8).slice(0, 3);
       for (const w of longWords) {
-        add(await grepAll(esc(w), 5), `word "${w}"`, 34, 1);
+        tasks.push({ results: grepAll(esc(w), 5), handle: (r) => add(r, `word "${w}"`, 34, 1) });
       }
     }
+
+    // Drain all grep strategies concurrently, then apply their handlers in push
+    // order so scoring/tie-breaks stay identical to the old sequential version.
+    const allResults = await Promise.all(tasks.map(t => t.results));
+    allResults.forEach((r, i) => tasks[i].handle(r));
 
     // Strategy: URL → page file. Always added as a sensible baseline candidate.
     {
@@ -1251,8 +1268,55 @@ export function setupIPC(mainWindow: BrowserWindow) {
       if (pageFile) add([{ file: pageFile, line: 1 }], `page for "${urlPath}"`, 60);
     }
 
+    // --- Cross-signal corroboration ------------------------------------------
+    // Any single grep strategy can land in the wrong file (a loose text run also
+    // appears in a shared component; a common component name is defined in two
+    // places). The strongest signal that we found the RIGHT file is INDEPENDENT
+    // signals agreeing on it: the component name resolves to File X *and* the
+    // element's text lives in File X *and* it sits under the page's route. Group
+    // matches by file, count how many distinct signal classes point at each, and
+    // boost the agreed-upon file so it decisively outranks lone weak matches.
+    type SignalClass = 'struct' | 'attr' | 'content' | 'route';
+    const classOf = (strategy: string): SignalClass => {
+      if (strategy.startsWith('component')) return 'struct';
+      if (strategy.startsWith('page for')) return 'route';
+      if (strategy.startsWith('id=') || strategy.startsWith('data-') ||
+          strategy.startsWith('aria-') || strategy.startsWith('role=')) return 'attr';
+      return 'content'; // heading / text / phrase / word
+    };
+
+    const byFile = new Map<string, { classes: Set<SignalClass>; contentHits: number }>();
+    for (const c of scored.values()) {
+      const cls = classOf(c.strategy);
+      let e = byFile.get(c.file);
+      if (!e) { e = { classes: new Set(), contentHits: 0 }; byFile.set(c.file, e); }
+      e.classes.add(cls);
+      if (cls === 'content') e.contentHits++;
+    }
+
+    const corroboration = (file: string): number => {
+      const e = byFile.get(file);
+      if (!e) return 0;
+      // Each distinct class beyond the first is strong independent agreement.
+      let boost = (e.classes.size - 1) * 45;
+      // A component-definition file that also contains the element's text is the
+      // single most reliable "this is it" — give it an extra bump.
+      if (e.classes.has('struct') && e.classes.has('content')) boost += 25;
+      // Multiple content hits derive from the same text, so they corroborate only
+      // weakly — a small, capped bonus.
+      boost += Math.min(e.contentHits - 1, 3) * 6;
+      return boost;
+    };
+
+    // Re-score with corroboration. Within a file, nudge content/usage lines above
+    // the bare `function X()` definition line so we open where the element is.
+    const rescored = Array.from(scored.values()).map(c => ({
+      ...c,
+      finalScore: c.score + corroboration(c.file) + (classOf(c.strategy) === 'content' ? 6 : 0),
+    }));
+
     // Rank, dedupe, cap. Keep at most 2 entries per file so the list stays varied.
-    const ranked = Array.from(scored.values()).sort((a, b) => b.score - a.score);
+    const ranked = rescored.sort((a, b) => b.finalScore - a.finalScore);
     const perFileCount = new Map<string, number>();
     const candidates: { file: string; line: number; strategy: string }[] = [];
     for (const c of ranked) {
@@ -1267,8 +1331,16 @@ export function setupIPC(mainWindow: BrowserWindow) {
       console.log('[IPC] Could not find element source');
       return null;
     }
-    console.log('[IPC] Element candidates:', candidates.map(c => `${path.relative(projectPath, c.file)}:${c.line} (${c.strategy})`));
-    return { candidates };
+    // Confidence = how decisively the winning FILE beat the next different file.
+    // A large gap means independent signals converged; a small gap means it was a
+    // coin-flip between files (the UI keeps the "wrong file?" picker for those).
+    const top = ranked[0];
+    const nextOtherFile = ranked.find(c => c.file !== top.file);
+    const confidenceGap = nextOtherFile ? top.finalScore - nextOtherFile.finalScore : top.finalScore;
+    const topClasses = byFile.get(top.file)?.classes.size ?? 1;
+    console.log('[IPC] Element candidates:', candidates.map(c => `${path.relative(projectPath, c.file)}:${c.line} (${c.strategy})`),
+      `| top gap=${confidenceGap} classes=${topClasses}`);
+    return { candidates, confidence: { gap: confidenceGap, agreeingSignals: topClasses } };
   });
 
   // Get app version
