@@ -74,6 +74,9 @@ interface SessionState {
   // init is far enough along to accept typed commands without dropping the
   // first character (e.g. .zshrc banners or screen clears stomping the echo).
   shellPromptSeen: boolean;
+  // True when the shell runs inside WSL — file paths written into prompts
+  // must then be /mnt/<drive>/... instead of Windows paths.
+  useWsl: boolean;
 }
 
 const sessions = new Map<string, SessionState>();
@@ -153,6 +156,7 @@ export function setupIPC(win: BrowserWindow) {
       outputBuffer: [],
       disposables: [],
       shellPromptSeen: false,
+      useWsl,
     };
 
     sessions.set(sessionId, session);
@@ -612,6 +616,11 @@ export function setupIPC(win: BrowserWindow) {
     const screenshotDir = app.getPath('temp');
     const timestamp = Date.now();
 
+    // Screenshots are written to the Windows temp dir, but a WSL session's
+    // CLI can only read them via /mnt/<drive>/... — translate the paths that
+    // go into the prompt (cleanup below keeps using the native paths).
+    const toPromptPath = (p: string) => (session!.useWsl ? toWslPath(p) : p);
+
     // Check if this is multi-edit data
     const anyData = data as unknown as { annotations?: MultiEditAnnotation[] };
     if (anyData.annotations && Array.isArray(anyData.annotations)) {
@@ -639,7 +648,10 @@ export function setupIPC(win: BrowserWindow) {
         }
       }
 
-      const prompt = formatMultiEditPrompt(anyData.annotations, screenshotPaths);
+      const prompt = formatMultiEditPrompt(
+        anyData.annotations,
+        screenshotPaths.map((p) => (p ? toPromptPath(p) : p))
+      );
       session.ptyProcess.write(prompt);
       setTimeout(() => session.ptyProcess.write('\r'), 100);
 
@@ -691,7 +703,11 @@ export function setupIPC(win: BrowserWindow) {
         data.referenceImage = '';  // Release base64 string from memory
       }
 
-      const prompt = formatAnnotationPrompt(data, screenshotPath, referenceImagePath);
+      const prompt = formatAnnotationPrompt(
+        data,
+        screenshotPath && toPromptPath(screenshotPath),
+        referenceImagePath && toPromptPath(referenceImagePath)
+      );
       session.ptyProcess.write(prompt);
       setTimeout(() => session.ptyProcess.write('\r'), 100);
 
