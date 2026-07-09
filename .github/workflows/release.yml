@@ -23,6 +23,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 20
+          # No shared caches in the publish pipeline; also, the action's default
+          # package-manager detection fails the job when it can't find a lockfile.
+          package-manager-cache: false
 
       - run: npm ci
 
@@ -69,6 +72,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 20
+          # No shared caches in the publish pipeline; also, the action's default
+          # package-manager detection fails the job when it can't find a lockfile.
+          package-manager-cache: false
 
       - run: npm ci
 
