@@ -753,16 +753,33 @@ export function setupIPC(mainWindow: BrowserWindow) {
     console.log('[IPC] Using code command:', codeCommand);
 
     return new Promise<number>((resolve, reject) => {
-      const proc = spawn(codeCommand, [
+      // With shell:true Node joins command and args into one unquoted string,
+      // so the macOS app-bundle fallback path ("...Visual Studio Code.app...")
+      // splits on its spaces and sh exits 127. Only use a shell on Windows
+      // (needed to run code.cmd) and quote there; spawn directly elsewhere.
+      const useShell = process.platform === 'win32';
+      const quoteForShell = (s: string) => `"${s.replace(/"/g, '""')}"`;
+      const serveArgs = [
         'serve-web',
         '--port', String(port),
         '--without-connection-token',
         '--accept-server-license-terms',
-      ], {
-        cwd: projectPath || undefined,
-        env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
-        shell: true,
-      });
+      ];
+      const proc = spawn(
+        useShell ? quoteForShell(codeCommand) : codeCommand,
+        useShell ? serveArgs.map(quoteForShell) : serveArgs,
+        {
+          cwd: projectPath || undefined,
+          // The Unix dirs don't apply on Windows, and ':' would corrupt PATH there.
+          env: {
+            ...process.env,
+            PATH: useShell
+              ? process.env.PATH
+              : `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin`,
+          },
+          shell: useShell,
+        }
+      );
 
       let resolved = false;
 
@@ -801,6 +818,12 @@ export function setupIPC(mainWindow: BrowserWindow) {
         const current = vscodeServers.get('current');
         if (current && current.process === proc) {
           vscodeServers.delete('current');
+        }
+        // Exiting before the ready message means the server never started —
+        // fail now instead of letting the timeout report a dead port.
+        if (!resolved) {
+          resolved = true;
+          reject(new Error(`VS Code server exited with code ${code} before becoming ready`));
         }
       });
 
