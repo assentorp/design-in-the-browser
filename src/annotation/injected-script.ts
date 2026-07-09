@@ -2720,7 +2720,7 @@ export const annotationScript = `
 
     textarea && textarea.addEventListener('keydown', function(e) {
       // Cmd/Ctrl+Enter: Always send immediately (sends all if in list mode)
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
         e.preventDefault();
         if (todoMode || pendingAnnotations.length > 0) {
           // Save current note first if there's text, then send all
