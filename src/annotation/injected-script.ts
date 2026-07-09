@@ -1003,7 +1003,7 @@ export const annotationScript = `
         );
         if (siblings.length > 1) {
           const index = siblings.indexOf(current) + 1;
-          selector += ':nth-child(' + index + ')';
+          selector += ':nth-of-type(' + index + ')';
         }
       }
 
@@ -2209,12 +2209,13 @@ export const annotationScript = `
         var resolvedValue = item.name + ' (' + item.value + ', ' + item.source + ')';
         textarea.__tokenMentionMap[displayName] = resolvedValue;
 
+        // Keep the leading > in the textarea (like @ for files) so
+        // expandMentions can find '>' + name at send time.
         var value = textarea.value;
-        var triggerStart = mention.startIndex - 1; // include the > character
         var after = value.substring(textarea.selectionStart);
-        textarea.value = value.substring(0, triggerStart) + displayName + after;
+        textarea.value = value.substring(0, mention.startIndex) + displayName + after;
 
-        var newPos = triggerStart + displayName.length;
+        var newPos = mention.startIndex + displayName.length;
         textarea.selectionStart = newPos;
         textarea.selectionEnd = newPos;
       } else {
@@ -3096,7 +3097,7 @@ export const annotationScript = `
 
   function handleGKeyDown(e) {
     var tag = document.activeElement && document.activeElement.tagName;
-    if ((e.key === 'g' || e.key === 'G') && !gKeyDown && !e.metaKey && !e.ctrlKey && !e.altKey && tag !== 'TEXTAREA' && tag !== 'INPUT') {
+    if ((e.key === 'g' || e.key === 'G') && !gKeyDown && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && tag !== 'TEXTAREA' && tag !== 'INPUT') {
       gKeyDown = true;
       if (highlightedElement) {
         highlightedElement.classList.remove('claude-design-highlight');
