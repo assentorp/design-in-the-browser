@@ -13,7 +13,9 @@
     "build:mac": "npm run build:main && vite build && electron-builder --mac",
     "build:win": "npm run build:main && vite build && electron-builder --win",
     "build:linux": "npm run build:main && vite build && electron-builder --linux",
-    "typecheck": "tsc --noEmit -p tsconfig.main.json",
+    "typecheck": "npm run typecheck:main && npm run typecheck:renderer",
+    "typecheck:main": "tsc --noEmit -p tsconfig.main.json",
+    "typecheck:renderer": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -464,6 +464,23 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     } catch { /* ignore */ }
   }, []);
 
+  // Unsaved-changes tracking for the in-app editor. A ref (not state): it's only
+  // read at decision points, and updating it must not re-render the browser.
+  const codeDirtyRef = useRef(false);
+
+  // Latest codePanel for use inside async callbacks without re-creating them.
+  const codePanelRef = useRef(codePanel);
+  codePanelRef.current = codePanel;
+
+  // Returns true when it's safe to discard the current editor buffer — either
+  // there are no unsaved edits, or the user explicitly confirmed losing them.
+  const confirmDiscardCodeEdits = useCallback(() => {
+    if (!codeDirtyRef.current) return true;
+    if (!confirm('Discard unsaved changes?')) return false;
+    codeDirtyRef.current = false;
+    return true;
+  }, []);
+
   // Open a project file in the in-app code editor panel, scrolled to `line`.
   // `candidates` (when resolution was fuzzy) populates the "wrong file?" picker.
   // `uncertain` (fuzzy resolution with a thin margin) makes the panel open its
@@ -482,6 +499,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       setCodePanelError(result.error);
       return;
     }
+    // Opening a DIFFERENT file remounts the editor (key={path}) and discards its
+    // buffer — confirm first when there are unsaved edits. Compared after the
+    // read because result.path is the resolved on-disk path, so a same-file
+    // reopen (which keeps the buffer) never prompts. The read has no side
+    // effects, so bailing here is safe.
+    const replacingDirtyFile = codeDirtyRef.current && result.path !== (codePanelRef.current?.path ?? result.path);
+    if (replacingDirtyFile && !confirmDiscardCodeEdits()) return;
     const fileName = result.path.split(/[\\/]/).pop() || result.path;
     setCodePanel((prev) => ({
       path: result.path,
@@ -494,7 +518,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       // Bump the nonce so the panel re-scrolls even if the same file reopens.
       nonce: (prev && prev.path === result.path ? prev.nonce : 0) + 1,
     }));
-  }, [clearSelection, projectPath]);
+  }, [clearSelection, projectPath, confirmDiscardCodeEdits]);
 
   const saveInlineEdit = useCallback((content: string) => {
     const mainAPI = getMainAPI();
@@ -502,8 +526,20 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     return mainAPI.writeProjectFile(codePanel.path, content, projectPath);
   }, [codePanel, projectPath]);
 
+  // Close the code side panel — confirming first if edits would be lost.
+  const closeCodePanel = useCallback(() => {
+    if (!confirmDiscardCodeEdits()) return;
+    setCodePanel(null);
+    setCodePanelError(null);
+    setCodeTreeOpen(false);
+    setCodeFull(false);
+  }, [confirmDiscardCodeEdits]);
+
   // Close the editor when switching projects so we never edit a stale file.
+  // The switch has already happened by the time this runs, so there's nothing
+  // to confirm — just drop the dirty flag along with the panel.
   useEffect(() => {
+    codeDirtyRef.current = false;
     setCodePanel(null);
     setCodePanelError(null);
     setCodePanelLoading(false);
@@ -1183,7 +1219,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
             <webview
               ref={webviewRef}
               className="webview"
-              allowpopups="true"
+              // Must be the STRING "true": React drops unknown attributes whose
+              // value is boolean true, so allowpopups={true} never reaches the
+              // DOM. The cast satisfies @types/react's boolean-typed declaration.
+              allowpopups={'true' as unknown as boolean}
             />
           </div>
         ) : (
@@ -1260,7 +1299,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                   onToggleFull={() => setCodeFull((f) => !f)}
                   nonce={codePanel.nonce}
                   onSave={saveInlineEdit}
-                  onClose={() => { setCodePanel(null); setCodePanelError(null); setCodeTreeOpen(false); setCodeFull(false); }}
+                  onClose={closeCodePanel}
+                  onDirtyChange={(d) => { codeDirtyRef.current = d; }}
                 />
               ) : (
                 <div className="code-editor-panel">
@@ -1271,7 +1311,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                     <button
                       type="button"
                       className="code-editor-close"
-                      onClick={() => { setCodePanel(null); setCodePanelError(null); setCodeTreeOpen(false); setCodeFull(false); }}
+                      onClick={closeCodePanel}
                       title="Close editor"
                       aria-label="Close editor"
                     >

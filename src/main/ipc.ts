@@ -1019,17 +1019,38 @@ export function setupIPC(mainWindow: BrowserWindow) {
     return detected;
   });
 
+  // Resolve filePath to its real on-disk location and verify it lies inside
+  // projectPath. Both sides go through realpath so a symlink inside the project
+  // can't smuggle reads/writes outside it (path.resolve alone doesn't follow
+  // links), and a symlinked project root (e.g. /tmp → /private/tmp) still works.
+  function resolveInsideProject(filePath: string, projectPath: string): { ok: true; target: string } | { ok: false; error: string } {
+    let root: string;
+    try {
+      root = fs.realpathSync(path.resolve(projectPath));
+    } catch {
+      return { ok: false, error: 'Project folder not found.' };
+    }
+    let target: string;
+    try {
+      target = fs.realpathSync(path.resolve(filePath));
+    } catch {
+      return { ok: false, error: 'File not found.' };
+    }
+    const rel = path.relative(root, target);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      return { ok: false, error: 'Path is outside the project.' };
+    }
+    return { ok: true, target };
+  }
+
   // Read a project file's text for the in-app code editor. The path must resolve
   // inside projectPath — this guards against the webview tricking us into reading
   // arbitrary files on disk.
   ipcMain.handle('file:read', async (_, { filePath, projectPath }: { filePath: string; projectPath: string }) => {
     try {
-      const root = path.resolve(projectPath);
-      const target = path.resolve(filePath);
-      const rel = path.relative(root, target);
-      if (rel.startsWith('..') || path.isAbsolute(rel)) {
-        return { ok: false as const, error: 'Path is outside the project.' };
-      }
+      const resolved = resolveInsideProject(filePath, projectPath);
+      if (!resolved.ok) return { ok: false as const, error: resolved.error };
+      const target = resolved.target;
       const stat = fs.statSync(target);
       if (!stat.isFile()) return { ok: false as const, error: 'Not a file.' };
       // Refuse oversized files — the editor is meant for source, not binaries/blobs.
@@ -1041,16 +1062,14 @@ export function setupIPC(mainWindow: BrowserWindow) {
     }
   });
 
-  // Write edited text back to a project file (same in-project safety check as read).
+  // Write edited text back to a project file (same in-project safety check as
+  // read). The editor only saves files it previously opened, so the target must
+  // already exist — which lets the check realpath the file itself.
   ipcMain.handle('file:write', async (_, { filePath, content, projectPath }: { filePath: string; content: string; projectPath: string }) => {
     try {
-      const root = path.resolve(projectPath);
-      const target = path.resolve(filePath);
-      const rel = path.relative(root, target);
-      if (rel.startsWith('..') || path.isAbsolute(rel)) {
-        return { ok: false as const, error: 'Path is outside the project.' };
-      }
-      fs.writeFileSync(target, content, 'utf8');
+      const resolved = resolveInsideProject(filePath, projectPath);
+      if (!resolved.ok) return { ok: false as const, error: resolved.error };
+      fs.writeFileSync(resolved.target, content, 'utf8');
       return { ok: true as const };
     } catch (err) {
       return { ok: false as const, error: err instanceof Error ? err.message : String(err) };

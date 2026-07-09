@@ -26,6 +26,10 @@ jobs:
 
       - run: npm ci
 
+      # vite build strips types without checking them, so the renderer must be
+      # type-checked explicitly (build:main already type-checks main/preload).
+      - run: npm run typecheck:renderer
+
       - run: npm run build:main && npx vite build
         env:
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
@@ -67,6 +71,10 @@ jobs:
           node-version: 20
 
       - run: npm ci
+
+      # vite build strips types without checking them, so the renderer must be
+      # type-checked explicitly (build:main already type-checks main/preload).
+      - run: npm run typecheck:renderer
 
       - run: npm run build:main && npx vite build
         env:

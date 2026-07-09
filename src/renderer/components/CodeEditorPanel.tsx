@@ -82,6 +82,9 @@ interface CodeEditorPanelProps {
   nonce: number;
   onSave: (content: string) => Promise<FileWriteResult>;
   onClose: () => void;
+  // Reports unsaved-changes state so the parent can confirm before discarding
+  // (closing the panel, opening another file, picking a different candidate).
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export default function CodeEditorPanel({
@@ -101,6 +104,7 @@ export default function CodeEditorPanel({
   nonce,
   onSave,
   onClose,
+  onDirtyChange,
 }: CodeEditorPanelProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -119,6 +123,13 @@ export default function CodeEditorPanel({
   // Keep the latest onSave without re-creating the editor when it changes.
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+
+  // Report dirty-state changes to the parent (latest callback, no editor rebuild).
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  useEffect(() => {
+    onDirtyChangeRef.current?.(dirty);
+  }, [dirty]);
 
   // Scroll the editor so the given 1-based line sits in the middle of the view,
   // and place the cursor there.
