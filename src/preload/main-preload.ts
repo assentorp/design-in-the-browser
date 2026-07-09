@@ -164,43 +164,27 @@ const mainAPI: MainAPI = {
 contextBridge.exposeInMainWorld('mainAPI', mainAPI);
 console.log('[Preload] mainAPI exposed to window');
 
-// Expose settings open listener separately since it needs to work before mainAPI is fully loaded
-contextBridge.exposeInMainWorld('onSettingsOpen', (callback: () => void) => {
-  ipcRenderer.on('open-settings', () => callback());
-});
+// Each of these channels has a single renderer consumer, but that consumer
+// re-registers on every React mount (Browser remounts on each project-tab
+// switch) and there is no unsubscribe. Keep exactly one ipcRenderer listener
+// per channel and let re-registration REPLACE the callback, so listeners and
+// stale closures don't accumulate for the app's lifetime.
+function exposeReplaceableListener(globalName: string, channel: string) {
+  let current: ((...args: unknown[]) => void) | null = null;
+  ipcRenderer.on(channel, (_event, ...args: unknown[]) => current?.(...args));
+  contextBridge.exposeInMainWorld(globalName, (callback: (...args: unknown[]) => void) => {
+    current = callback;
+  });
+}
 
-contextBridge.exposeInMainWorld('onWhatsNewOpen', (callback: () => void) => {
-  ipcRenderer.on('open-whats-new', () => callback());
-});
-
-contextBridge.exposeInMainWorld('onSendQueuedEdits', (callback: () => void) => {
-  ipcRenderer.on('send-queued-edits', () => callback());
-});
-
-contextBridge.exposeInMainWorld('onToggleAnnotate', (callback: () => void) => {
-  ipcRenderer.on('toggle-annotate', () => callback());
-});
-
-contextBridge.exposeInMainWorld('onSwitchTab', (callback: (index: number) => void) => {
-  ipcRenderer.on('switch-tab', (_event, index: number) => callback(index));
-});
-
-contextBridge.exposeInMainWorld('onClearCacheReload', (callback: () => void) => {
-  ipcRenderer.on('clear-cache-and-reload', () => callback());
-});
-
-contextBridge.exposeInMainWorld('onReloadWebview', (callback: () => void) => {
-  ipcRenderer.on('reload-webview', () => callback());
-});
-
-contextBridge.exposeInMainWorld('onToggleInspector', (callback: () => void) => {
-  ipcRenderer.on('toggle-inspector', () => callback());
-});
-
-contextBridge.exposeInMainWorld('onBlockedNewWindow', (callback: (url: string) => void) => {
-  ipcRenderer.on('blocked-new-window', (_event, url: string) => callback(url));
-});
-
-contextBridge.exposeInMainWorld('onPaneZoom', (callback: (direction: string, source: string) => void) => {
-  ipcRenderer.on('pane-zoom', (_event, direction: string, source: string) => callback(direction, source));
-});
+// Settings open listener is exposed separately since it needs to work before mainAPI is fully loaded
+exposeReplaceableListener('onSettingsOpen', 'open-settings');
+exposeReplaceableListener('onWhatsNewOpen', 'open-whats-new');
+exposeReplaceableListener('onSendQueuedEdits', 'send-queued-edits');
+exposeReplaceableListener('onToggleAnnotate', 'toggle-annotate');
+exposeReplaceableListener('onSwitchTab', 'switch-tab');
+exposeReplaceableListener('onClearCacheReload', 'clear-cache-and-reload');
+exposeReplaceableListener('onReloadWebview', 'reload-webview');
+exposeReplaceableListener('onToggleInspector', 'toggle-inspector');
+exposeReplaceableListener('onBlockedNewWindow', 'blocked-new-window');
+exposeReplaceableListener('onPaneZoom', 'pane-zoom');
