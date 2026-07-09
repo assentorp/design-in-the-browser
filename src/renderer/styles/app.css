@@ -1044,8 +1044,8 @@ body,
 
 .toolbar-code-btn:hover:not(:disabled):not(.active) {
   background: var(--bg-tertiary);
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 .toolbar-code-btn.active {
