@@ -54,67 +54,9 @@ Electron desktop app for visually annotating elements in a browser and sending e
 ### Annotation (`src/annotation/`)
 - `injected-script.ts` - Script injected into webview for element selection, annotation UI, @-mention file autocomplete
 
-## Recent Changes (v1.2.2 - v1.2.28)
+## Reference (IPC channels + v1.2.2–v1.2.28 changelog)
 
-### Editor Integration (v1.2.24+)
-- Replaced embedded VS Code with configurable external editor support
-- Supported editors: VS Code, Cursor, Zed, Sublime Text, WebStorm, Nova
-- Editor auto-detection on startup
-- Editor setting stored in app settings
-- "Code" button in toolbar opens project in selected editor
-- Element inspector can open source files at specific lines
-- Editor opens with file explorer sidebar visible (passes project path as first arg)
-
-### Annotation System
-- Annotations formatted as markdown lists for CLI parsing
-- Multi-edit mode: annotate multiple elements, sent as a single prompt
-- @-mention file autocomplete in annotation textarea (type `@` to search project files)
-- Screenshot captured per annotation, stored in OS temp folder
-- Reference image support (paste/attach design reference)
-- Text selection annotations (select text on page, annotate it)
-
-### Terminal & Session Management
-- Double-click terminal tab names to rename inline (Enter saves, Escape cancels)
-- Confirmation dialog when closing project or terminal tabs
-- Close buttons positioned at far right of tabs (absolute positioned, won't shift centered names)
-- Session state (pendingEdits, editActions, annotateMode) clears when switching or closing projects
-- File drag-and-drop into terminal pastes file paths
-
-### CLI Tool Integration
-- CLI tool activity detection via terminal data monitoring
-- Spinner indicator on CLI tool tab when active
-- Edit queue: annotations sent while CLI is busy are queued, auto-flushed when idle
-- Idle detection ignores small data chunks (≤8 bytes: cursor blinks, TUI redraws)
-- Idle timeout: 1.5 seconds of no substantial output
-- Annotation auto-submit: PTY text and `\r` sent as separate writes with 100ms delay for TUI compatibility
-
-### UI/UX
-- What's New modal with changelog, notification dot for unseen changes
-- Settings cog and notification bell in tab bar
-- Project tab names centered with close button at far right
-- Terminal tab names centered with close button at far right
-- Cmd+R/Ctrl+R reload disabled to prevent accidental session loss
-- Settings moved to app name menu on macOS (standard Mac convention)
-- Claude model selection and `--dangerously-skip-permissions` option in project config
-- Loading bar with instant visual feedback
-
-### Settings
-- Settings stored in `app.getPath('userData')/settings.json`
-- Screenshot cleanup: 1 min, 5 min (recommended/default), 10 min, 30 min, 1 hour
-- Screenshots stored in OS temp folder (won't fill up disk, OS handles cleanup)
-- Settings modal: Cmd/Ctrl + , (macOS: app menu, Windows: File menu)
-- Editor preference: configurable via settings
-
-### Auto-Updates
-- electron-updater with GitHub releases
-- Update banner: available → downloading (with %) → ready to install
-- "Check for Updates" in menu (macOS: app menu, Windows: Help menu)
-- macOS code signing and notarization
-
-### Windows Support
-- GPU hardware acceleration disabled on Windows
-- ASAR-compatible renderer path resolution
-- WSL support: shell selector, path conversion (`C:\foo` → `/mnt/c/foo`)
+The IPC channel catalog and the full feature changelog live in the `ditb-reference` skill (`.claude/skills/ditb-reference/SKILL.md`) so they load on demand instead of every session. Consult it when you need exact IPC channel names/payloads or the history of a shipped feature.
 
 ## Build & Release
 
@@ -188,23 +130,4 @@ type ShellType = 'default' | 'wsl';
 
 ## IPC Channels
 
-### Main → Renderer
-- `app:update-available` - New version available
-- `app:update-progress` - Download progress
-- `app:update-downloaded` - Ready to install
-- `open-settings` - Open settings modal
-- `open-whats-new` - Open What's New modal
-- `toggle-annotate` - Toggle annotation mode
-- `terminal:data` - Terminal output (sessionId + data)
-
-### Renderer → Main
-- `terminal:create` - Create terminal (with shell type)
-- `terminal:input` - Send input to terminal
-- `terminal:ready` - Signal terminal is ready for output
-- `terminal:run-command` - Run command in terminal
-- `annotation:send` - Send annotation to CLI tool (writes prompt + Enter to PTY)
-- `editor:open-file` - Open file/folder in external editor (with optional projectPath for sidebar)
-- `editor:detect` - Detect installed editors
-- `settings:get` / `settings:save` - App settings
-- `wsl:check` - Check WSL availability
-- `app:download-update` / `app:install-update` - Update actions
+The full Main↔Renderer IPC channel catalog lives in the `ditb-reference` skill (`.claude/skills/ditb-reference/SKILL.md`).
