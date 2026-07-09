@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.8.0',
+    date: 'July 9, 2026',
+    changes: [
+      'Built-in code editor: clicking an element\'s "Edit code" button now opens its source file right beside the page — no external editor needed. Syntax highlighting for JS/TS/JSX/HTML/CSS, Cmd/Ctrl+S to save, drag the panel edge to resize, or expand it to the full window',
+      'The Code button in the toolbar opens the whole project in the built-in editor with a file tree sidebar. The built-in editor is now the default; VS Code, Cursor, Zed, Sublime, WebStorm, and Nova remain available under Settings',
+      'Smarter element-to-source matching: component names, data attributes, headings, text, and the page URL are searched in parallel and cross-checked, so the right file opens far more often. When the match is a close call, a "wrong file?" picker lists the other likely locations',
+      'Unsaved changes in the built-in editor are protected — closing the panel or opening another file asks for confirmation instead of silently discarding edits',
+    ],
+  },
+  {
     version: '1.7.3',
     date: 'June 23, 2026',
     changes: [
