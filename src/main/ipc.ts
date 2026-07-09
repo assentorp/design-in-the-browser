@@ -92,7 +92,19 @@ function toWslPath(windowsPath: string): string {
   return windowsPath.replace(/\\/g, '/');
 }
 
-export function setupIPC(mainWindow: BrowserWindow) {
+// Set by setupIPC; lets index.ts point the registered handlers at a new
+// window after close-and-reopen (macOS dock activate) without re-registering.
+let rebindWindowImpl: ((win: BrowserWindow) => void) | null = null;
+
+export function rebindIPCMainWindow(win: BrowserWindow): void {
+  rebindWindowImpl?.(win);
+}
+
+export function setupIPC(win: BrowserWindow) {
+  // Handlers are registered once per app lifetime but the window can be
+  // closed and recreated on macOS, so they must read this mutable reference
+  // rather than a captured parameter that outlives its window.
+  let mainWindow = win;
   const defaultShell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/zsh';
 
   // Create a new terminal session
@@ -1642,35 +1654,44 @@ export function setupIPC(mainWindow: BrowserWindow) {
   });
 
   // Clean up on window close
-  mainWindow.on('closed', () => {
-    for (const [sessionId, session] of sessions) {
-      console.log('[IPC] Cleaning up session:', sessionId);
-      for (const d of session.disposables) d.dispose();
-      session.disposables.length = 0;
-      session.outputBuffer.length = 0;
-      session.ptyProcess.kill();
-    }
-    sessions.clear();
-
-    // Kill all VS Code servers
-    for (const [key, server] of vscodeServers) {
-      console.log('[IPC] Killing VS Code server:', key);
-      server.process.kill();
-    }
-    vscodeServers.clear();
-
-    // Stop all Starter Project static servers
-    for (const [key, entry] of staticServers) {
-      console.log('[IPC] Stopping static server:', key);
-      if (entry.notifyTimer) clearTimeout(entry.notifyTimer);
-      entry.watcher?.close();
-      for (const client of entry.clients) {
-        try { client.end(); } catch { /* ignore */ }
+  const attachWindow = (w: BrowserWindow) => {
+    mainWindow = w;
+    w.on('closed', () => {
+      for (const [sessionId, session] of sessions) {
+        console.log('[IPC] Cleaning up session:', sessionId);
+        for (const d of session.disposables) d.dispose();
+        session.disposables.length = 0;
+        session.outputBuffer.length = 0;
+        session.ptyProcess.kill();
       }
-      entry.clients.clear();
-      entry.server.close();
-    }
-    staticServers.clear();
-  });
+      sessions.clear();
+
+      // Kill all VS Code servers
+      for (const [key, server] of vscodeServers) {
+        console.log('[IPC] Killing VS Code server:', key);
+        server.process.kill();
+      }
+      vscodeServers.clear();
+
+      // Stop all Starter Project static servers
+      for (const [key, entry] of staticServers) {
+        console.log('[IPC] Stopping static server:', key);
+        if (entry.notifyTimer) clearTimeout(entry.notifyTimer);
+        entry.watcher?.close();
+        for (const client of entry.clients) {
+          try { client.end(); } catch { /* ignore */ }
+        }
+        entry.clients.clear();
+        entry.server.close();
+      }
+      staticServers.clear();
+
+      // The DevTools views were children of the closed window.
+      devToolsViews.clear();
+    });
+  };
+
+  attachWindow(win);
+  rebindWindowImpl = attachWindow;
 }
 
