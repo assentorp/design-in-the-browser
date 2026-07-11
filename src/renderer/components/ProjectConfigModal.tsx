@@ -914,7 +914,7 @@ export default function ProjectConfigModal({
     }
 
     return (
-      <div className="project-config-page">
+      <div className={`project-config-page${view === 'list' ? ' project-config-page-full' : ''}`}>
         <div className="home-hero">
           <img className="home-hero-icon" src={appIcon} alt="" />
           <h1 className="home-hero-title">{timeGreeting()}</h1>
@@ -924,10 +924,15 @@ export default function ProjectConfigModal({
               : 'Point at a project and start designing in the browser.'}
           </p>
         </div>
-        <div className={`modal modal-inline${view === 'list' ? ' modal-wide' : ''}`}>
-          {panelHeader}
-          <div className="modal-body">{body}</div>
-        </div>
+        {view === 'list' ? (
+          // Full-width dashboard on startup — no panel chrome around the grid
+          <div className="home-projects">{body}</div>
+        ) : (
+          <div className="modal modal-inline">
+            {panelHeader}
+            <div className="modal-body">{body}</div>
+          </div>
+        )}
       </div>
     );
   }

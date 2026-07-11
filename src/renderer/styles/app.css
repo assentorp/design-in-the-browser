@@ -1673,6 +1673,32 @@ body,
   padding: 40px 20px;
 }
 
+/* Full-width dashboard variant: top-aligned so a long grid scrolls
+   naturally (vertical centering clips overflowing flex content). */
+.project-config-page-full {
+  justify-content: flex-start;
+}
+
+.project-config-page-full .home-hero {
+  margin-top: 5vh;
+  flex-shrink: 0;
+}
+
+.home-projects {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 12px;
+  animation: preset-rise-in 0.35s ease backwards;
+  animation-delay: 60ms;
+}
+
+/* With the full window available, cards get a little bigger and airier */
+.home-projects .preset-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 24px 16px;
+}
+
 /* Startup home hero (greeting above the projects panel) */
 .home-hero {
   display: flex;
@@ -2774,6 +2800,7 @@ body,
   .modal-overlay .modal,
   .project-config-page .modal-inline,
   .home-hero,
+  .home-projects,
   .preset-card,
   .preset-search {
     animation: none;
