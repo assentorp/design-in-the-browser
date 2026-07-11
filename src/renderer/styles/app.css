@@ -1858,11 +1858,20 @@ body,
   height: 36px;
   border-radius: 9px;
   flex-shrink: 0;
-  font-size: 13px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.5px;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--text-secondary);
   user-select: none;
+  overflow: hidden;
+}
+
+.preset-item-favicon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 .preset-item-tool {

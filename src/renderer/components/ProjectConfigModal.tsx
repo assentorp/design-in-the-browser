@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { initAnalytics } from '../analytics';
 import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared/types';
 // 128px copy of build/icon.png — the full 1024px app icon is 726 KB and was
@@ -28,16 +28,6 @@ interface ProjectConfigModalProps {
 
 type View = 'list' | 'new' | 'edit';
 type ProjectType = 'existing' | 'starter';
-
-// Deterministic hue from the project name, so each project card gets a
-// stable, recognizable avatar color.
-const presetHue = (name: string): number => {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) {
-    h = (h * 31 + name.charCodeAt(i)) % 360;
-  }
-  return h;
-};
 
 const presetInitials = (name: string): string => {
   const words = name.trim().split(/[\s\-_./]+/).filter(Boolean);
@@ -175,6 +165,28 @@ export default function ProjectConfigModal({
       (p) => p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)
     );
   }, [presets, search]);
+
+  // Project favicons, resolved from each project's files by the main process.
+  // Map value: undefined = not requested yet, null = none found.
+  const [favicons, setFavicons] = useState<Record<string, string | null>>({});
+  const requestedFaviconsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const api = window.mainAPI;
+    if (!api?.getProjectFavicon) return;
+    let cancelled = false;
+    for (const preset of presets) {
+      if (requestedFaviconsRef.current.has(preset.id)) continue;
+      requestedFaviconsRef.current.add(preset.id);
+      api.getProjectFavicon(preset.path)
+        .then((dataUrl) => {
+          if (!cancelled) setFavicons((prev) => ({ ...prev, [preset.id]: dataUrl }));
+        })
+        .catch(() => {
+          if (!cancelled) setFavicons((prev) => ({ ...prev, [preset.id]: null }));
+        });
+    }
+    return () => { cancelled = true; };
+  }, [presets]);
 
   const handleOpenPreset = async (preset: ProjectPreset) => {
     let url = preset.url || 'http://localhost:3000';
@@ -427,7 +439,7 @@ export default function ProjectConfigModal({
         )}
         <div className="preset-grid">
           {filteredPresets.map((preset, index) => {
-            const hue = presetHue(preset.name);
+            const favicon = favicons[preset.id];
             return (
               <div
                 key={preset.id}
@@ -435,13 +447,12 @@ export default function ProjectConfigModal({
                 style={{ '--stagger': index } as React.CSSProperties}
                 onClick={() => handleOpenPreset(preset)}
               >
-                <div
-                  className="preset-item-avatar"
-                  style={{
-                    background: `linear-gradient(135deg, hsl(${hue} 55% 44%), hsl(${(hue + 42) % 360} 55% 32%))`,
-                  }}
-                >
-                  {presetInitials(preset.name)}
+                <div className="preset-item-avatar">
+                  {favicon ? (
+                    <img className="preset-item-favicon" src={favicon} alt="" />
+                  ) : (
+                    presetInitials(preset.name)
+                  )}
                 </div>
                 <div className="preset-item-info">
                   <span className="preset-item-name">{preset.name}</span>

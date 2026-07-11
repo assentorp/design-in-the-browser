@@ -208,6 +208,7 @@ export interface MainAPI {
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
   getPresets: () => Promise<ProjectPreset[]>;
   savePresets: (presets: ProjectPreset[]) => Promise<ProjectPreset[]>;
+  getProjectFavicon: (projectPath: string) => Promise<string | null>;
   getPathForFile: (file: File) => string;
   getAppVersion: () => Promise<string>;
   clearWebviewCache: () => Promise<void>;

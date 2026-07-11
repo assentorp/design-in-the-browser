@@ -138,6 +138,10 @@ const mainAPI: MainAPI = {
     return ipcRenderer.invoke('presets:save', presets);
   },
 
+  getProjectFavicon: (projectPath: string): Promise<string | null> => {
+    return ipcRenderer.invoke('project:favicon', { projectPath });
+  },
+
   getPathForFile: (file: File): string => {
     return webUtils.getPathForFile(file);
   },
