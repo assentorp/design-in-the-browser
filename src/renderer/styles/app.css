@@ -2022,8 +2022,9 @@ body,
   color: #ef4444;
 }
 
-/* Compact primary "New Project" button in the list toolbar */
-.btn-new-project {
+/* Compact primary "New Project" button in the list toolbar.
+   Double class beats the base .btn height rule defined later in the file. */
+.btn.btn-new-project {
   display: inline-flex;
   align-items: center;
   gap: 6px;
