@@ -504,8 +504,13 @@ export default function App() {
 
   const handleDeletePreset = useCallback((presetId: string) => {
     setProjectPresets((prev) => {
+      const removed = prev.find((p) => p.id === presetId);
       const updated = prev.filter((p) => p.id !== presetId);
       window.mainAPI?.savePresets(updated);
+      // Drop the stored preview thumbnail unless another preset shares the path
+      if (removed && !updated.some((p) => p.path === removed.path)) {
+        window.mainAPI?.deleteProjectPreview?.(removed.path);
+      }
       return updated;
     });
   }, []);

@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { spawn, exec, type ChildProcess } from 'child_process';
+import * as crypto from 'crypto';
 import type { AnnotationData, ShellType, CodeEditor, ExternalEditor } from '../shared/types';
 import { formatAnnotationPrompt, formatMultiEditPrompt, type MultiEditAnnotation } from '../shared/format-prompt';
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
@@ -1466,6 +1467,46 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const result = await findProjectFavicon(key);
     faviconCache.set(key, result);
     return result;
+  });
+
+  // Project preview thumbnails: a snapshot of the page taken while the
+  // project is open, shown on the project cards. Stored as small JPEGs in
+  // userData (one per project path) so they survive restarts.
+  const previewsDir = path.join(app.getPath('userData'), 'project-previews');
+  const previewFile = (projectPath: string) =>
+    path.join(previewsDir, crypto.createHash('sha1').update(path.resolve(projectPath)).digest('hex') + '.jpg');
+
+  ipcMain.handle('project:save-preview', async (_, { projectPath, dataUrl }: { projectPath: string; dataUrl: string }) => {
+    try {
+      const img = nativeImage.createFromDataURL(dataUrl);
+      if (img.isEmpty()) return false;
+      // Downscale before writing — cards render at ~220px, and full-page
+      // PNG captures can be several MB.
+      const buf = img.resize({ width: 640 }).toJPEG(70);
+      await fs.promises.mkdir(previewsDir, { recursive: true });
+      await fs.promises.writeFile(previewFile(projectPath), buf);
+      return true;
+    } catch (err) {
+      console.warn('[IPC] Failed to save project preview:', err);
+      return false;
+    }
+  });
+
+  ipcMain.handle('project:get-preview', async (_, { projectPath }: { projectPath: string }) => {
+    try {
+      const buf = await fs.promises.readFile(previewFile(projectPath));
+      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle('project:delete-preview', async (_, { projectPath }: { projectPath: string }) => {
+    try {
+      await fs.promises.unlink(previewFile(projectPath));
+    } catch {
+      // Nothing stored — fine
+    }
   });
 
   // Check if WSL is available on Windows

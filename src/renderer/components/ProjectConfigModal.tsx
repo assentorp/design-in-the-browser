@@ -46,6 +46,17 @@ const cliToolLabel = (preset: ProjectPreset): string => {
   return tool.charAt(0).toUpperCase() + tool.slice(1);
 };
 
+const timeAgo = (ts: number): string => {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString();
+};
+
 const timeGreeting = (): string => {
   const hour = new Date().getHours();
   if (hour < 5) return 'Working late';
@@ -166,29 +177,44 @@ export default function ProjectConfigModal({
     );
   }, [presets, search]);
 
-  // Project favicons, resolved from each project's files by the main process.
+  // Project favicons and preview thumbnails, resolved by the main process.
   // Map value: undefined = not requested yet, null = none found.
   const [favicons, setFavicons] = useState<Record<string, string | null>>({});
-  const requestedFaviconsRef = useRef<Set<string>>(new Set());
+  const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  const requestedArtRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const api = window.mainAPI;
-    if (!api?.getProjectFavicon) return;
     let cancelled = false;
     for (const preset of presets) {
-      if (requestedFaviconsRef.current.has(preset.id)) continue;
-      requestedFaviconsRef.current.add(preset.id);
-      api.getProjectFavicon(preset.path)
+      if (requestedArtRef.current.has(preset.id)) continue;
+      requestedArtRef.current.add(preset.id);
+      api?.getProjectFavicon?.(preset.path)
         .then((dataUrl) => {
           if (!cancelled) setFavicons((prev) => ({ ...prev, [preset.id]: dataUrl }));
         })
         .catch(() => {
           if (!cancelled) setFavicons((prev) => ({ ...prev, [preset.id]: null }));
         });
+      api?.getProjectPreview?.(preset.path)
+        .then((dataUrl) => {
+          if (!cancelled) setPreviews((prev) => ({ ...prev, [preset.id]: dataUrl }));
+        })
+        .catch(() => {
+          if (!cancelled) setPreviews((prev) => ({ ...prev, [preset.id]: null }));
+        });
     }
     return () => { cancelled = true; };
   }, [presets]);
 
+  // Most recently opened first; never-opened presets keep their saved order.
+  const sortedPresets = useMemo(
+    () => [...filteredPresets].sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0)),
+    [filteredPresets]
+  );
+
   const handleOpenPreset = async (preset: ProjectPreset) => {
+    // Stamp last-opened so the cards can sort and show recency
+    onUpdatePreset({ ...preset, lastOpenedAt: Date.now() });
     let url = preset.url || 'http://localhost:3000';
     if (preset.usesStaticServer) {
       try {
@@ -366,14 +392,28 @@ export default function ProjectConfigModal({
   }, [view, canFilter]);
 
   // --- Shared header ---
-  const title = view === 'list' ? 'Your Projects'
-    : view === 'edit' ? 'Edit Project'
+  const title = view === 'edit' ? 'Edit Project'
     : hasPresets ? 'New Project'
     : 'Create your first project';
 
   const showBack = view !== 'list' && hasPresets;
 
-  const panelHeader = (
+  // The project list carries its actions in a toolbar inside the body, so it
+  // gets no title bar — just a close button when shown as a modal. Form views
+  // keep the classic back/title/close header.
+  const panelHeader = view === 'list' ? (
+    canClose ? (
+      <div className="modal-header modal-header-bare">
+        <span className="modal-header-spacer" />
+        <button className="modal-close" onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    ) : null
+  ) : (
     <div className="modal-header">
       {showBack ? (
         <button type="button" className="btn-back" onClick={handleBack}>
@@ -405,20 +445,29 @@ export default function ProjectConfigModal({
               ? `${filteredPresets.length} of ${presets.length}`
               : presets.length === 1 ? '1 project' : `${presets.length} projects`}
           </span>
-          {canFilter && (
-            <button
-              type="button"
-              className={`preset-filter-btn${searchOpen ? ' active' : ''}`}
-              onClick={toggleSearch}
-              title="Filter projects (⌘F)"
-              aria-label="Filter projects"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="7"></circle>
-                <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
+          <div className="preset-toolbar-actions">
+            {canFilter && (
+              <button
+                type="button"
+                className={`preset-filter-btn${searchOpen ? ' active' : ''}`}
+                onClick={toggleSearch}
+                title="Filter projects (⌘F)"
+                aria-label="Filter projects"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
+                </svg>
+              </button>
+            )}
+            <button type="button" className="btn btn-primary btn-new-project" onClick={handleNewProject}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
+              New Project
             </button>
-          )}
+          </div>
         </div>
         {searchOpen && (
           <input
@@ -437,76 +486,80 @@ export default function ProjectConfigModal({
             autoFocus
           />
         )}
-        <div className="preset-grid">
-          {filteredPresets.map((preset, index) => {
+        <div className="preset-card-grid">
+          {sortedPresets.map((preset, index) => {
             const favicon = favicons[preset.id];
+            const preview = previews[preset.id];
+            const sub = preset.lastOpenedAt
+              ? `${cliToolLabel(preset)} · ${timeAgo(preset.lastOpenedAt)}`
+              : cliToolLabel(preset);
             return (
               <div
                 key={preset.id}
-                className="preset-item"
+                className="preset-card"
                 style={{ '--stagger': index } as React.CSSProperties}
                 onClick={() => handleOpenPreset(preset)}
+                title={preset.path}
               >
-                <div className="preset-item-avatar">
-                  {favicon ? (
-                    <img className="preset-item-favicon" src={favicon} alt="" />
+                <div className="preset-card-thumb">
+                  {preview ? (
+                    <img className="preset-card-preview" src={preview} alt="" />
+                  ) : favicon ? (
+                    <img className="preset-card-thumb-favicon" src={favicon} alt="" />
                   ) : (
-                    presetInitials(preset.name)
+                    <span className="preset-card-thumb-initials">{presetInitials(preset.name)}</span>
                   )}
+                  <div className="preset-card-actions">
+                    <button
+                      type="button"
+                      className="preset-item-btn preset-item-edit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditPreset(preset);
+                      }}
+                      title="Edit"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="preset-item-btn preset-item-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeletePreset(preset.id);
+                      }}
+                      title="Remove"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <div className="preset-item-info">
-                  <span className="preset-item-name">{preset.name}</span>
-                  <span className="preset-item-path">{preset.path}</span>
-                </div>
-                <span className="preset-item-tool">{cliToolLabel(preset)}</span>
-                <div className="preset-item-actions">
-                  <button
-                    type="button"
-                    className="preset-item-btn preset-item-edit"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditPreset(preset);
-                    }}
-                    title="Edit"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="preset-item-btn preset-item-delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeletePreset(preset.id);
-                    }}
-                    title="Remove"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
+                <div className="preset-card-meta">
+                  <div className="preset-card-favicon-tile">
+                    {favicon ? <img src={favicon} alt="" /> : presetInitials(preset.name)}
+                  </div>
+                  <div className="preset-card-text">
+                    <span className="preset-card-name">{preset.name}</span>
+                    <span className="preset-card-sub">{sub}</span>
+                  </div>
                 </div>
               </div>
             );
           })}
-          {filteredPresets.length === 0 && search && (
-            <div className="preset-empty">
-              <span>No projects match &ldquo;{search}&rdquo;</span>
-              <button type="button" className="preset-empty-clear" onClick={() => setSearch('')}>
-                Clear filter
-              </button>
-            </div>
-          )}
         </div>
-        <button type="button" className="btn btn-new-project" onClick={handleNewProject}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          New Project
-        </button>
+        {filteredPresets.length === 0 && search && (
+          <div className="preset-empty">
+            <span>No projects match &ldquo;{search}&rdquo;</span>
+            <button type="button" className="preset-empty-clear" onClick={() => setSearch('')}>
+              Clear filter
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1765,6 +1765,12 @@ body,
   color: var(--text-secondary);
 }
 
+.preset-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .preset-filter-btn {
   display: flex;
   align-items: center;
@@ -1808,33 +1814,33 @@ body,
   }
 }
 
-.preset-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* Project cards (Figma-style grid with preview thumbnails) */
+.preset-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
 }
 
-.preset-item {
+.preset-card {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  flex-direction: column;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 12px;
+  overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   animation: preset-rise-in 0.3s ease backwards;
   animation-delay: calc(var(--stagger, 0) * 30ms);
 }
 
-.preset-item:hover {
+.preset-card:hover {
   border-color: var(--accent);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
-.preset-item:active {
+.preset-card:active {
   transform: translateY(0);
   box-shadow: none;
 }
@@ -1850,17 +1856,78 @@ body,
   }
 }
 
-.preset-item-avatar {
+.preset-card-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #151515;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+  overflow: hidden;
+}
+
+.preset-card-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  display: block;
+}
+
+.preset-card-thumb-favicon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  opacity: 0.9;
+}
+
+.preset-card-thumb-initials {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.preset-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.preset-card:hover .preset-card-actions {
+  opacity: 1;
+}
+
+.preset-card-actions .preset-item-btn {
+  background: rgba(20, 20, 20, 0.7);
+  color: #ccc;
+  backdrop-filter: blur(4px);
+}
+
+.preset-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.preset-card-favicon-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
@@ -1868,35 +1935,21 @@ body,
   overflow: hidden;
 }
 
-.preset-item-favicon {
-  width: 22px;
-  height: 22px;
+.preset-card-favicon-tile img {
+  width: 16px;
+  height: 16px;
   object-fit: contain;
 }
 
-.preset-item-tool {
-  flex-shrink: 0;
-  max-width: 90px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 3px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.preset-item-info {
-  flex: 1;
+.preset-card-text {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
-.preset-item-name {
-  font-size: 14px;
+.preset-card-name {
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -1904,18 +1957,12 @@ body,
   white-space: nowrap;
 }
 
-.preset-item-path {
-  font-size: 12px;
+.preset-card-sub {
+  font-size: 11px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.preset-item-actions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
 }
 
 .preset-item-btn {
@@ -1930,51 +1977,28 @@ body,
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  opacity: 0;
   transition: all 0.15s ease;
 }
 
-.preset-item:hover .preset-item-btn {
-  opacity: 1;
-}
-
 .preset-item-edit:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
 }
 
 .preset-item-delete:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
 }
 
+/* Compact primary "New Project" button in the list toolbar */
 .btn-new-project {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  height: 42px;
-  margin-top: 10px;
-  padding: 0 16px;
-  background: transparent;
-  border: 1px dashed var(--border-color);
-  border-radius: 10px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-new-project:hover {
-  border-color: var(--accent);
-  border-style: solid;
-  color: var(--text-primary);
-  background: rgba(198, 97, 63, 0.06);
-}
-
-.btn-new-project:active {
-  transform: translateY(1px);
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
+  border-radius: 8px;
 }
 
 .project-type-toggle {
@@ -2140,15 +2164,22 @@ body,
   height: 28px;
 }
 
+/* Title-less header for the project list — just hosts the close button */
+.modal-header-bare {
+  border-bottom: none;
+  min-height: 0;
+  padding: 10px 12px 0;
+}
+
 .modal-inline {
   max-width: 420px;
   box-shadow: none;
   border-radius: 16px;
 }
 
-/* Wider panel for the project list (cards need the room) */
+/* Wider panel for the project card grid */
 .modal-wide {
-  max-width: 580px;
+  max-width: 720px;
 }
 
 .project-config-page .modal-inline {
@@ -2741,15 +2772,14 @@ body,
   .modal-overlay .modal,
   .project-config-page .modal-inline,
   .home-hero,
-  .preset-item,
+  .preset-card,
   .preset-search {
     animation: none;
   }
 
-  .preset-item:hover,
-  .preset-item:active,
-  .btn:active:not(:disabled),
-  .btn-new-project:active {
+  .preset-card:hover,
+  .preset-card:active,
+  .btn:active:not(:disabled) {
     transform: none;
   }
 }

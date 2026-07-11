@@ -753,6 +753,36 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     };
   }, [isReady, onAnnotateModeChange, onPendingEditsChange, sessionId, activeTerminalTabId, sendAllEdits, removeEditItem, clearAllEdits, addToTodoList, projectPath, openInlineEditor]);
 
+  // Capture a preview thumbnail for the project cards on the home screen —
+  // once shortly after the page first paints, then refreshed every minute so
+  // the card reflects roughly what the project looked like when last open.
+  useEffect(() => {
+    if (!hasFirstPaint || !projectPath) return;
+    const api = getMainAPI();
+    if (!api?.saveProjectPreview) return;
+    let cancelled = false;
+
+    const capture = async () => {
+      const webview = webviewRef.current;
+      if (!webview || cancelled) return;
+      try {
+        const image = await webview.capturePage();
+        if (cancelled || image.isEmpty()) return;
+        api.saveProjectPreview(projectPath, image.toDataURL());
+      } catch {
+        // Page navigating or webview detached — try again next tick
+      }
+    };
+
+    const settleTimer = setTimeout(capture, 1500);
+    const refreshTimer = setInterval(capture, 60_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(settleTimer);
+      clearInterval(refreshTimer);
+    };
+  }, [hasFirstPaint, projectPath]);
+
   // Sync CLI running state to webview so it can auto-queue annotations
   useEffect(() => {
     const webview = webviewRef.current;
