@@ -1818,31 +1818,32 @@ body,
 .preset-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 14px;
+  gap: 20px 14px;
 }
 
+/* Figma-style file card: the thumbnail carries the border; name and meta
+   sit as plain text underneath, no boxed footer. */
 .preset-card {
   display: flex;
   flex-direction: column;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  overflow: hidden;
+  gap: 8px;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease;
   animation: preset-rise-in 0.3s ease backwards;
   animation-delay: calc(var(--stagger, 0) * 30ms);
 }
 
 .preset-card:hover {
-  border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
 .preset-card:active {
   transform: translateY(0);
-  box-shadow: none;
+}
+
+.preset-card:hover .preset-card-thumb {
+  border-color: var(--accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes preset-rise-in {
@@ -1859,12 +1860,14 @@ body,
 .preset-card-thumb {
   position: relative;
   aspect-ratio: 16 / 10;
-  background: #151515;
-  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .preset-card-preview {
@@ -1913,21 +1916,20 @@ body,
 .preset-card-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 0 2px;
 }
 
 .preset-card-favicon-tile {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  font-size: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
@@ -1936,8 +1938,8 @@ body,
 }
 
 .preset-card-favicon-tile img {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   object-fit: contain;
 }
 
