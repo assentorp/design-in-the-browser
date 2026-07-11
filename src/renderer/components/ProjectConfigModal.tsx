@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { initAnalytics } from '../analytics';
 import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared/types';
-import appIcon from '../../../build/icon.png';
+// 128px copy of build/icon.png — the full 1024px app icon is 726 KB and was
+// getting bundled into the renderer just to render at 56–64px.
+import appIcon from '../assets/icon-128.png';
 
 interface ProjectConfigModalProps {
   presets: ProjectPreset[];
@@ -26,6 +28,41 @@ interface ProjectConfigModalProps {
 
 type View = 'list' | 'new' | 'edit';
 type ProjectType = 'existing' | 'starter';
+
+// Deterministic hue from the project name, so each project card gets a
+// stable, recognizable avatar color.
+const presetHue = (name: string): number => {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) % 360;
+  }
+  return h;
+};
+
+const presetInitials = (name: string): string => {
+  const words = name.trim().split(/[\s\-_./]+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+};
+
+const cliToolLabel = (preset: ProjectPreset): string => {
+  const tool = preset.cliTool || 'claude';
+  if (tool === 'custom') {
+    const firstToken = (preset.customCliCommand || '').trim().split(/\s+/)[0] || '';
+    const base = firstToken.split(/[/\\]/).pop();
+    return base ? base.charAt(0).toUpperCase() + base.slice(1) : 'Custom';
+  }
+  return tool.charAt(0).toUpperCase() + tool.slice(1);
+};
+
+const timeGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 5) return 'Working late';
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+};
 
 export default function ProjectConfigModal({
   presets,
@@ -56,6 +93,7 @@ export default function ProjectConfigModal({
   const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
   const [customCliCommand, setCustomCliCommand] = useState('');
   const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [isWindows, setIsWindows] = useState(false);
   const [wslAvailable, setWslAvailable] = useState(false);
@@ -293,10 +331,30 @@ export default function ProjectConfigModal({
   const isValid = name.trim()
     && (isStarter || path.trim())
     && (cliTool !== 'custom' || customCliCommand.trim());
-  const showSearch = presets.length > 4;
+  const canFilter = presets.length > 3;
+
+  const toggleSearch = () => {
+    setSearchOpen((open) => {
+      if (open) setSearch('');
+      return !open;
+    });
+  };
+
+  // Cmd/Ctrl+F opens the project filter while the list is showing
+  useEffect(() => {
+    if (view !== 'list' || !canFilter) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [view, canFilter]);
 
   // --- Shared header ---
-  const title = view === 'list' ? 'Open Project'
+  const title = view === 'list' ? 'Your Projects'
     : view === 'edit' ? 'Edit Project'
     : hasPresets ? 'New Project'
     : 'Create your first project';
@@ -329,60 +387,106 @@ export default function ProjectConfigModal({
   const listBody = (
     <div className="project-config">
       <div className="project-config-section">
-        {showSearch && (
+        <div className="preset-toolbar">
+          <span className="preset-count">
+            {search.trim()
+              ? `${filteredPresets.length} of ${presets.length}`
+              : presets.length === 1 ? '1 project' : `${presets.length} projects`}
+          </span>
+          {canFilter && (
+            <button
+              type="button"
+              className={`preset-filter-btn${searchOpen ? ' active' : ''}`}
+              onClick={toggleSearch}
+              title="Filter projects (⌘F)"
+              aria-label="Filter projects"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
+              </svg>
+            </button>
+          )}
+        </div>
+        {searchOpen && (
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter projects..."
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                if (search) setSearch('');
+                else setSearchOpen(false);
+              }
+            }}
+            placeholder="Filter by name or path…"
             className="form-input preset-search"
             autoFocus
           />
         )}
         <div className="preset-grid">
-          {filteredPresets.map((preset) => (
-            <div
-              key={preset.id}
-              className="preset-item"
-              onClick={() => handleOpenPreset(preset)}
-            >
-              <div className="preset-item-info">
-                <span className="preset-item-name">{preset.name}</span>
-                <span className="preset-item-path">{preset.path}</span>
-              </div>
-              <div className="preset-item-actions">
-                <button
-                  type="button"
-                  className="preset-item-btn preset-item-edit"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEditPreset(preset);
+          {filteredPresets.map((preset, index) => {
+            const hue = presetHue(preset.name);
+            return (
+              <div
+                key={preset.id}
+                className="preset-item"
+                style={{ '--stagger': index } as React.CSSProperties}
+                onClick={() => handleOpenPreset(preset)}
+              >
+                <div
+                  className="preset-item-avatar"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${hue} 55% 44%), hsl(${(hue + 42) % 360} 55% 32%))`,
                   }}
-                  title="Edit"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className="preset-item-btn preset-item-delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeletePreset(preset.id);
-                  }}
-                  title="Remove"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
+                  {presetInitials(preset.name)}
+                </div>
+                <div className="preset-item-info">
+                  <span className="preset-item-name">{preset.name}</span>
+                  <span className="preset-item-path">{preset.path}</span>
+                </div>
+                <span className="preset-item-tool">{cliToolLabel(preset)}</span>
+                <div className="preset-item-actions">
+                  <button
+                    type="button"
+                    className="preset-item-btn preset-item-edit"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditPreset(preset);
+                    }}
+                    title="Edit"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="preset-item-btn preset-item-delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeletePreset(preset.id);
+                    }}
+                    title="Remove"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {filteredPresets.length === 0 && search && (
-            <div className="preset-empty">No matches</div>
+            <div className="preset-empty">
+              <span>No projects match &ldquo;{search}&rdquo;</span>
+              <button type="button" className="preset-empty-clear" onClick={() => setSearch('')}>
+                Clear filter
+              </button>
+            </div>
           )}
         </div>
         <button type="button" className="btn btn-new-project" onClick={handleNewProject}>
@@ -747,7 +851,16 @@ export default function ProjectConfigModal({
 
     return (
       <div className="project-config-page">
-        <div className="modal modal-inline">
+        <div className="home-hero">
+          <img className="home-hero-icon" src={appIcon} alt="" />
+          <h1 className="home-hero-title">{timeGreeting()}</h1>
+          <p className="home-hero-subtitle">
+            {hasPresets
+              ? 'Pick up where you left off, or start something new.'
+              : 'Point at a project and start designing in the browser.'}
+          </p>
+        </div>
+        <div className={`modal modal-inline${view === 'list' ? ' modal-wide' : ''}`}>
           {panelHeader}
           <div className="modal-body">{body}</div>
         </div>
@@ -758,7 +871,7 @@ export default function ProjectConfigModal({
   // Modal when adding from tab bar
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal${view === 'list' ? ' modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         {panelHeader}
         <div className="modal-body">{body}</div>
       </div>

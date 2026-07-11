@@ -126,7 +126,9 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
         brightWhite: '#ffffff',
       },
       allowTransparency: false,
-      scrollback: 10000,
+      // Every tab's buffer stays in memory for the whole session (2+ tabs per
+      // project), so keep scrollback generous but not extravagant.
+      scrollback: 4000,
     });
 
     const fitAddon = new FitAddon();
