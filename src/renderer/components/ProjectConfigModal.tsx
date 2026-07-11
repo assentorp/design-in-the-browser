@@ -446,6 +446,23 @@ export default function ProjectConfigModal({
               : presets.length === 1 ? '1 project' : `${presets.length} projects`}
           </span>
           <div className="preset-toolbar-actions">
+            {searchOpen && (
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    if (search) setSearch('');
+                    else setSearchOpen(false);
+                  }
+                }}
+                placeholder="Filter projects…"
+                className="form-input preset-search"
+                autoFocus
+              />
+            )}
             {canFilter && (
               <button
                 type="button"
@@ -469,23 +486,6 @@ export default function ProjectConfigModal({
             </button>
           </div>
         </div>
-        {searchOpen && (
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.stopPropagation();
-                if (search) setSearch('');
-                else setSearchOpen(false);
-              }
-            }}
-            placeholder="Filter by name or path…"
-            className="form-input preset-search"
-            autoFocus
-          />
-        )}
         <div className="preset-card-grid">
           {sortedPresets.map((preset, index) => {
             const favicon = favicons[preset.id];

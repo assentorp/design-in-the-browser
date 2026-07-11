@@ -1823,20 +1823,24 @@ body,
   background: rgba(198, 97, 63, 0.12);
 }
 
-.preset-search {
-  width: 100%;
-  margin-bottom: 10px;
+/* Inline filter input in the toolbar — same height as the buttons beside it */
+.form-input.preset-search {
+  width: 220px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+  border-radius: 8px;
   animation: preset-search-in 0.15s ease;
 }
 
 @keyframes preset-search-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateX(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 
