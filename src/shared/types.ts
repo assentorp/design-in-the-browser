@@ -125,6 +125,8 @@ export interface ProjectPreset {
   shell?: ShellType;
   claudeModel?: string;
   dangerouslySkipPermissions?: boolean;
+  // Start Claude in auto mode (--permission-mode acceptEdits)
+  autoAcceptEdits?: boolean;
   customCliCommand?: string;
   // True for Starter Project presets — when opened, the built-in static
   // HTTP server is restarted and the URL is rewritten to the fresh port.

@@ -1696,7 +1696,7 @@ body,
 /* With the full window available, cards get a little bigger and airier */
 .home-projects .preset-card-grid {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 24px 16px;
+  gap: 16px;
 }
 
 /* Startup home hero (greeting above the projects panel) */
@@ -1761,7 +1761,7 @@ body,
 .project-config-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .project-config-actions {
@@ -1784,10 +1784,20 @@ body,
 }
 
 .preset-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+}
+
+/* Muted "3 of 8" suffix shown next to the headline while filtering */
+.preset-count-filtered {
   font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 400;
+  letter-spacing: 0;
   color: var(--text-secondary);
 }
 
@@ -1848,30 +1858,25 @@ body,
 .preset-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 20px 14px;
+  gap: 14px;
 }
 
-/* Figma-style file card: the thumbnail carries the border; name and meta
-   sit as plain text underneath, no boxed footer. */
+/* Figma-style file card: one bordered surface — preview on top, meta
+   footer inside the same card. */
 .preset-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   animation: preset-rise-in 0.3s ease backwards;
   animation-delay: calc(var(--stagger, 0) * 30ms);
 }
 
 .preset-card:hover {
-  transform: translateY(-2px);
-}
-
-.preset-card:active {
-  transform: translateY(0);
-}
-
-.preset-card:hover .preset-card-thumb {
   border-color: var(--accent);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
@@ -1891,13 +1896,11 @@ body,
   position: relative;
   aspect-ratio: 16 / 10;
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .preset-card-preview {
@@ -1947,7 +1950,7 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 2px;
+  padding: 10px 12px;
 }
 
 .preset-card-favicon-tile {
@@ -2023,63 +2026,75 @@ body,
 }
 
 /* Compact primary "New Project" button in the list toolbar.
-   Double class beats the base .btn height rule defined later in the file. */
+   Double class beats the base .btn height rule defined later in the file.
+   Left padding is smaller than right: the + glyph has ~3px of built-in
+   whitespace inside its 14px box, so 9px reads optically equal to 12px. */
 .btn.btn-new-project {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 28px;
-  padding: 0 12px;
+  padding: 0 12px 0 9px;
   font-size: 13px;
   border-radius: 8px;
 }
 
-.project-type-toggle {
+/* Segmented control (project type) — a recessed track with a raised
+   active chip, so the choice reads at a glance without radio-card bulk. */
+.segmented-control {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-.project-type-option {
+.segmented-option {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: transparent;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.project-type-option:hover {
-  border-color: var(--accent);
+.segmented-option:hover {
   color: var(--text-primary);
 }
 
-.project-type-option.active {
-  border-color: var(--accent);
-  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+.segmented-option.active {
+  background: var(--bg-tertiary);
   color: var(--text-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-.project-type-option input[type="radio"] {
+.segmented-option input[type="radio"] {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-.project-type-option-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
+/* Two related fields side by side (Start Command + URL, CLI + Model) */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
-.project-type-option-desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
+/* Hint that belongs to the row above it — pull it against that row so it
+   reads as attached (within-group gap < between-group gap) */
+.form-hint-pull-up {
+  margin-top: -10px;
 }
 
 .btn-back {
@@ -2204,20 +2219,49 @@ body,
   padding: 10px 12px 0;
 }
 
-.modal-inline {
-  max-width: 420px;
-  box-shadow: none;
+/* Full-width submit anchoring the form — a touch taller than the fields */
+.btn.btn-submit {
+  height: 40px;
+  border-radius: 8px;
+}
+
+/* Full-page form view (startup New/Edit Project): a plain centered column
+   on the page surface, with Back pinned to the screen corner. */
+.page-back {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 10;
+}
+
+.page-form {
+  width: 100%;
+  max-width: 500px;
+  padding: 28px;
+  /* Surface stack: faint top-lit gradient, hairline border, inner top
+     highlight, soft tinted shadow — same physics as the rest of the app */
+  background: linear-gradient(180deg, #262626, #222222);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 16px 40px rgba(10, 8, 6, 0.35);
+  animation: preset-rise-in 0.35s ease backwards;
+  animation-delay: 60ms;
+}
+
+.page-form-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  margin: 0 0 20px;
 }
 
 /* Wider panel for the project card grid */
 .modal-wide {
   max-width: 720px;
-}
-
-.project-config-page .modal-inline {
-  animation: preset-rise-in 0.35s ease backwards;
-  animation-delay: 60ms;
 }
 
 .modal-close {
@@ -2349,27 +2393,33 @@ body,
 }
 
 .form-group label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
+/* Inputs read as recessed wells: darker than the panel, shadowed at the
+   top edge (light comes from above), with an accent halo on focus. */
 .form-input,
 .form-select {
   height: 36px;
   padding: 0 12px;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-primary);
   font-size: 14px;
   outline: none;
-  transition: border-color 0.15s ease;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .form-input:focus,
 .form-select:focus {
   border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 3px rgba(198, 97, 63, 0.18);
 }
 
 .form-input::placeholder {
@@ -2403,7 +2453,7 @@ body,
   padding: 0;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2424,13 +2474,6 @@ body,
   cursor: pointer;
 }
 
-.checkbox-label input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
 .form-checkbox-label {
   display: flex;
   align-items: center;
@@ -2441,11 +2484,47 @@ body,
   font-weight: 400 !important;
 }
 
+/* Custom checkbox: a small recessed well (same physics as the inputs) that
+   fills with the accent when checked — native ones render as stark white
+   squares on the dark theme. */
+.checkbox-label input[type="checkbox"],
 .form-checkbox-label input[type="checkbox"] {
+  appearance: none;
   width: 16px;
   height: 16px;
-  accent-color: var(--accent);
+  margin: 0;
+  flex-shrink: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.checkbox-label input[type="checkbox"]:hover:not(:checked),
+.form-checkbox-label input[type="checkbox"]:hover:not(:checked) {
+  border-color: var(--text-secondary);
+}
+
+.checkbox-label input[type="checkbox"]:checked,
+.form-checkbox-label input[type="checkbox"]:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 10px 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.checkbox-label input[type="checkbox"]:focus-visible,
+.form-checkbox-label input[type="checkbox"]:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 3px rgba(198, 97, 63, 0.18);
 }
 
 .form-hint {
@@ -2803,7 +2882,7 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .modal-overlay,
   .modal-overlay .modal,
-  .project-config-page .modal-inline,
+  .page-form,
   .home-hero,
   .home-projects,
   .preset-card,
@@ -2811,8 +2890,6 @@ body,
     animation: none;
   }
 
-  .preset-card:hover,
-  .preset-card:active,
   .btn:active:not(:disabled) {
     transform: none;
   }

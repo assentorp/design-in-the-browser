@@ -207,6 +207,30 @@ app.whenReady().then(() => {
   setTimeout(sweepStaleScreenshots, 5000);
 });
 
+// Local dev servers often use self-signed certs (mkcert, `next dev
+// --experimental-https`). Trust them for loopback hosts only — both the
+// browser webview and the hidden preview-capture window hit this; every
+// other host keeps strict certificate validation.
+app.on('certificate-error', (event, _contents, url, _error, _cert, callback) => {
+  let isLoopback = false;
+  try {
+    const { hostname } = new URL(url);
+    isLoopback =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      hostname.endsWith('.localhost');
+  } catch {
+    // Unparseable URL — fall through to rejection
+  }
+  if (isLoopback) {
+    event.preventDefault();
+    callback(true);
+  } else {
+    callback(false);
+  }
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
