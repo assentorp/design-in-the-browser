@@ -1015,13 +1015,12 @@ export const annotationScript = `
       }
       .claude-design-freeze-badge {
         position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
+        bottom: 16px;
+        left: 16px;
         display: flex;
         align-items: center;
         gap: 7px;
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(31, 31, 31, 0.92);
         border: 1px solid rgba(198, 97, 63, 0.5);
         color: #fff;
         padding: 6px 12px;
@@ -1031,6 +1030,7 @@ export const annotationScript = `
         line-height: 1;
         z-index: 2147483647;
         pointer-events: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       }
       .claude-design-freeze-badge svg {
         width: 12px;
@@ -3339,6 +3339,9 @@ export const annotationScript = `
   var freezeBadgeElement = null;
   function showFreezeBadge() {
     if (freezeBadgeElement) return;
+    // The badge takes the hints bar's corner — dismiss the hints if still up
+    // (the user has evidently found the shortcut).
+    removeShortcutHints();
     freezeBadgeElement = document.createElement('div');
     freezeBadgeElement.className = 'claude-design-freeze-badge';
     freezeBadgeElement.innerHTML =
