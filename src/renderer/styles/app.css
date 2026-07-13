@@ -987,6 +987,14 @@ body,
   opacity: 1;
 }
 
+/* The inspector toggle sits at the window's left edge — a centered tooltip
+   would hang past the edge and get clipped, so align it to the button's
+   left side instead. */
+.toolbar-devtools-btn.has-tooltip::after {
+  left: 0;
+  transform: none;
+}
+
 .toolbar-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
