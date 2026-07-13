@@ -75,6 +75,9 @@ interface SessionState {
   // init is far enough along to accept typed commands without dropping the
   // first character (e.g. .zshrc banners or screen clears stomping the echo).
   shellPromptSeen: boolean;
+  // True when the shell runs inside WSL — file paths written into prompts
+  // must then be /mnt/<drive>/... instead of Windows paths.
+  useWsl: boolean;
 }
 
 const sessions = new Map<string, SessionState>();
@@ -93,7 +96,19 @@ function toWslPath(windowsPath: string): string {
   return windowsPath.replace(/\\/g, '/');
 }
 
-export function setupIPC(mainWindow: BrowserWindow) {
+// Set by setupIPC; lets index.ts point the registered handlers at a new
+// window after close-and-reopen (macOS dock activate) without re-registering.
+let rebindWindowImpl: ((win: BrowserWindow) => void) | null = null;
+
+export function rebindIPCMainWindow(win: BrowserWindow): void {
+  rebindWindowImpl?.(win);
+}
+
+export function setupIPC(win: BrowserWindow) {
+  // Handlers are registered once per app lifetime but the window can be
+  // closed and recreated on macOS, so they must read this mutable reference
+  // rather than a captured parameter that outlives its window.
+  let mainWindow = win;
   const defaultShell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/zsh';
 
   // Create a new terminal session
@@ -142,6 +157,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       outputBuffer: [],
       disposables: [],
       shellPromptSeen: false,
+      useWsl,
     };
 
     sessions.set(sessionId, session);
@@ -601,6 +617,11 @@ export function setupIPC(mainWindow: BrowserWindow) {
     const screenshotDir = app.getPath('temp');
     const timestamp = Date.now();
 
+    // Screenshots are written to the Windows temp dir, but a WSL session's
+    // CLI can only read them via /mnt/<drive>/... — translate the paths that
+    // go into the prompt (cleanup below keeps using the native paths).
+    const toPromptPath = (p: string) => (session!.useWsl ? toWslPath(p) : p);
+
     // Check if this is multi-edit data
     const anyData = data as unknown as { annotations?: MultiEditAnnotation[] };
     if (anyData.annotations && Array.isArray(anyData.annotations)) {
@@ -628,7 +649,10 @@ export function setupIPC(mainWindow: BrowserWindow) {
         }
       }
 
-      const prompt = formatMultiEditPrompt(anyData.annotations, screenshotPaths);
+      const prompt = formatMultiEditPrompt(
+        anyData.annotations,
+        screenshotPaths.map((p) => (p ? toPromptPath(p) : p))
+      );
       session.ptyProcess.write(prompt);
       setTimeout(() => session.ptyProcess.write('\r'), 100);
 
@@ -680,7 +704,11 @@ export function setupIPC(mainWindow: BrowserWindow) {
         data.referenceImage = '';  // Release base64 string from memory
       }
 
-      const prompt = formatAnnotationPrompt(data, screenshotPath, referenceImagePath);
+      const prompt = formatAnnotationPrompt(
+        data,
+        screenshotPath && toPromptPath(screenshotPath),
+        referenceImagePath && toPromptPath(referenceImagePath)
+      );
       session.ptyProcess.write(prompt);
       setTimeout(() => session.ptyProcess.write('\r'), 100);
 
@@ -754,16 +782,33 @@ export function setupIPC(mainWindow: BrowserWindow) {
     console.log('[IPC] Using code command:', codeCommand);
 
     return new Promise<number>((resolve, reject) => {
-      const proc = spawn(codeCommand, [
+      // With shell:true Node joins command and args into one unquoted string,
+      // so the macOS app-bundle fallback path ("...Visual Studio Code.app...")
+      // splits on its spaces and sh exits 127. Only use a shell on Windows
+      // (needed to run code.cmd) and quote there; spawn directly elsewhere.
+      const useShell = process.platform === 'win32';
+      const quoteForShell = (s: string) => `"${s.replace(/"/g, '""')}"`;
+      const serveArgs = [
         'serve-web',
         '--port', String(port),
         '--without-connection-token',
         '--accept-server-license-terms',
-      ], {
-        cwd: projectPath || undefined,
-        env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin` },
-        shell: true,
-      });
+      ];
+      const proc = spawn(
+        useShell ? quoteForShell(codeCommand) : codeCommand,
+        useShell ? serveArgs.map(quoteForShell) : serveArgs,
+        {
+          cwd: projectPath || undefined,
+          // The Unix dirs don't apply on Windows, and ':' would corrupt PATH there.
+          env: {
+            ...process.env,
+            PATH: useShell
+              ? process.env.PATH
+              : `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin`,
+          },
+          shell: useShell,
+        }
+      );
 
       let resolved = false;
 
@@ -802,6 +847,12 @@ export function setupIPC(mainWindow: BrowserWindow) {
         const current = vscodeServers.get('current');
         if (current && current.process === proc) {
           vscodeServers.delete('current');
+        }
+        // Exiting before the ready message means the server never started —
+        // fail now instead of letting the timeout report a dead port.
+        if (!resolved) {
+          resolved = true;
+          reject(new Error(`VS Code server exited with code ${code} before becoming ready`));
         }
       });
 
@@ -1741,35 +1792,44 @@ export function setupIPC(mainWindow: BrowserWindow) {
   });
 
   // Clean up on window close
-  mainWindow.on('closed', () => {
-    for (const [sessionId, session] of sessions) {
-      console.log('[IPC] Cleaning up session:', sessionId);
-      for (const d of session.disposables) d.dispose();
-      session.disposables.length = 0;
-      session.outputBuffer.length = 0;
-      session.ptyProcess.kill();
-    }
-    sessions.clear();
-
-    // Kill all VS Code servers
-    for (const [key, server] of vscodeServers) {
-      console.log('[IPC] Killing VS Code server:', key);
-      server.process.kill();
-    }
-    vscodeServers.clear();
-
-    // Stop all Starter Project static servers
-    for (const [key, entry] of staticServers) {
-      console.log('[IPC] Stopping static server:', key);
-      if (entry.notifyTimer) clearTimeout(entry.notifyTimer);
-      entry.watcher?.close();
-      for (const client of entry.clients) {
-        try { client.end(); } catch { /* ignore */ }
+  const attachWindow = (w: BrowserWindow) => {
+    mainWindow = w;
+    w.on('closed', () => {
+      for (const [sessionId, session] of sessions) {
+        console.log('[IPC] Cleaning up session:', sessionId);
+        for (const d of session.disposables) d.dispose();
+        session.disposables.length = 0;
+        session.outputBuffer.length = 0;
+        session.ptyProcess.kill();
       }
-      entry.clients.clear();
-      entry.server.close();
-    }
-    staticServers.clear();
-  });
+      sessions.clear();
+
+      // Kill all VS Code servers
+      for (const [key, server] of vscodeServers) {
+        console.log('[IPC] Killing VS Code server:', key);
+        server.process.kill();
+      }
+      vscodeServers.clear();
+
+      // Stop all Starter Project static servers
+      for (const [key, entry] of staticServers) {
+        console.log('[IPC] Stopping static server:', key);
+        if (entry.notifyTimer) clearTimeout(entry.notifyTimer);
+        entry.watcher?.close();
+        for (const client of entry.clients) {
+          try { client.end(); } catch { /* ignore */ }
+        }
+        entry.clients.clear();
+        entry.server.close();
+      }
+      staticServers.clear();
+
+      // The DevTools views were children of the closed window.
+      devToolsViews.clear();
+    });
+  };
+
+  attachWindow(win);
+  rebindWindowImpl = attachWindow;
 }
 

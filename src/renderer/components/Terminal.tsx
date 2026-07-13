@@ -63,6 +63,7 @@ interface TerminalProps {
 
 export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabCounter, onTabsChange, children, projectPath, shell, cliToolTabId, cliToolRunning, hasTodoItems, onZoom }: TerminalProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const projectPathRef = useRef(projectPath);
   const shellRef = useRef(shell);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -217,16 +218,27 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
         e.preventDefault();
         createNewTab();
       }
-      // Cmd+W or Ctrl+W: Close tab
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+      // Close tab: Cmd+W on macOS, Ctrl+Shift+W elsewhere (plain Ctrl+W
+      // belongs to the shell — readline's delete-word). Only when focus is
+      // inside the terminal pane, so the shortcut can't kill a running PTY
+      // from the URL bar, and confirmed like the tab close button.
+      const isMac = navigator.platform.includes('Mac');
+      const closeCombo = isMac
+        ? e.metaKey && !e.shiftKey && e.key === 'w'
+        : e.ctrlKey && e.shiftKey && (e.key === 'w' || e.key === 'W');
+      if (closeCombo) {
+        if (!rootRef.current?.contains(document.activeElement)) return;
         e.preventDefault();
-        closeTab(activeTabId);
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (confirm(`Close "${tab?.name || 'terminal'}"?`)) {
+          closeTab(activeTabId);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createNewTab, closeTab, activeTabId]);
+  }, [createNewTab, closeTab, activeTabId, tabs]);
 
   // Create and manage terminal instances for tabs
   useEffect(() => {
@@ -449,7 +461,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
   }, [onZoom, handleTerminalZoom]);
 
   return (
-    <div className="terminal-container">
+    <div className="terminal-container" ref={rootRef}>
       {hasTodoItems && (
         <div className="todo-section">
           <div className="todo-header">Todo</div>

@@ -1093,6 +1093,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     webviewRef.current?.reloadIgnoringCache();
   }, []);
 
+  const stopLoading = useCallback(() => {
+    webviewRef.current?.stop();
+  }, []);
+
   const clearCacheAndReload = useCallback(async () => {
     const mainAPI = getMainAPI();
     if (mainAPI) {
@@ -1216,6 +1220,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onBack={goBack}
         onForward={goForward}
         onReload={reload}
+        onStop={stopLoading}
         onClearCacheReload={clearCacheAndReload}
         onToggleAnnotate={toggleAnnotate}
         onToggleCodeView={toggleCodeView}
