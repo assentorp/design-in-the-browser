@@ -1,5 +1,6 @@
 import { app, BrowserWindow, screen, session, nativeImage, Menu, clipboard, shell } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { setupIPC, rebindIPCMainWindow } from './ipc';
 import { createMenu } from './menu';
 import { checkForUpdates } from './updater';
@@ -121,6 +122,9 @@ function createWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[Main] Page loaded successfully');
     mainWindow!.setTitle(`Design In The Browser — v${app.getVersion()}`);
+    // Chromium remembers per-origin zoom across loads — make sure the app
+    // chrome always comes back at 100%.
+    mainWindow!.webContents.setZoomLevel(0);
   });
 
   if (isDev) {
@@ -150,15 +154,18 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Keep main window at zoom level 0 (100%) — redirect zoom to webview via IPC
+  // Keep main window at zoom level 0 (100%) — zoom is redirected to the
+  // webview via IPC. Cmd+=/-/0 are intercepted in before-input-event, and
+  // visual (pinch) zoom is disabled below, so the only remaining vector is
+  // ctrl/cmd+wheel — reset when Chromium reports it instead of polling.
   mainWindow.webContents.setZoomLevel(0);
-  setInterval(() => {
+  mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
+  mainWindow.webContents.on('zoom-changed', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    const level = mainWindow.webContents.getZoomLevel();
-    if (level !== 0) {
+    if (mainWindow.webContents.getZoomLevel() !== 0) {
       mainWindow.webContents.setZoomLevel(0);
     }
-  }, 16);
+  });
 
   if (!ipcSetup) {
     setupIPC(mainWindow);
@@ -172,7 +179,61 @@ function createWindow() {
   checkForUpdates(mainWindow);
 }
 
-app.whenReady().then(createWindow);
+// Annotation screenshots/reference images are written to the OS temp dir and
+// deleted by a delayed timer — which never fires if the app quits first, so
+// leftovers from previous runs accumulate. Sweep them once, off the startup
+// path, using async fs so the event loop stays responsive.
+async function sweepStaleScreenshots() {
+  const tmp = app.getPath('temp');
+  const MAX_AGE_MS = 60 * 60 * 1000; // older than an hour = orphaned
+  try {
+    const entries = await fs.promises.readdir(tmp);
+    const now = Date.now();
+    for (const entry of entries) {
+      if (!/^claude-design-(screenshot|reference)-/.test(entry)) continue;
+      const p = path.join(tmp, entry);
+      try {
+        const stat = await fs.promises.stat(p);
+        if (now - stat.mtimeMs > MAX_AGE_MS) {
+          await fs.promises.unlink(p);
+        }
+      } catch {
+        // File vanished or is unreadable — nothing to clean
+      }
+    }
+  } catch {
+    // Temp dir unreadable — skip
+  }
+}
+
+app.whenReady().then(() => {
+  createWindow();
+  setTimeout(sweepStaleScreenshots, 5000);
+});
+
+// Local dev servers often use self-signed certs (mkcert, `next dev
+// --experimental-https`). Trust them for loopback hosts only — both the
+// browser webview and the hidden preview-capture window hit this; every
+// other host keeps strict certificate validation.
+app.on('certificate-error', (event, _contents, url, _error, _cert, callback) => {
+  let isLoopback = false;
+  try {
+    const { hostname } = new URL(url);
+    isLoopback =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      hostname.endsWith('.localhost');
+  } catch {
+    // Unparseable URL — fall through to rejection
+  }
+  if (isLoopback) {
+    event.preventDefault();
+    callback(true);
+  } else {
+    callback(false);
+  }
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

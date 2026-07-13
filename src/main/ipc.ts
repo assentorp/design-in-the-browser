@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { spawn, exec, type ChildProcess } from 'child_process';
+import * as crypto from 'crypto';
 import type { AnnotationData, ShellType, CodeEditor, ExternalEditor } from '../shared/types';
 import { formatAnnotationPrompt, formatMultiEditPrompt, type MultiEditAnnotation } from '../shared/format-prompt';
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
@@ -1436,6 +1437,127 @@ export function setupIPC(win: BrowserWindow) {
   // Save project presets
   ipcMain.handle('presets:save', (_, presets) => {
     return savePresets(presets);
+  });
+
+  // Resolve a project's favicon from its files (the dev server usually isn't
+  // running when the project list shows, so we can't fetch it over HTTP).
+  // Returns a data: URL or null. Cached per path for the app's lifetime.
+  const faviconCache = new Map<string, string | null>();
+
+  const FAVICON_MIME: Record<string, string> = {
+    '.ico': 'image/x-icon',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.gif': 'image/gif',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+  };
+
+  const readIconFile = async (p: string): Promise<string | null> => {
+    const mime = FAVICON_MIME[path.extname(p).toLowerCase()];
+    if (!mime) return null;
+    try {
+      const stat = await fs.promises.stat(p);
+      // Favicons are small; anything huge is not a favicon (and would bloat
+      // the renderer as a base64 string).
+      if (!stat.isFile() || stat.size === 0 || stat.size > 256 * 1024) return null;
+      const buf = await fs.promises.readFile(p);
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const findProjectFavicon = async (root: string): Promise<string | null> => {
+    // Common on-disk locations across static sites, Vite, CRA, Next.js
+    // (pages + app router), Nuxt, Angular, SvelteKit.
+    const candidates = [
+      'favicon.svg', 'favicon.ico', 'favicon.png',
+      'public/favicon.svg', 'public/favicon.ico', 'public/favicon.png',
+      'static/favicon.svg', 'static/favicon.ico', 'static/favicon.png',
+      'app/favicon.ico', 'src/app/favicon.ico', 'src/favicon.ico',
+      'apple-touch-icon.png', 'public/apple-touch-icon.png',
+    ];
+    for (const rel of candidates) {
+      const dataUrl = await readIconFile(path.join(root, rel));
+      if (dataUrl) return dataUrl;
+    }
+
+    // Fall back to the <link rel="...icon..."> of a root HTML file.
+    for (const htmlRel of ['index.html', 'public/index.html', 'src/index.html']) {
+      let html: string;
+      try {
+        html = await fs.promises.readFile(path.join(root, htmlRel), 'utf8');
+      } catch {
+        continue;
+      }
+      const link = html.match(/<link[^>]+rel=["'][^"']*icon[^"']*["'][^>]*>/i)?.[0];
+      const href = link?.match(/href=["']([^"']+)["']/i)?.[1];
+      if (!href) continue;
+      if (href.startsWith('data:image/')) return href;
+      if (/^(https?:)?\/\//i.test(href)) continue; // remote icon — skip
+      const cleaned = decodeURIComponent(href.split(/[?#]/)[0]).replace(/^\.?\//, '');
+      // Try relative to the HTML file, the project root, and public/ (dev
+      // servers map absolute paths like /favicon.svg onto public/).
+      const bases = [path.dirname(path.join(root, htmlRel)), root, path.join(root, 'public')];
+      for (const base of bases) {
+        const target = path.resolve(base, cleaned);
+        if (target !== root && !target.startsWith(root + path.sep)) continue;
+        const dataUrl = await readIconFile(target);
+        if (dataUrl) return dataUrl;
+      }
+    }
+    return null;
+  };
+
+  ipcMain.handle('project:favicon', async (_, { projectPath }: { projectPath: string }) => {
+    const key = path.resolve(projectPath);
+    const cached = faviconCache.get(key);
+    if (cached !== undefined) return cached;
+    const result = await findProjectFavicon(key);
+    faviconCache.set(key, result);
+    return result;
+  });
+
+  // Project preview thumbnails: a snapshot of the page taken while the
+  // project is open, shown on the project cards. Stored as small JPEGs in
+  // userData (one per project path) so they survive restarts.
+  const previewsDir = path.join(app.getPath('userData'), 'project-previews');
+  const previewFile = (projectPath: string) =>
+    path.join(previewsDir, crypto.createHash('sha1').update(path.resolve(projectPath)).digest('hex') + '.jpg');
+
+  ipcMain.handle('project:save-preview', async (_, { projectPath, dataUrl }: { projectPath: string; dataUrl: string }) => {
+    try {
+      const img = nativeImage.createFromDataURL(dataUrl);
+      if (img.isEmpty()) return false;
+      // Downscale before writing — cards render at ~220px, and full-page
+      // PNG captures can be several MB.
+      const buf = img.resize({ width: 640 }).toJPEG(70);
+      await fs.promises.mkdir(previewsDir, { recursive: true });
+      await fs.promises.writeFile(previewFile(projectPath), buf);
+      return true;
+    } catch (err) {
+      console.warn('[IPC] Failed to save project preview:', err);
+      return false;
+    }
+  });
+
+  ipcMain.handle('project:get-preview', async (_, { projectPath }: { projectPath: string }) => {
+    try {
+      const buf = await fs.promises.readFile(previewFile(projectPath));
+      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle('project:delete-preview', async (_, { projectPath }: { projectPath: string }) => {
+    try {
+      await fs.promises.unlink(previewFile(projectPath));
+    } catch {
+      // Nothing stored — fine
+    }
   });
 
   // Check if WSL is available on Windows

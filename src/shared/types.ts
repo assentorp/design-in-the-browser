@@ -125,10 +125,15 @@ export interface ProjectPreset {
   shell?: ShellType;
   claudeModel?: string;
   dangerouslySkipPermissions?: boolean;
+  // Start Claude in auto mode (--permission-mode acceptEdits)
+  autoAcceptEdits?: boolean;
   customCliCommand?: string;
   // True for Starter Project presets — when opened, the built-in static
   // HTTP server is restarted and the URL is rewritten to the fresh port.
   usesStaticServer?: boolean;
+  // Set every time the preset is opened — drives "Opened 2h ago" on the
+  // project cards and most-recent-first ordering.
+  lastOpenedAt?: number;
 }
 
 export interface ElementInfo {
@@ -208,6 +213,10 @@ export interface MainAPI {
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
   getPresets: () => Promise<ProjectPreset[]>;
   savePresets: (presets: ProjectPreset[]) => Promise<ProjectPreset[]>;
+  getProjectFavicon: (projectPath: string) => Promise<string | null>;
+  saveProjectPreview: (projectPath: string, dataUrl: string) => Promise<boolean>;
+  getProjectPreview: (projectPath: string) => Promise<string | null>;
+  deleteProjectPreview: (projectPath: string) => Promise<void>;
   getPathForFile: (file: File) => string;
   getAppVersion: () => Promise<string>;
   clearWebviewCache: () => Promise<void>;

@@ -395,7 +395,7 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(
-    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; customCliCommand: string; usesStaticServer?: boolean }) => {
+    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; autoAcceptEdits: boolean; customCliCommand: string; usesStaticServer?: boolean }) => {
       const newIndex = sessionCounter + 1;
       const newSession = createSession(
         { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
@@ -462,8 +462,11 @@ export default function App() {
           shell: config.shell,
           claudeModel: config.claudeModel || undefined,
           dangerouslySkipPermissions: config.dangerouslySkipPermissions || undefined,
+          autoAcceptEdits: config.autoAcceptEdits || undefined,
           customCliCommand: config.cliTool === 'custom' ? config.customCliCommand : undefined,
           usesStaticServer: config.usesStaticServer || undefined,
+          // Creating a project also opens it, so it's the most recent
+          lastOpenedAt: Date.now(),
         };
         setProjectPresets((prev) => {
           const updated = [...prev, newPreset];
@@ -489,6 +492,8 @@ export default function App() {
       if (config.cliTool === 'claude') {
         if (config.claudeModel) cliCommand += ` --model ${config.claudeModel}`;
         if (config.dangerouslySkipPermissions) cliCommand += ' --dangerously-skip-permissions';
+        // Bypass already skips every prompt, so auto mode would be redundant
+        else if (config.autoAcceptEdits) cliCommand += ' --permission-mode acceptEdits';
       }
 
       commands.push({
@@ -504,8 +509,13 @@ export default function App() {
 
   const handleDeletePreset = useCallback((presetId: string) => {
     setProjectPresets((prev) => {
+      const removed = prev.find((p) => p.id === presetId);
       const updated = prev.filter((p) => p.id !== presetId);
       window.mainAPI?.savePresets(updated);
+      // Drop the stored preview thumbnail unless another preset shares the path
+      if (removed && !updated.some((p) => p.path === removed.path)) {
+        window.mainAPI?.deleteProjectPreview?.(removed.path);
+      }
       return updated;
     });
   }, []);

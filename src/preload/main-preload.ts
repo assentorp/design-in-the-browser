@@ -138,6 +138,22 @@ const mainAPI: MainAPI = {
     return ipcRenderer.invoke('presets:save', presets);
   },
 
+  getProjectFavicon: (projectPath: string): Promise<string | null> => {
+    return ipcRenderer.invoke('project:favicon', { projectPath });
+  },
+
+  saveProjectPreview: (projectPath: string, dataUrl: string): Promise<boolean> => {
+    return ipcRenderer.invoke('project:save-preview', { projectPath, dataUrl });
+  },
+
+  getProjectPreview: (projectPath: string): Promise<string | null> => {
+    return ipcRenderer.invoke('project:get-preview', { projectPath });
+  },
+
+  deleteProjectPreview: (projectPath: string): Promise<void> => {
+    return ipcRenderer.invoke('project:delete-preview', { projectPath });
+  },
+
   getPathForFile: (file: File): string => {
     return webUtils.getPathForFile(file);
   },

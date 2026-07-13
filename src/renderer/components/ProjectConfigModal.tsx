@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { initAnalytics } from '../analytics';
 import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared/types';
-import appIcon from '../../../build/icon.png';
+// 128px copy of build/icon.png — the full 1024px app icon is 726 KB and was
+// getting bundled into the renderer just to render at 56–64px.
+import appIcon from '../assets/icon-128.png';
 
 interface ProjectConfigModalProps {
   presets: ProjectPreset[];
@@ -17,6 +19,7 @@ interface ProjectConfigModalProps {
     saveAsPreset: boolean;
     claudeModel: string;
     dangerouslySkipPermissions: boolean;
+    autoAcceptEdits: boolean;
     customCliCommand: string;
     usesStaticServer?: boolean;
   }) => void;
@@ -26,6 +29,45 @@ interface ProjectConfigModalProps {
 
 type View = 'list' | 'new' | 'edit';
 type ProjectType = 'existing' | 'starter';
+
+// Aliases offered in the Model dropdown; anything else goes through Custom…
+const KNOWN_CLAUDE_MODELS = ['', 'fable', 'opus', 'sonnet', 'haiku'];
+
+const presetInitials = (name: string): string => {
+  const words = name.trim().split(/[\s\-_./]+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+};
+
+const cliToolLabel = (preset: ProjectPreset): string => {
+  const tool = preset.cliTool || 'claude';
+  if (tool === 'custom') {
+    const firstToken = (preset.customCliCommand || '').trim().split(/\s+/)[0] || '';
+    const base = firstToken.split(/[/\\]/).pop();
+    return base ? base.charAt(0).toUpperCase() + base.slice(1) : 'Custom';
+  }
+  return tool.charAt(0).toUpperCase() + tool.slice(1);
+};
+
+const timeAgo = (ts: number): string => {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString();
+};
+
+const timeGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 5) return 'Working late';
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+};
 
 export default function ProjectConfigModal({
   presets,
@@ -53,9 +95,12 @@ export default function ProjectConfigModal({
   const [shell, setShell] = useState<ShellType>('default');
   const [saveAsPreset, setSaveAsPreset] = useState(true);
   const [claudeModel, setClaudeModel] = useState('');
+  const [modelIsCustom, setModelIsCustom] = useState(false);
   const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
+  const [autoAcceptEdits, setAutoAcceptEdits] = useState(false);
   const [customCliCommand, setCustomCliCommand] = useState('');
   const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [isWindows, setIsWindows] = useState(false);
   const [wslAvailable, setWslAvailable] = useState(false);
@@ -138,7 +183,47 @@ export default function ProjectConfigModal({
     );
   }, [presets, search]);
 
+  // Project favicons and preview thumbnails, resolved by the main process.
+  // Map value: undefined = not requested yet, null = none found.
+  const [favicons, setFavicons] = useState<Record<string, string | null>>({});
+  const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  const requestedArtRef = useRef<Set<string>>(new Set());
+  // No cancelled/cleanup guard here on purpose: requestedArtRef already
+  // dedupes fetches, and StrictMode's dev remount would otherwise discard
+  // the first run's results while the second run skips the (already
+  // requested) presets — leaving the cards permanently empty. A late
+  // setState after a real unmount is a harmless no-op.
+  useEffect(() => {
+    const api = window.mainAPI;
+    for (const preset of presets) {
+      if (requestedArtRef.current.has(preset.id)) continue;
+      requestedArtRef.current.add(preset.id);
+      api?.getProjectFavicon?.(preset.path)
+        .then((dataUrl) => {
+          setFavicons((prev) => ({ ...prev, [preset.id]: dataUrl }));
+        })
+        .catch(() => {
+          setFavicons((prev) => ({ ...prev, [preset.id]: null }));
+        });
+      api?.getProjectPreview?.(preset.path)
+        .then((dataUrl) => {
+          setPreviews((prev) => ({ ...prev, [preset.id]: dataUrl }));
+        })
+        .catch(() => {
+          setPreviews((prev) => ({ ...prev, [preset.id]: null }));
+        });
+    }
+  }, [presets]);
+
+  // Most recently opened first; never-opened presets keep their saved order.
+  const sortedPresets = useMemo(
+    () => [...filteredPresets].sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0)),
+    [filteredPresets]
+  );
+
   const handleOpenPreset = async (preset: ProjectPreset) => {
+    // Stamp last-opened so the cards can sort and show recency
+    onUpdatePreset({ ...preset, lastOpenedAt: Date.now() });
     let url = preset.url || 'http://localhost:3000';
     if (preset.usesStaticServer) {
       try {
@@ -158,6 +243,7 @@ export default function ProjectConfigModal({
       saveAsPreset: false,
       claudeModel: preset.claudeModel || '',
       dangerouslySkipPermissions: preset.dangerouslySkipPermissions || false,
+      autoAcceptEdits: preset.autoAcceptEdits || false,
       customCliCommand: preset.customCliCommand || '',
       usesStaticServer: preset.usesStaticServer,
     });
@@ -172,7 +258,9 @@ export default function ProjectConfigModal({
     setCliTool(preset.cliTool || 'claude');
     setShell(preset.shell || 'default');
     setClaudeModel(preset.claudeModel || '');
+    setModelIsCustom(!KNOWN_CLAUDE_MODELS.includes(preset.claudeModel || ''));
     setDangerouslySkipPermissions(preset.dangerouslySkipPermissions || false);
+    setAutoAcceptEdits(preset.autoAcceptEdits || false);
     setCustomCliCommand(preset.customCliCommand || '');
     setView('edit');
   };
@@ -186,7 +274,9 @@ export default function ProjectConfigModal({
     setCliTool('claude');
     setShell('default');
     setClaudeModel('');
+    setModelIsCustom(false);
     setDangerouslySkipPermissions(false);
+    setAutoAcceptEdits(false);
     setCustomCliCommand('');
     setSaveAsPreset(true);
     setProjectType('existing');
@@ -244,8 +334,9 @@ export default function ProjectConfigModal({
           cliTool,
           shell,
           saveAsPreset,
-          claudeModel: cliTool === 'claude' ? claudeModel : '',
+          claudeModel: cliTool === 'claude' ? claudeModel.trim() : '',
           dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
+          autoAcceptEdits: cliTool === 'claude' ? autoAcceptEdits : false,
           customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : '',
           usesStaticServer: true,
         });
@@ -259,7 +350,8 @@ export default function ProjectConfigModal({
     // Existing Project flow (requires path)
     if (!path.trim()) return;
 
-    // Update existing preset if editing
+    // Editing saves the preset and returns to the list — it does not open
+    // the project (the card itself does that).
     if (editingPresetId) {
       onUpdatePreset({
         id: editingPresetId,
@@ -269,10 +361,15 @@ export default function ProjectConfigModal({
         url: url.trim() || 'http://localhost:3000',
         cliTool,
         shell,
-        claudeModel: cliTool === 'claude' ? claudeModel : undefined,
+        claudeModel: cliTool === 'claude' ? claudeModel.trim() : undefined,
         dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : undefined,
+        autoAcceptEdits: cliTool === 'claude' ? autoAcceptEdits : undefined,
         customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : undefined,
+        // Editing must not reset the card's recency in the sorted grid
+        lastOpenedAt: presets.find((p) => p.id === editingPresetId)?.lastOpenedAt,
       });
+      handleBack();
+      return;
     }
 
     onCreate({
@@ -283,8 +380,9 @@ export default function ProjectConfigModal({
       cliTool,
       shell,
       saveAsPreset: !editingPresetId && saveAsPreset,
-      claudeModel: cliTool === 'claude' ? claudeModel : '',
+      claudeModel: cliTool === 'claude' ? claudeModel.trim() : '',
       dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
+      autoAcceptEdits: cliTool === 'claude' ? autoAcceptEdits : false,
       customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : '',
     });
   };
@@ -293,17 +391,51 @@ export default function ProjectConfigModal({
   const isValid = name.trim()
     && (isStarter || path.trim())
     && (cliTool !== 'custom' || customCliCommand.trim());
-  const showSearch = presets.length > 4;
+  const canFilter = presets.length > 3;
+
+  const toggleSearch = () => {
+    setSearchOpen((open) => {
+      if (open) setSearch('');
+      return !open;
+    });
+  };
+
+  // Cmd/Ctrl+F opens the project filter while the list is showing
+  useEffect(() => {
+    if (view !== 'list' || !canFilter) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [view, canFilter]);
 
   // --- Shared header ---
-  const title = view === 'list' ? 'Open Project'
-    : view === 'edit' ? 'Edit Project'
+  const title = view === 'edit' ? 'Edit Project'
     : hasPresets ? 'New Project'
     : 'Create your first project';
 
   const showBack = view !== 'list' && hasPresets;
 
-  const panelHeader = (
+  // The project list carries its actions in a toolbar inside the body, so it
+  // gets no title bar — just a close button when shown as a modal. Form views
+  // keep the classic back/title/close header.
+  const panelHeader = view === 'list' ? (
+    canClose ? (
+      <div className="modal-header modal-header-bare">
+        <span className="modal-header-spacer" />
+        <button className="modal-close" onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    ) : null
+  ) : (
     <div className="modal-header">
       {showBack ? (
         <button type="button" className="btn-back" onClick={handleBack}>
@@ -329,69 +461,132 @@ export default function ProjectConfigModal({
   const listBody = (
     <div className="project-config">
       <div className="project-config-section">
-        {showSearch && (
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter projects..."
-            className="form-input preset-search"
-            autoFocus
-          />
-        )}
-        <div className="preset-grid">
-          {filteredPresets.map((preset) => (
-            <div
-              key={preset.id}
-              className="preset-item"
-              onClick={() => handleOpenPreset(preset)}
-            >
-              <div className="preset-item-info">
-                <span className="preset-item-name">{preset.name}</span>
-                <span className="preset-item-path">{preset.path}</span>
-              </div>
-              <div className="preset-item-actions">
-                <button
-                  type="button"
-                  className="preset-item-btn preset-item-edit"
-                  onClick={(e) => {
+        <div className="preset-toolbar">
+          <span className="preset-count">
+            Projects
+            {search.trim() && (
+              <span className="preset-count-filtered">
+                {filteredPresets.length} of {presets.length}
+              </span>
+            )}
+          </span>
+          <div className="preset-toolbar-actions">
+            {searchOpen && (
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
                     e.stopPropagation();
-                    handleEditPreset(preset);
-                  }}
-                  title="Edit"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className="preset-item-btn preset-item-delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeletePreset(preset.id);
-                  }}
-                  title="Remove"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          ))}
-          {filteredPresets.length === 0 && search && (
-            <div className="preset-empty">No matches</div>
-          )}
+                    if (search) setSearch('');
+                    else setSearchOpen(false);
+                  }
+                }}
+                placeholder="Filter projects…"
+                className="form-input preset-search"
+                autoFocus
+              />
+            )}
+            {canFilter && (
+              <button
+                type="button"
+                className={`preset-filter-btn${searchOpen ? ' active' : ''}`}
+                onClick={toggleSearch}
+                title="Filter projects (⌘F)"
+                aria-label="Filter projects"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
+                </svg>
+              </button>
+            )}
+            <button type="button" className="btn btn-primary btn-new-project" onClick={handleNewProject}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              New Project
+            </button>
+          </div>
         </div>
-        <button type="button" className="btn btn-new-project" onClick={handleNewProject}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          New Project
-        </button>
+        <div className="preset-card-grid">
+          {sortedPresets.map((preset, index) => {
+            const favicon = favicons[preset.id];
+            const preview = previews[preset.id];
+            const sub = preset.lastOpenedAt
+              ? `${cliToolLabel(preset)} · ${timeAgo(preset.lastOpenedAt)}`
+              : cliToolLabel(preset);
+            return (
+              <div
+                key={preset.id}
+                className="preset-card"
+                style={{ '--stagger': index } as React.CSSProperties}
+                onClick={() => handleOpenPreset(preset)}
+                title={preset.path}
+              >
+                <div className="preset-card-thumb">
+                  {preview ? (
+                    <img className="preset-card-preview" src={preview} alt="" />
+                  ) : favicon ? (
+                    <img className="preset-card-thumb-favicon" src={favicon} alt="" />
+                  ) : (
+                    <span className="preset-card-thumb-initials">{presetInitials(preset.name)}</span>
+                  )}
+                  <div className="preset-card-actions">
+                    <button
+                      type="button"
+                      className="preset-item-btn preset-item-edit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditPreset(preset);
+                      }}
+                      title="Edit"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="preset-item-btn preset-item-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Remove "${preset.name}"?`)) {
+                          onDeletePreset(preset.id);
+                        }
+                      }}
+                      title="Remove"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div className="preset-card-meta">
+                  <div className="preset-card-favicon-tile">
+                    {favicon ? <img src={favicon} alt="" /> : presetInitials(preset.name)}
+                  </div>
+                  <div className="preset-card-text">
+                    <span className="preset-card-name">{preset.name}</span>
+                    <span className="preset-card-sub">{sub}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {filteredPresets.length === 0 && search && (
+          <div className="preset-empty">
+            <span>No projects match &ldquo;{search}&rdquo;</span>
+            <button type="button" className="preset-empty-clear" onClick={() => setSearch('')}>
+              Clear filter
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -399,75 +594,77 @@ export default function ProjectConfigModal({
   // --- Form body ---
   const formBody = (
     <div className="project-config">
-      <div className="project-config-section">
-        <form onSubmit={handleSubmit}>
-          <div className="project-config-form">
-            {view === 'new' && (
-              <div className="form-group">
-                <label>Type</label>
-                <div className="project-type-toggle" role="radiogroup" aria-label="Project type">
-                  <label className={`project-type-option${projectType === 'existing' ? ' active' : ''}`}>
-                    <input
-                      type="radio"
-                      name="project-type"
-                      value="existing"
-                      checked={projectType === 'existing'}
-                      onChange={() => setProjectType('existing')}
-                    />
-                    <span className="project-type-option-title">Existing Project</span>
-                    <span className="project-type-option-desc">Point at a folder you already have.</span>
-                  </label>
-                  <label className={`project-type-option${projectType === 'starter' ? ' active' : ''}`}>
-                    <input
-                      type="radio"
-                      name="project-type"
-                      value="starter"
-                      checked={projectType === 'starter'}
-                      onChange={() => setProjectType('starter')}
-                    />
-                    <span className="project-type-option-title">Starter Project</span>
-                    <span className="project-type-option-desc">Create a new folder with a ready-to-edit webpage.</span>
-                  </label>
-                </div>
-              </div>
-            )}
+      <form onSubmit={handleSubmit}>
+        <div className="project-config-form">
+          {view === 'new' && (
             <div className="form-group">
-              <label>Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={isStarter ? 'my-first-page' : 'My Project'}
-                className="form-input"
-                autoFocus
-                disabled={starterBusy}
-              />
-              {isStarter && (
-                <span className="form-hint">
-                  We'll ask where to save it, then create a folder with this name.
-                </span>
-              )}
-            </div>
-            {!isStarter && (
-              <div className="form-group">
-                <label>Path</label>
-                <div className="path-input-wrapper">
+              <div className="segmented-control" role="radiogroup" aria-label="Project type">
+                <label className={`segmented-option${projectType === 'existing' ? ' active' : ''}`}>
                   <input
-                    type="text"
-                    value={path}
-                    onChange={(e) => setPath(e.target.value)}
-                    placeholder="/path/to/project"
-                    className="form-input"
+                    type="radio"
+                    name="project-type"
+                    value="existing"
+                    checked={projectType === 'existing'}
+                    onChange={() => setProjectType('existing')}
                   />
-                  <button type="button" className="browse-btn" onClick={handleBrowse}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                  </button>
-                </div>
+                  Existing Project
+                </label>
+                <label className={`segmented-option${projectType === 'starter' ? ' active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="project-type"
+                    value="starter"
+                    checked={projectType === 'starter'}
+                    onChange={() => setProjectType('starter')}
+                  />
+                  Starter Project
+                </label>
               </div>
+              <span className="form-hint">
+                {projectType === 'existing'
+                  ? 'Point at a folder you already have.'
+                  : 'Create a new folder with a ready-to-edit webpage.'}
+              </span>
+            </div>
+          )}
+          <div className="form-group">
+            <label>Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={isStarter ? 'my-first-page' : 'My Project'}
+              className="form-input"
+              autoFocus
+              disabled={starterBusy}
+            />
+            {isStarter && (
+              <span className="form-hint">
+                We'll ask where to save it, then create a folder with this name.
+              </span>
             )}
-            {!isStarter && (
+          </div>
+          {!isStarter && (
+            <div className="form-group">
+              <label>Path</label>
+              <div className="path-input-wrapper">
+                <input
+                  type="text"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder="/path/to/project"
+                  className="form-input"
+                />
+                <button type="button" className="browse-btn" onClick={handleBrowse} title="Browse…">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+          {!isStarter && (
+            <div className="form-row">
               <div className="form-group">
                 <label>Start Command</label>
                 <input
@@ -478,8 +675,6 @@ export default function ProjectConfigModal({
                   className="form-input"
                 />
               </div>
-            )}
-            {!isStarter && (
               <div className="form-group">
                 <label>URL</label>
                 <input
@@ -490,7 +685,9 @@ export default function ProjectConfigModal({
                   className="form-input"
                 />
               </div>
-            )}
+            </div>
+          )}
+          <div className={cliTool === 'claude' || cliTool === 'custom' ? 'form-row' : undefined}>
             <div className="form-group">
               <label>CLI Tool</label>
               <select
@@ -508,7 +705,7 @@ export default function ProjectConfigModal({
             </div>
             {cliTool === 'custom' && (
               <div className="form-group">
-                <label>Custom Command</label>
+                <label>Command</label>
                 <input
                   type="text"
                   value={customCliCommand}
@@ -516,73 +713,104 @@ export default function ProjectConfigModal({
                   placeholder="gsd"
                   className="form-input"
                 />
-                <span className="form-hint">
-                  Command to launch your CLI tool (e.g. <code>gsd</code>).
-                </span>
               </div>
             )}
             {cliTool === 'claude' && (
               <div className="form-group">
                 <label>Model</label>
                 <select
-                  value={claudeModel}
-                  onChange={(e) => setClaudeModel(e.target.value)}
+                  value={modelIsCustom ? '__custom' : claudeModel}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom') {
+                      setModelIsCustom(true);
+                      setClaudeModel('');
+                    } else {
+                      setModelIsCustom(false);
+                      setClaudeModel(e.target.value);
+                    }
+                  }}
                   className="form-select"
                 >
                   <option value="">Default</option>
-                  <option value="sonnet">Sonnet</option>
+                  <option value="fable">Fable</option>
                   <option value="opus">Opus</option>
+                  <option value="sonnet">Sonnet</option>
                   <option value="haiku">Haiku</option>
+                  <option value="__custom">Custom…</option>
                 </select>
-              </div>
-            )}
-            {cliTool === 'claude' && (
-              <div className="form-group">
-                <label className="form-checkbox-label">
+                {modelIsCustom && (
                   <input
-                    type="checkbox"
-                    checked={dangerouslySkipPermissions}
-                    onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
+                    type="text"
+                    value={claudeModel}
+                    onChange={(e) => setClaudeModel(e.target.value)}
+                    placeholder="claude-fable-5"
+                    className="form-input"
+                    spellCheck={false}
+                    autoFocus
                   />
-                  Bypass permission prompts
-                </label>
-                {dangerouslySkipPermissions && (
-                  <span className="form-hint form-hint-warning">
-                    Skips all permission checks. Only use in trusted projects you fully control.
-                  </span>
                 )}
               </div>
             )}
-            {isWindows && wslAvailable && (
-              <div className="form-group">
-                <label>Shell</label>
-                <select
-                  value={shell}
-                  onChange={(e) => setShell(e.target.value as ShellType)}
-                  className="form-select"
-                >
-                  <option value="default">PowerShell</option>
-                  <option value="wsl">WSL (Linux)</option>
-                </select>
-              </div>
-            )}
-            {starterError && (
-              <span className="form-hint form-hint-warning">{starterError}</span>
-            )}
-            <div className="project-config-actions">
-              <button type="submit" className="btn btn-primary" disabled={!isValid || starterBusy}>
-                {starterBusy
-                  ? 'Creating…'
-                  : view === 'edit'
-                    ? 'Open Project'
-                    : isStarter
-                      ? 'Choose Location & Create'
-                      : 'Create Project'}
-              </button>
-            </div>
           </div>
-        </form>
-      </div>
+          {cliTool === 'custom' && (
+            <span className="form-hint form-hint-pull-up">
+              Command to launch your CLI tool (e.g. <code>gsd</code>).
+            </span>
+          )}
+          {cliTool === 'claude' && (
+            <div className="form-group">
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={autoAcceptEdits}
+                  onChange={(e) => setAutoAcceptEdits(e.target.checked)}
+                />
+                Start in auto mode (auto-accept edits)
+              </label>
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={dangerouslySkipPermissions}
+                  onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
+                />
+                Bypass permission prompts
+              </label>
+              {dangerouslySkipPermissions && (
+                <span className="form-hint form-hint-warning">
+                  Skips all permission checks. Only use in trusted projects you fully control.
+                </span>
+              )}
+            </div>
+          )}
+          {isWindows && wslAvailable && (
+            <div className="form-group">
+              <label>Shell</label>
+              <select
+                value={shell}
+                onChange={(e) => setShell(e.target.value as ShellType)}
+                className="form-select"
+              >
+                <option value="default">PowerShell</option>
+                <option value="wsl">WSL (Linux)</option>
+              </select>
+            </div>
+          )}
+          {starterError && (
+            <span className="form-hint form-hint-warning">{starterError}</span>
+          )}
+          <div className="project-config-actions">
+            <button type="submit" className="btn btn-primary btn-submit" disabled={!isValid || starterBusy}>
+              {starterBusy
+                ? 'Creating…'
+                : view === 'edit'
+                  ? 'Save Project'
+                  : isStarter
+                    ? 'Choose Location & Create'
+                    : 'Create Project'}
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 
@@ -746,11 +974,39 @@ export default function ProjectConfigModal({
     }
 
     return (
-      <div className="project-config-page">
-        <div className="modal modal-inline">
-          {panelHeader}
-          <div className="modal-body">{body}</div>
-        </div>
+      <div className={`project-config-page${view === 'list' ? ' project-config-page-full' : ''}`}>
+        {view === 'list' ? (
+          // Full-width dashboard on startup — no panel chrome around the grid
+          <>
+            <div className="home-hero">
+              <img className="home-hero-icon" src={appIcon} alt="" />
+              <h1 className="home-hero-title">{timeGreeting()}</h1>
+              <p className="home-hero-subtitle">
+                {hasPresets
+                  ? 'Pick up where you left off, or start something new.'
+                  : 'Point at a project and start designing in the browser.'}
+              </p>
+            </div>
+            <div className="home-projects">{body}</div>
+          </>
+        ) : (
+          // Form as a page of its own: back in the screen corner, no hero,
+          // no panel box — the page is the surface.
+          <>
+            {showBack && (
+              <button type="button" className="btn-back page-back" onClick={handleBack}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                Back
+              </button>
+            )}
+            <div className="page-form">
+              <h1 className="page-form-title">{title}</h1>
+              {body}
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -758,7 +1014,7 @@ export default function ProjectConfigModal({
   // Modal when adding from tab bar
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal${view === 'list' ? ' modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         {panelHeader}
         <div className="modal-body">{body}</div>
       </div>
