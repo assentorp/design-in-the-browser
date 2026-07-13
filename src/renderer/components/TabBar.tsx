@@ -1,4 +1,5 @@
 import type { Session } from '../../shared/types';
+import { appConfirm } from './ConfirmDialog';
 
 interface TabBarProps {
   sessions: Session[];
@@ -40,9 +41,9 @@ export default function TabBar({
             </div>
             <button
               className="tab-close"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                if (confirm(`Close "${session.name}"?`)) {
+                if (await appConfirm({ title: `Close "${session.name}"?`, confirmLabel: 'Close' })) {
                   onCloseSession(session.id);
                 }
               }}

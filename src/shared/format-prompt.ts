@@ -9,7 +9,7 @@ export interface MultiEditAnnotation {
   screenshot?: string;
 }
 
-export function formatAnnotationPrompt(data: AnnotationData, screenshotPath?: string, referenceImagePath?: string): string {
+export function formatAnnotationPrompt(data: AnnotationData, screenshotPath?: string, referenceImagePaths?: string[]): string {
   const { element, request, selectedText, elements } = data;
 
   let prompt: string;
@@ -36,9 +36,13 @@ export function formatAnnotationPrompt(data: AnnotationData, screenshotPath?: st
     prompt += ` (see element screenshot: ${screenshotPath})`;
   }
 
-  // Add reference image path for Claude to read
-  if (referenceImagePath) {
-    prompt += ` (see reference image: ${referenceImagePath})`;
+  // Add reference image paths for Claude to read. Numbered like Claude Code's
+  // attachments so the note can say e.g. "make it look like [Image #2]".
+  if (referenceImagePaths && referenceImagePaths.length === 1) {
+    prompt += ` (see reference image: ${referenceImagePaths[0]})`;
+  } else if (referenceImagePaths && referenceImagePaths.length > 1) {
+    const labeled = referenceImagePaths.map((p, i) => `[Image #${i + 1}]: ${p}`);
+    prompt += ` (reference images — ${labeled.join(', ')})`;
   }
 
   return prompt;

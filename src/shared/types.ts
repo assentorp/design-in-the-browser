@@ -45,7 +45,8 @@ export interface AnnotationData {
     height: number;
   };
   screenshot?: string; // base64 image data
-  referenceImage?: string; // base64 image data for user-provided reference
+  referenceImage?: string; // legacy single reference image (kept for pages running an older injected script)
+  referenceImages?: string[]; // base64 data of user-provided reference images, prompt order
   request: string;
 }
 

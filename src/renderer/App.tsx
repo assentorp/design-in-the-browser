@@ -8,6 +8,7 @@ import EditQueuePanel from './components/EditQueuePanel';
 import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
 import WhatsNewModal from './components/WhatsNewModal';
+import ConfirmDialogHost from './components/ConfirmDialog';
 import { changelog } from './changelog';
 import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData } from '../shared/types';
 import { createSession } from '../shared/session';
@@ -17,6 +18,10 @@ document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// The macOS title bar is hidden (traffic lights only), so the renderer
+// provides the drag region and clears space for the traffic lights.
+const isMac = navigator.platform.includes('Mac');
 
 const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   claude: 'claude',
@@ -630,7 +635,9 @@ export default function App() {
   // Handle case when no active session yet — show full-page config
   if (sessions.length === 0 || !activeSession) {
     return (
-      <div className="app">
+      <div className={`app${isMac ? ' mac' : ''}`}>
+        {isMac && <div className="titlebar-drag" />}
+        <ConfirmDialogHost />
         {updateBanner}
         {presetsLoaded ? (
           <ProjectConfigModal
@@ -651,7 +658,8 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app${isMac ? ' mac' : ''}`}>
+      <ConfirmDialogHost />
       {updateBanner}
       {showConfigModal && (
         <ProjectConfigModal

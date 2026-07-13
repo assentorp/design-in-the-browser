@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 
 import Toolbar from './Toolbar';
 import CodeEditorPanel from './CodeEditorPanel';
 import CodeFileTree from './CodeFileTree';
+import { appConfirm } from './ConfirmDialog';
 import type { AnnotationData, MultiEditData, SessionPendingEdit, ElementCandidate, CodeEditor } from '../../shared/types';
 import { annotationScript } from '../../annotation/injected-script';
 
@@ -474,9 +475,15 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
   // Returns true when it's safe to discard the current editor buffer — either
   // there are no unsaved edits, or the user explicitly confirmed losing them.
-  const confirmDiscardCodeEdits = useCallback(() => {
+  const confirmDiscardCodeEdits = useCallback(async () => {
     if (!codeDirtyRef.current) return true;
-    if (!confirm('Discard unsaved changes?')) return false;
+    const ok = await appConfirm({
+      title: 'Discard unsaved changes?',
+      message: 'Your edits in the code panel haven’t been saved.',
+      confirmLabel: 'Discard',
+      danger: true,
+    });
+    if (!ok) return false;
     codeDirtyRef.current = false;
     return true;
   }, []);
@@ -505,7 +512,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     // reopen (which keeps the buffer) never prompts. The read has no side
     // effects, so bailing here is safe.
     const replacingDirtyFile = codeDirtyRef.current && result.path !== (codePanelRef.current?.path ?? result.path);
-    if (replacingDirtyFile && !confirmDiscardCodeEdits()) return;
+    if (replacingDirtyFile && !(await confirmDiscardCodeEdits())) return;
     const fileName = result.path.split(/[\\/]/).pop() || result.path;
     setCodePanel((prev) => ({
       path: result.path,
@@ -527,8 +534,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   }, [codePanel, projectPath]);
 
   // Close the code side panel — confirming first if edits would be lost.
-  const closeCodePanel = useCallback(() => {
-    if (!confirmDiscardCodeEdits()) return;
+  const closeCodePanel = useCallback(async () => {
+    if (!(await confirmDiscardCodeEdits())) return;
     setCodePanel(null);
     setCodePanelError(null);
     setCodeTreeOpen(false);
@@ -637,7 +644,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
                 } else {
                   // Handle single annotation
                   const singleData = data as AnnotationData;
-                  console.log('[Browser] Annotation received, has referenceImage:', !!singleData.referenceImage, 'cliRunning:', cliRunningRef.current);
+                  console.log('[Browser] Annotation received, reference images:', (singleData.referenceImages?.length || 0) + (singleData.referenceImage ? 1 : 0), 'cliRunning:', cliRunningRef.current);
                   singleData.sessionId = sessionId;
                   singleData.terminalTabId = activeTerminalTabId;
 
@@ -1207,6 +1214,37 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
   const currentWidth = viewport ? viewportSizes[viewport] : null;
 
+  // In device-width previews the page is framed by a striped gutter. A
+  // drag-to-select started on that gutter never reaches the injected script
+  // (it lives inside the webview), so forward the drag as synthetic input
+  // events, clamped to the page edge — the marquee then behaves as if it
+  // started at the edge. Once the pointer crosses into the webview the guest
+  // receives real events and takes over seamlessly.
+  const handleGutterMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!annotateMode || e.button !== 0) return;
+    if (e.target !== e.currentTarget) return; // only the gutter itself
+    const webview = webviewRef.current;
+    if (!webview) return;
+    const rect = webview.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const toGuest = (me: { clientX: number; clientY: number }) => ({
+      x: Math.round(Math.min(Math.max(me.clientX - rect.left, 0), rect.width - 1)),
+      y: Math.round(Math.min(Math.max(me.clientY - rect.top, 0), rect.height - 1)),
+    });
+    e.preventDefault();
+    webview.sendInputEvent({ type: 'mouseDown', ...toGuest(e), button: 'left', clickCount: 1 });
+    const onMove = (me: MouseEvent) => {
+      webview.sendInputEvent({ type: 'mouseMove', ...toGuest(me) });
+    };
+    const onUp = (me: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', onUp, true);
+      webview.sendInputEvent({ type: 'mouseUp', ...toGuest(me), button: 'left', clickCount: 1 });
+    };
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('mouseup', onUp, true);
+  }, [annotateMode]);
+
   return (
     <div className="browser" ref={browserRef}>
       <Toolbar
@@ -1236,7 +1274,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         onToggleDevTools={hasMainAPI ? toggleDevTools : undefined}
       />
       <div className="browser-body">
-      <div className={`browser-content ${currentWidth ? 'has-viewport' : ''} ${codeFull ? 'is-hidden' : ''}`}>
+      <div
+        className={`browser-content ${currentWidth ? 'has-viewport' : ''} ${currentWidth && annotateMode ? 'gutter-annotate' : ''} ${codeFull ? 'is-hidden' : ''}`}
+        onMouseDown={handleGutterMouseDown}
+      >
         {isLoading && <div className="browser-loading-bar" />}
         {!hasFirstPaint && (
           <div className="browser-loading-placeholder">

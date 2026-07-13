@@ -674,7 +674,7 @@ export function setupIPC(win: BrowserWindow) {
     } else {
       // Single annotation
       let screenshotPath: string | undefined;
-      let referenceImagePath: string | undefined;
+      const referenceImagePaths: string[] = [];
 
       // Save screenshot if present, then release base64 from memory
       if (data.screenshot) {
@@ -689,31 +689,38 @@ export function setupIPC(win: BrowserWindow) {
         data.screenshot = '';  // Release base64 string from memory
       }
 
-      // Save reference image if present, then release base64 from memory
-      if (data.referenceImage) {
+      // Save reference images if present, then release base64 from memory.
+      // referenceImage (singular) is the legacy field from older injected scripts.
+      const referenceImages = [
+        ...(data.referenceImages || []),
+        ...(data.referenceImage ? [data.referenceImage] : []),
+      ];
+      for (let i = 0; i < referenceImages.length; i++) {
         try {
-          const matches = data.referenceImage.match(/^data:image\/(\w+);base64,/);
+          const matches = referenceImages[i].match(/^data:image\/(\w+);base64,/);
           const ext = matches ? matches[1] : 'png';
-          referenceImagePath = path.join(screenshotDir, `claude-design-reference-${timestamp}.${ext}`);
-          const base64Data = data.referenceImage.replace(/^data:image\/\w+;base64,/, '');
-          fs.writeFileSync(referenceImagePath, base64Data, 'base64');
-          console.log('[IPC] Reference image saved:', referenceImagePath);
+          const refPath = path.join(screenshotDir, `claude-design-reference-${timestamp}-${i + 1}.${ext}`);
+          const base64Data = referenceImages[i].replace(/^data:image\/\w+;base64,/, '');
+          fs.writeFileSync(refPath, base64Data, 'base64');
+          referenceImagePaths.push(refPath);
+          console.log('[IPC] Reference image saved:', refPath);
         } catch (err) {
           console.error('[IPC] Failed to save reference image:', err);
         }
-        data.referenceImage = '';  // Release base64 string from memory
       }
+      data.referenceImage = '';  // Release base64 strings from memory
+      data.referenceImages = [];
 
       const prompt = formatAnnotationPrompt(
         data,
         screenshotPath && toPromptPath(screenshotPath),
-        referenceImagePath && toPromptPath(referenceImagePath)
+        referenceImagePaths.map(toPromptPath)
       );
       session.ptyProcess.write(prompt);
       setTimeout(() => session.ptyProcess.write('\r'), 100);
 
       // Clean up images after a delay
-      const pathsToClean = [screenshotPath, referenceImagePath].filter(Boolean) as string[];
+      const pathsToClean = [screenshotPath, ...referenceImagePaths].filter(Boolean) as string[];
       if (pathsToClean.length > 0) {
         const cleanupDelay = getScreenshotCleanupMs();
         setTimeout(() => {
@@ -1133,7 +1140,8 @@ export function setupIPC(win: BrowserWindow) {
     const excludeDirs = ['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.output', 'coverage', '.cache'];
     const excludeArgs = excludeDirs.flatMap(d => ['--exclude-dir', d]);
     const includeArgs = ['--include=*.tsx', '--include=*.jsx', '--include=*.ts', '--include=*.js',
-                         '--include=*.vue', '--include=*.svelte'];
+                         '--include=*.vue', '--include=*.svelte',
+                         '--include=*.html', '--include=*.htm', '--include=*.astro'];
 
     console.log('[IPC] Searching for element:', {
       componentNames: info.componentNames?.slice(0, 5),
@@ -1183,7 +1191,9 @@ export function setupIPC(win: BrowserWindow) {
     // The clicked element lives on a page; files under that page's route folder
     // are far more likely than shared root files (layout.tsx, providers, etc.).
     const urlPath = (info.pageUrl || '/').replace(/\/$/, '') || '/';
-    const urlSegments = urlPath.split('/').filter(Boolean).map(s => s.toLowerCase());
+    // Static sites serve /about.html — compare route segments without the
+    // extension so they still line up with source files.
+    const urlSegments = urlPath.split('/').filter(Boolean).map(s => s.toLowerCase().replace(/\.html?$/, ''));
     const rootishPattern = /(^|\/)(layout|template|_app|_document|providers?|globals?|root)\.[jt]sx?$/i;
     const uiPathPattern = /(component|page|section|view|screen|app|ui|feature|module|widget)\b/i;
     const nonUiPathPattern = /(_?scripts?|utils?|helpers?|\/lib\/|config|migrations?|seeds?|\/cli\/|test|spec|__tests?__|\.config\.|\.setup\.)/i;
@@ -1192,7 +1202,7 @@ export function setupIPC(win: BrowserWindow) {
       const rel = path.relative(projectPath, file).toLowerCase();
       let s = 0;
       // Files under (or named like) a URL segment are strongly preferred.
-      if (urlSegments.some(seg => rel.includes('/' + seg + '/') || rel.includes('/' + seg + '.'))) s += 30;
+      if (urlSegments.some(seg => rel.includes('/' + seg + '/') || rel.includes('/' + seg + '.') || rel.startsWith(seg + '.'))) s += 30;
       if (rootishPattern.test(rel)) s -= 40; // demote layout.tsx & friends
       if (uiPathPattern.test(rel)) s += 8;
       if (nonUiPathPattern.test(rel)) s -= 25;

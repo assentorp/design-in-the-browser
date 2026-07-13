@@ -73,9 +73,17 @@ function createWindow() {
     height: saved?.height || Math.round(workArea.height * 0.9),
     minWidth: 1000,
     minHeight: 600,
-    title: `Design In The Browser v${app.getVersion()}`,
+    title: 'Design In The Browser',
     icon,
     backgroundColor: '#1a1a1a',
+    // On macOS, hide the title bar text but keep the traffic lights and
+    // let the renderer's top bar act as the drag region.
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hidden' as const,
+          trafficLightPosition: { x: 16, y: 16 },
+        }
+      : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -121,7 +129,7 @@ function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[Main] Page loaded successfully');
-    mainWindow!.setTitle(`Design In The Browser — v${app.getVersion()}`);
+    mainWindow!.setTitle('Design In The Browser');
     // Chromium remembers per-origin zoom across loads — make sure the app
     // chrome always comes back at 100%.
     mainWindow!.webContents.setZoomLevel(0);

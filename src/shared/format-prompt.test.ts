@@ -80,14 +80,25 @@ describe('formatAnnotationPrompt', () => {
 
   it('appends reference image path', () => {
     const data = makeAnnotationData();
-    const result = formatAnnotationPrompt(data, undefined, '/tmp/reference.png');
+    const result = formatAnnotationPrompt(data, undefined, ['/tmp/reference.png']);
     expect(result).toBe('- <div>: make it red (see reference image: /tmp/reference.png)');
   });
 
   it('appends both screenshot and reference image paths', () => {
     const data = makeAnnotationData();
-    const result = formatAnnotationPrompt(data, '/tmp/screenshot.png', '/tmp/reference.png');
+    const result = formatAnnotationPrompt(data, '/tmp/screenshot.png', ['/tmp/reference.png']);
     expect(result).toBe('- <div>: make it red (see element screenshot: /tmp/screenshot.png) (see reference image: /tmp/reference.png)');
+  });
+
+  it('numbers multiple reference images like Claude Code attachments', () => {
+    const data = makeAnnotationData();
+    const result = formatAnnotationPrompt(data, undefined, ['/tmp/a.png', '/tmp/b.jpg']);
+    expect(result).toBe('- <div>: make it red (reference images — [Image #1]: /tmp/a.png, [Image #2]: /tmp/b.jpg)');
+  });
+
+  it('appends nothing for an empty reference image list', () => {
+    const data = makeAnnotationData();
+    expect(formatAnnotationPrompt(data, undefined, [])).toBe('- <div>: make it red');
   });
 
   it('prioritizes selectedText over elements and single element', () => {

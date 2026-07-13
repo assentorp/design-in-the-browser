@@ -3,6 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalTab, ShellType } from '../../shared/types';
+import { appConfirm } from './ConfirmDialog';
 
 const getMainAPI = () => (typeof window !== 'undefined' ? window.mainAPI : undefined);
 
@@ -230,9 +231,9 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
         if (!rootRef.current?.contains(document.activeElement)) return;
         e.preventDefault();
         const tab = tabs.find(t => t.id === activeTabId);
-        if (confirm(`Close "${tab?.name || 'terminal'}"?`)) {
-          closeTab(activeTabId);
-        }
+        appConfirm({ title: `Close "${tab?.name || 'terminal'}"?`, confirmLabel: 'Close' }).then((ok) => {
+          if (ok) closeTab(activeTabId);
+        });
       }
     };
 
@@ -514,9 +515,9 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
               )}
               <button
                 className="terminal-tab-close"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  if (confirm(`Close "${tab.name}"?`)) {
+                  if (await appConfirm({ title: `Close "${tab.name}"?`, confirmLabel: 'Close' })) {
                     closeTab(tab.id);
                   }
                 }}

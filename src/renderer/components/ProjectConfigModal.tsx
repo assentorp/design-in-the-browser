@@ -4,6 +4,7 @@ import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared
 // 128px copy of build/icon.png — the full 1024px app icon is 726 KB and was
 // getting bundled into the renderer just to render at 56–64px.
 import appIcon from '../assets/icon-128.png';
+import { appConfirm } from './ConfirmDialog';
 
 interface ProjectConfigModalProps {
   presets: ProjectPreset[];
@@ -551,9 +552,14 @@ export default function ProjectConfigModal({
                     <button
                       type="button"
                       className="preset-item-btn preset-item-delete"
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        if (confirm(`Remove "${preset.name}"?`)) {
+                        if (await appConfirm({
+                          title: `Remove "${preset.name}"?`,
+                          message: 'This only removes the project from this list — no files are deleted.',
+                          confirmLabel: 'Remove',
+                          danger: true,
+                        })) {
                           onDeletePreset(preset.id);
                         }
                       }}
