@@ -2453,22 +2453,14 @@ export const annotationScript = `
     var overlay = document.createElement('div');
     overlay.className = 'claude-design-mention-overlay';
     var tcs = getComputedStyle(textarea);
-    var mirrorProps = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing',
-      'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-      'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderRadius'];
+    var mirrorProps = ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
+      'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+      'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width', 'border-radius'];
     for (var mp = 0; mp < mirrorProps.length; mp++) {
-      overlay.style.setProperty(
-        mirrorProps[mp].replace(/[A-Z]/g, function(c) { return '-' + c.toLowerCase(); }),
-        tcs[mirrorProps[mp]],
-        'important'
-      );
+      overlay.style.setProperty(mirrorProps[mp], tcs.getPropertyValue(mirrorProps[mp]), 'important');
     }
     textarea.parentNode.insertBefore(overlay, textarea.nextSibling);
     textarea.classList.add('claude-design-has-mention-overlay');
-
-    function escapeHtml(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
 
     // Ranges of picked mentions in the current value (prefix + known map key).
     // Partially edited mentions stop matching and degrade to plain text, which
@@ -2846,19 +2838,19 @@ export const annotationScript = `
       imagesRow.innerHTML = html;
     }
 
+    function addImageFile(file) {
+      if (!file || !file.type || !file.type.startsWith('image/')) return;
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        referenceImagesData.push(e.target.result);
+        renderImageThumbs();
+      };
+      reader.readAsDataURL(file);
+    }
+
     function handleFiles(files) {
       if (!files) return;
-      for (var fi = 0; fi < files.length; fi++) {
-        (function(file) {
-          if (!file || !file.type || !file.type.startsWith('image/')) return;
-          var reader = new FileReader();
-          reader.onload = function(e) {
-            referenceImagesData.push(e.target.result);
-            renderImageThumbs();
-          };
-          reader.readAsDataURL(file);
-        })(files[fi]);
-      }
+      for (var fi = 0; fi < files.length; fi++) addImageFile(files[fi]);
     }
 
     function removeImage(index) {

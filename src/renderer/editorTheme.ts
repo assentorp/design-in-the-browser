@@ -3,13 +3,12 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
 
-// CodeMirror theme matching the app's design language: same neutral dark
-// surfaces as the rest of the UI and a warm, muted syntax palette built
-// around the #c6613f accent (instead of One Dark's blue-leaning scheme).
+// CodeMirror theme matching the app's design language: One Dark's familiar
+// syntax palette rendered on the app's own neutral surfaces, with the
+// #c6613f accent for caret, selection, and search highlights.
 
 const accent = '#c6613f';
 
-// One Dark's proven syntax palette, rendered on the app's own surfaces.
 const colors = {
   background: '#1a1a1a', // --bg-primary
   text: '#abb2bf',
