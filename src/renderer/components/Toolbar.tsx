@@ -12,6 +12,7 @@ interface ToolbarProps {
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
+  onStop: () => void;
   onClearCacheReload: () => void;
   onToggleAnnotate: () => void;
   onToggleCodeView: () => void;
@@ -38,6 +39,7 @@ export default function Toolbar({
   onBack,
   onForward,
   onReload,
+  onStop,
   onClearCacheReload,
   onToggleAnnotate,
   onToggleCodeView,
@@ -141,7 +143,7 @@ export default function Toolbar({
         </button>
         <button
           className="toolbar-btn has-tooltip"
-          onClick={onReload}
+          onClick={isLoading ? onStop : onReload}
           data-tooltip={isLoading ? 'Stop' : `Reload (${navigator.platform.includes('Mac') ? 'Cmd' : 'Ctrl'}+R)`}
         >
           {isLoading ? (

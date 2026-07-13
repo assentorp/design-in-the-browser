@@ -1,6 +1,6 @@
 import { app, BrowserWindow, screen, session, nativeImage, Menu, clipboard, shell } from 'electron';
 import * as path from 'path';
-import { setupIPC } from './ipc';
+import { setupIPC, rebindIPCMainWindow } from './ipc';
 import { createMenu } from './menu';
 import { checkForUpdates } from './updater';
 import { getSettings, saveSettings } from './settings';
@@ -163,6 +163,10 @@ function createWindow() {
   if (!ipcSetup) {
     setupIPC(mainWindow);
     ipcSetup = true;
+  } else {
+    // macOS: window was closed and recreated via dock activate — point the
+    // already-registered handlers at the new window.
+    rebindIPCMainWindow(mainWindow);
   }
   createMenu(mainWindow);
   checkForUpdates(mainWindow);

@@ -6,66 +6,81 @@ let updateDownloaded = false;
 
 let mainWindowRef: BrowserWindow | null = null;
 let isManualCheck = false;
+let listenersSetup = false;
+
+// The window can be closed and recreated (macOS dock reopen), and
+// checkForUpdates runs once per window creation — so the autoUpdater
+// listeners are registered only once and always resolve the live window,
+// instead of stacking duplicates bound to a destroyed one.
+function liveWindow(): BrowserWindow | null {
+  return mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
+}
 
 export function checkForUpdates(mainWindow: BrowserWindow) {
   mainWindowRef = mainWindow;
 
-  // Configure auto-updater
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  if (!listenersSetup) {
+    listenersSetup = true;
 
-  // Check for updates
-  autoUpdater.on('update-available', (info) => {
-    console.log('[Updater] Update available:', info.version);
-    mainWindow.webContents.send('app:update-available', {
-      version: info.version,
-      url: `https://github.com/assentorp/ditb-releases/releases/tag/v${info.version}`,
-    });
-    isManualCheck = false;
-  });
+    // Configure auto-updater
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-not-available', () => {
-    console.log('[Updater] Up to date');
-    if (isManualCheck) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: 'No Updates',
-        message: 'You are running the latest version.',
-        buttons: ['OK'],
+    // Check for updates
+    autoUpdater.on('update-available', (info) => {
+      console.log('[Updater] Update available:', info.version);
+      liveWindow()?.webContents.send('app:update-available', {
+        version: info.version,
+        url: `https://github.com/assentorp/ditb-releases/releases/tag/v${info.version}`,
       });
       isManualCheck = false;
-    }
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    console.log('[Updater] Download progress:', Math.round(progress.percent) + '%');
-    mainWindow.webContents.send('app:update-progress', {
-      percent: progress.percent,
-      transferred: progress.transferred,
-      total: progress.total,
     });
-  });
 
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('[Updater] Update downloaded:', info.version);
-    updateDownloaded = true;
-    mainWindow.webContents.send('app:update-downloaded', {
-      version: info.version,
-    });
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('[Updater] Error:', err);
-    if (isManualCheck) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'error',
-        title: 'Update Error',
-        message: 'Failed to check for updates. Please try again later.',
-        buttons: ['OK'],
-      });
+    autoUpdater.on('update-not-available', () => {
+      console.log('[Updater] Up to date');
+      const win = liveWindow();
+      if (isManualCheck && win) {
+        dialog.showMessageBox(win, {
+          type: 'info',
+          title: 'No Updates',
+          message: 'You are running the latest version.',
+          buttons: ['OK'],
+        });
+      }
       isManualCheck = false;
-    }
-  });
+    });
+
+    autoUpdater.on('download-progress', (progress) => {
+      console.log('[Updater] Download progress:', Math.round(progress.percent) + '%');
+      liveWindow()?.webContents.send('app:update-progress', {
+        percent: progress.percent,
+        transferred: progress.transferred,
+        total: progress.total,
+      });
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log('[Updater] Update downloaded:', info.version);
+      updateDownloaded = true;
+      liveWindow()?.webContents.send('app:update-downloaded', {
+        version: info.version,
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.error('[Updater] Error:', err);
+      const win = liveWindow();
+      if (isManualCheck && win) {
+        dialog.showMessageBox(win, {
+          type: 'error',
+          title: 'Update Error',
+          message: 'Failed to check for updates. Please try again later.',
+          buttons: ['OK'],
+        });
+      }
+      isManualCheck = false;
+    });
+  }
 
   // Check for updates after a short delay
   setTimeout(() => {
@@ -79,8 +94,9 @@ export function manualCheckForUpdates() {
   isManualCheck = true;
   autoUpdater.checkForUpdates().catch((err) => {
     console.error('[Updater] Manual check failed:', err);
-    if (mainWindowRef) {
-      dialog.showMessageBox(mainWindowRef, {
+    const win = liveWindow();
+    if (win) {
+      dialog.showMessageBox(win, {
         type: 'error',
         title: 'Update Error',
         message: 'Failed to check for updates. Please try again later.',
@@ -97,8 +113,9 @@ export function downloadUpdate() {
     console.log('[Updater] Download started successfully');
   }).catch((err) => {
     console.error('[Updater] Download failed:', err);
-    if (mainWindowRef) {
-      dialog.showMessageBox(mainWindowRef, {
+    const win = liveWindow();
+    if (win) {
+      dialog.showMessageBox(win, {
         type: 'error',
         title: 'Download Error',
         message: `Failed to download update: ${err.message || err}`,
@@ -113,8 +130,9 @@ export function installUpdate() {
 
   if (!updateDownloaded) {
     console.error('[Updater] Update not downloaded yet, cannot install');
-    if (mainWindowRef) {
-      dialog.showMessageBox(mainWindowRef, {
+    const win = liveWindow();
+    if (win) {
+      dialog.showMessageBox(win, {
         type: 'error',
         title: 'Update Error',
         message: 'Update has not finished downloading. Please wait and try again.',
