@@ -859,23 +859,34 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const webview = webviewRef.current;
     if (!webview) return;
 
+    // True while the user is typing somewhere in the app chrome — terminal,
+    // URL bar, or the CodeMirror editor (a contenteditable div). Alt and F
+    // must stay ordinary keys there: on non-US layouts Alt combos produce
+    // characters (e.g. { is Alt+Shift+8 on Danish keyboards), so stealing
+    // focus on Alt makes those impossible to type.
+    const isTypingContext = () => {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active) return false;
+      return !!(
+        active.closest('.terminal-pane') ||
+        active.classList.contains('xterm-helper-textarea') ||
+        active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        active.isContentEditable
+      );
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Alt') {
         webview.executeJavaScript('window.__claudeDesignSetAltKey && window.__claudeDesignSetAltKey(true); true;').catch(() => {});
-        // Focus the webview so mousemove events fire inside it,
-        // but only if the terminal doesn't have focus (Alt+Arrow for word jump)
-        const active = document.activeElement;
-        const inTerminal = active?.closest('.terminal-pane') || active?.classList.contains('xterm-helper-textarea');
-        if (!inTerminal) {
+        // Focus the webview so mousemove events fire inside it
+        if (!isTypingContext()) {
           webview.focus();
         }
       }
       // Forward F key to webview for freeze animations
-      if ((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const tag = (document.activeElement as HTMLElement)?.tagName;
-        if (tag !== 'TEXTAREA' && tag !== 'INPUT') {
-          webview.executeJavaScript('window.__claudeDesignToggleFreeze && window.__claudeDesignToggleFreeze(); true;').catch(() => {});
-        }
+      if ((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingContext()) {
+        webview.executeJavaScript('window.__claudeDesignToggleFreeze && window.__claudeDesignToggleFreeze(); true;').catch(() => {});
       }
     };
 
