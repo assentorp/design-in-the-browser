@@ -271,9 +271,9 @@ export default function CodeEditorPanel({
           {onToggleFull && (
             <button
               type="button"
-              className={`code-editor-tree-toggle ${full ? 'is-active' : ''}`}
+              className={`code-editor-tree-toggle has-tooltip ${full ? 'is-active' : ''}`}
               onClick={onToggleFull}
-              title={full ? 'Exit full width' : 'Expand to full width'}
+              data-tooltip={full ? 'Exit full width' : 'Expand to full width'}
               aria-label="Toggle full width"
             >
               {full ? (
@@ -290,9 +290,9 @@ export default function CodeEditorPanel({
           {onToggleTree && (
             <button
               type="button"
-              className={`code-editor-tree-toggle ${treeOpen ? 'is-active' : ''}`}
+              className={`code-editor-tree-toggle has-tooltip ${treeOpen ? 'is-active' : ''}`}
               onClick={onToggleTree}
-              title={treeOpen ? 'Hide file tree' : 'Show file tree'}
+              data-tooltip={treeOpen ? 'Hide file tree' : 'Show file tree'}
               aria-label="Toggle file tree"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -302,18 +302,18 @@ export default function CodeEditorPanel({
           )}
           <button
             type="button"
-            className="code-editor-save"
+            className="code-editor-save has-tooltip"
             onClick={() => void doSave()}
             disabled={!dirty || saving}
-            title="Save (⌘S)"
+            data-tooltip="Save (⌘S)"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
           <button
             type="button"
-            className="code-editor-close"
+            className="code-editor-close has-tooltip"
             onClick={onClose}
-            title="Close editor"
+            data-tooltip="Close editor"
             aria-label="Close editor"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">

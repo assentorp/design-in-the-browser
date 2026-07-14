@@ -981,11 +981,13 @@ body,
   color: var(--text-primary);
 }
 
-.toolbar-btn.has-tooltip {
+/* Instant labeled tooltip for icon-only buttons: add .has-tooltip and a
+   data-tooltip attribute. Shows below the button. */
+.has-tooltip {
   position: relative;
 }
 
-.toolbar-btn.has-tooltip::after {
+.has-tooltip::after {
   content: attr(data-tooltip);
   position: absolute;
   top: 100%;
@@ -1007,7 +1009,7 @@ body,
   z-index: 1000;
 }
 
-.toolbar-btn.has-tooltip:hover::after {
+.has-tooltip:hover::after {
   opacity: 1;
 }
 
@@ -1016,6 +1018,14 @@ body,
    left side instead. */
 .toolbar-devtools-btn.has-tooltip::after {
   left: 0;
+  transform: none;
+}
+
+/* Buttons at the panel's right edge: right-align so the tooltip can't be
+   clipped by the window edge. */
+.code-editor-header-actions .has-tooltip::after {
+  left: auto;
+  right: 0;
   transform: none;
 }
 
