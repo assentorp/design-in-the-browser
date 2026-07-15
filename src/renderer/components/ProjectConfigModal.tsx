@@ -490,6 +490,14 @@ export default function ProjectConfigModal({
                       else setSearchOpen(false);
                     }
                   }}
+                  onBlur={(e) => {
+                    // Collapse when focus leaves and there's no active filter.
+                    // Clicks on the field's own icon are excluded so the
+                    // toggle handler decides instead of fighting the blur.
+                    const toIcon = e.relatedTarget instanceof HTMLElement
+                      && e.relatedTarget.closest('.preset-search-field');
+                    if (!search.trim() && !toIcon) setSearchOpen(false);
+                  }}
                   placeholder="Filter projects…"
                   className="preset-search-input"
                   tabIndex={searchOpen ? 0 : -1}
