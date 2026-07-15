@@ -94,6 +94,7 @@ export default function ProjectConfigModal({
   const [customCliCommand, setCustomCliCommand] = useState('');
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [isWindows, setIsWindows] = useState(false);
   const [wslAvailable, setWslAvailable] = useState(false);
@@ -386,11 +387,19 @@ export default function ProjectConfigModal({
     && (cliTool !== 'custom' || customCliCommand.trim());
   const canFilter = presets.length > 3;
 
+  const openSearch = () => {
+    setSearchOpen(true);
+    // The input is always mounted (the field morphs open), so focus explicitly
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
   const toggleSearch = () => {
-    setSearchOpen((open) => {
-      if (open) setSearch('');
-      return !open;
-    });
+    if (searchOpen) {
+      setSearch('');
+      setSearchOpen(false);
+    } else {
+      openSearch();
+    }
   };
 
   // Cmd/Ctrl+F opens the project filter while the list is showing
@@ -400,6 +409,7 @@ export default function ProjectConfigModal({
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -464,36 +474,40 @@ export default function ProjectConfigModal({
             )}
           </span>
           <div className="preset-toolbar-actions">
-            {searchOpen && (
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.stopPropagation();
-                    if (search) setSearch('');
-                    else setSearchOpen(false);
-                  }
-                }}
-                placeholder="Filter projects…"
-                className="form-input preset-search"
-                autoFocus
-              />
-            )}
             {canFilter && (
-              <button
-                type="button"
-                className={`preset-filter-btn${searchOpen ? ' active' : ''}`}
-                onClick={toggleSearch}
-                title="Filter projects (⌘F)"
-                aria-label="Filter projects"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="7"></circle>
-                  <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
-                </svg>
-              </button>
+              // One control that morphs: collapsed it's the icon button,
+              // open it widens into the filter field with the icon inside.
+              <div className={`preset-search-field${searchOpen ? ' open' : ''}`}>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      if (search) setSearch('');
+                      else setSearchOpen(false);
+                    }
+                  }}
+                  placeholder="Filter projects…"
+                  className="preset-search-input"
+                  tabIndex={searchOpen ? 0 : -1}
+                  aria-hidden={!searchOpen}
+                />
+                <button
+                  type="button"
+                  className="preset-search-icon"
+                  onClick={toggleSearch}
+                  title="Filter projects (⌘F)"
+                  aria-label="Filter projects"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
+                  </svg>
+                </button>
+              </div>
             )}
             <button type="button" className="btn btn-primary btn-new-project" onClick={handleNewProject}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -1830,51 +1830,63 @@ body,
   gap: 8px;
 }
 
-.preset-filter-btn {
+/* Project filter: one control that morphs between icon button and search
+   field. The icon anchors the right edge; the field grows out to the left. */
+.preset-search-field {
   display: flex;
   align-items: center;
-  justify-content: center;
   width: 28px;
   height: 28px;
-  padding: 0;
+  overflow: hidden;
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
+  transition: width 0.2s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-.preset-filter-btn:hover {
-  color: var(--text-primary);
+.preset-search-field:hover {
   border-color: var(--text-secondary);
 }
 
-.preset-filter-btn.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(198, 97, 63, 0.12);
+.preset-search-field.open {
+  width: 240px;
+  background: var(--bg-primary);
 }
 
-/* Inline filter input in the toolbar — same height as the buttons beside it */
-.form-input.preset-search {
-  width: 220px;
-  height: 28px;
-  padding: 0 10px;
+.preset-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0 0 10px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
   font-size: 13px;
-  border-radius: 8px;
-  animation: preset-search-in 0.15s ease;
 }
 
-@keyframes preset-search-in {
-  from {
-    opacity: 0;
-    transform: translateX(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+.preset-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.preset-search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.preset-search-field:hover .preset-search-icon,
+.preset-search-field.open .preset-search-icon {
+  color: var(--text-primary);
 }
 
 /* Project cards (Figma-style grid with preview thumbnails) */
@@ -2997,9 +3009,12 @@ body,
   .modal-overlay .modal,
   .page-form,
   .home-projects,
-  .preset-card,
-  .preset-search {
+  .preset-card {
     animation: none;
+  }
+
+  .preset-search-field {
+    transition: none;
   }
 
   .btn:active:not(:disabled) {
