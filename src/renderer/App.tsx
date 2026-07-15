@@ -665,7 +665,6 @@ export default function App() {
         homeActive={!activeSession && !newTabActive}
         newTabOpen={newTabOpen}
         newTabActive={newTabActive}
-        onSelectNewTab={handleNewSession}
         onCloseNewTab={handleCloseNewTab}
         onSelectHome={handleSelectHome}
         onSelectSession={handleSelectSession}
@@ -684,8 +683,6 @@ export default function App() {
           <ProjectConfigModal
             key={newTabActive ? 'new' : 'home'}
             presets={projectPresets}
-            canClose={false}
-            onClose={() => {}}
             onCreate={handleCreateProject}
             onDeletePreset={handleDeletePreset}
             onUpdatePreset={handleUpdatePreset}

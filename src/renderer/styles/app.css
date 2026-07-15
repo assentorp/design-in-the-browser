@@ -2246,18 +2246,7 @@ body,
   pointer-events: none;
 }
 
-.modal-header-spacer {
-  width: 28px;
-  height: 28px;
-}
-
 /* Title-less header for the project list — just hosts the close button */
-.modal-header-bare {
-  border-bottom: none;
-  min-height: 0;
-  padding: 10px 12px 0;
-}
-
 /* Full-width submit anchoring the form — a touch taller than the fields */
 /* Full-page form view (startup New/Edit Project): a plain centered column
    on the page surface, with Back pinned to the screen corner. */
@@ -2296,10 +2285,6 @@ body,
 }
 
 /* Wider panel for the project card grid */
-.modal-wide {
-  max-width: 720px;
-}
-
 .modal-close {
   display: flex;
   align-items: center;

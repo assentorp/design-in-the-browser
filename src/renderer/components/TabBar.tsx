@@ -5,10 +5,10 @@ interface TabBarProps {
   sessions: Session[];
   activeSessionId: string;
   homeActive: boolean;
-  // Transient "New" tab (projects screen opened via +)
+  // Transient "New" tab (projects screen opened via +). Selecting it goes
+  // through onNewSession, which focuses the existing New tab or opens one.
   newTabOpen: boolean;
   newTabActive: boolean;
-  onSelectNewTab: () => void;
   onCloseNewTab: () => void;
   onSelectHome: () => void;
   onSelectSession: (sessionId: string) => void;
@@ -28,7 +28,6 @@ export default function TabBar({
   homeActive,
   newTabOpen,
   newTabActive,
-  onSelectNewTab,
   onCloseNewTab,
   onSelectHome,
   onSelectSession,
@@ -84,7 +83,7 @@ export default function TabBar({
         {newTabOpen && (
           <div
             className={`tab ${newTabActive ? 'active' : ''}`}
-            onClick={onSelectNewTab}
+            onClick={onNewSession}
             title="New project"
           >
             <div className="tab-content">
