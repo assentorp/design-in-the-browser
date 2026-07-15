@@ -23,6 +23,9 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 // provides the drag region and clears space for the traffic lights.
 const isMac = navigator.platform.includes('Mac');
 
+// Sentinel id for the always-open Home tab (the projects screen).
+const HOME_TAB = 'home';
+
 const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   claude: 'claude',
   cursor: 'cursor',
@@ -306,7 +309,10 @@ export default function App() {
     pendingCommandsRef.current = remaining;
   }, [sessions]);
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  // The Home tab shows the projects screen instead of a session's panes.
+  const activeSession = activeSessionId === HOME_TAB
+    ? undefined
+    : sessions.find((s) => s.id === activeSessionId) || sessions[0];
   if (activeSession) {
     browserWidthRef.current = activeSession.browserWidth;
   }
@@ -560,21 +566,26 @@ export default function App() {
       // Remove saved session config
       setSessions((prev) => {
         const filtered = prev.filter((s) => s.id !== sessionId);
-        if (filtered.length === 0) {
-          // Show modal to create a new project instead of auto-creating
-          setShowConfigModal(true);
-          return filtered;
-        }
         if (sessionId === activeSessionId) {
-          const index = prev.findIndex((s) => s.id === sessionId);
-          const newActiveIndex = Math.max(0, index - 1);
-          setActiveSessionId(filtered[newActiveIndex]?.id || filtered[0].id);
+          if (filtered.length === 0) {
+            // Last project closed — land on the Home tab
+            setActiveSessionId(HOME_TAB);
+          } else {
+            const index = prev.findIndex((s) => s.id === sessionId);
+            const newActiveIndex = Math.max(0, index - 1);
+            setActiveSessionId(filtered[newActiveIndex]?.id || filtered[0].id);
+          }
         }
         return filtered;
       });
     },
     [activeSessionId, sessions]
   );
+
+  const handleSelectHome = useCallback(() => {
+    setEditActions(null);
+    setActiveSessionId(HOME_TAB);
+  }, []);
 
   const handleSelectSession = useCallback((sessionId: string) => {
     if (sessionId !== activeSessionId) {
@@ -632,31 +643,6 @@ export default function App() {
     </div>
   );
 
-  // Handle case when no active session yet — show full-page config
-  if (sessions.length === 0 || !activeSession) {
-    return (
-      <div className={`app${isMac ? ' mac' : ''}`}>
-        {isMac && <div className="titlebar-drag" />}
-        <ConfirmDialogHost />
-        {updateBanner}
-        {presetsLoaded ? (
-          <ProjectConfigModal
-            presets={projectPresets}
-            canClose={false}
-            onClose={() => {}}
-            onCreate={handleCreateProject}
-            onDeletePreset={handleDeletePreset}
-            onUpdatePreset={handleUpdatePreset}
-          />
-        ) : (
-          <div className="app-loading">
-            <div className="app-loading-spinner" />
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className={`app${isMac ? ' mac' : ''}`}>
       <ConfirmDialogHost />
@@ -679,16 +665,35 @@ export default function App() {
       )}
       <TabBar
         sessions={sessions}
-        activeSessionId={activeSessionId}
+        activeSessionId={activeSession?.id ?? HOME_TAB}
+        homeActive={!activeSession}
+        onSelectHome={handleSelectHome}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
         onCloseSession={handleCloseSession}
-        terminalCollapsed={activeSession.terminalCollapsed}
-        onToggleTerminal={toggleTerminal}
+        terminalCollapsed={activeSession?.terminalCollapsed ?? true}
+        onToggleTerminal={activeSession ? toggleTerminal : undefined}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenWhatsNew={handleOpenWhatsNew}
         hasUnseenChanges={hasUnseenChanges}
       />
+      {!activeSession ? (
+        // Home tab: the projects screen (also the first-run onboarding host)
+        presetsLoaded ? (
+          <ProjectConfigModal
+            presets={projectPresets}
+            canClose={false}
+            onClose={() => {}}
+            onCreate={handleCreateProject}
+            onDeletePreset={handleDeletePreset}
+            onUpdatePreset={handleUpdatePreset}
+          />
+        ) : (
+          <div className="app-loading">
+            <div className="app-loading-spinner" />
+          </div>
+        )
+      ) : (
       <div className="panes">
         <div
           className="pane browser-pane"
@@ -743,6 +748,7 @@ export default function App() {
           </Terminal>
         </div>
       </div>
+      )}
     </div>
   );
 }

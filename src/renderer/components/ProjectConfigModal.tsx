@@ -62,14 +62,6 @@ const timeAgo = (ts: number): string => {
   return new Date(ts).toLocaleDateString();
 };
 
-const timeGreeting = (): string => {
-  const hour = new Date().getHours();
-  if (hour < 5) return 'Working late';
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-};
-
 export default function ProjectConfigModal({
   presets,
   canClose,
@@ -982,19 +974,9 @@ export default function ProjectConfigModal({
     return (
       <div className={`project-config-page${view === 'list' ? ' project-config-page-full' : ''}`}>
         {view === 'list' ? (
-          // Full-width dashboard on startup — no panel chrome around the grid
-          <>
-            <div className="home-hero">
-              <img className="home-hero-icon" src={appIcon} alt="" />
-              <h1 className="home-hero-title">{timeGreeting()}</h1>
-              <p className="home-hero-subtitle">
-                {hasPresets
-                  ? 'Pick up where you left off, or start something new.'
-                  : 'Point at a project and start designing in the browser.'}
-              </p>
-            </div>
-            <div className="home-projects">{body}</div>
-          </>
+          // Full-width dashboard (the Home tab) — no hero, no panel chrome,
+          // just the projects grid
+          <div className="home-projects">{body}</div>
         ) : (
           // Form as a page of its own: back in the screen corner, no hero,
           // no panel box — the page is the surface.

@@ -63,18 +63,33 @@ body,
   padding-left: 84px;
 }
 
-/* Invisible drag strip for full-page screens that have no tab bar.
-   pointer-events: none keeps it from swallowing clicks — the drag region
-   is resolved at the window level, so dragging still works. Interactive
-   elements inside the strip opt out with -webkit-app-region: no-drag. */
-.titlebar-drag {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 44px;
-  pointer-events: none;
-  -webkit-app-region: drag;
+/* Home tab: icon-only, always first, can't be closed */
+.tab-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+
+.tab-home:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.tab-home.active {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 .tabs {
@@ -1723,15 +1738,10 @@ body,
   justify-content: flex-start;
 }
 
-.project-config-page-full .home-hero {
-  margin-top: 5vh;
-  flex-shrink: 0;
-}
-
 .home-projects {
   width: 100%;
   max-width: 1400px;
-  margin: 0 auto;
+  margin: 24px auto 0;
   padding: 0 12px;
   animation: preset-rise-in 0.35s ease backwards;
   animation-delay: 60ms;
@@ -1741,37 +1751,6 @@ body,
 .home-projects .preset-card-grid {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
-}
-
-/* Startup home hero (greeting above the projects panel) */
-.home-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 24px;
-  animation: preset-rise-in 0.35s ease backwards;
-}
-
-.home-hero-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 13px;
-  margin-bottom: 14px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-}
-
-.home-hero-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 6px 0;
-}
-
-.home-hero-subtitle {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-  text-align: center;
 }
 
 .project-config-page .project-config {
@@ -2273,16 +2252,11 @@ body,
    on the page surface, with Back pinned to the screen corner. */
 .page-back {
   position: fixed;
-  top: 20px;
+  /* Below the always-present tab bar (~45px) */
+  top: 57px;
   left: 20px;
   z-index: 10;
   -webkit-app-region: no-drag;
-}
-
-/* macOS: clear the traffic lights and align with their row */
-.app.mac .page-back {
-  top: 9px;
-  left: 84px;
 }
 
 .page-form {
@@ -3023,7 +2997,6 @@ body,
   .modal-overlay,
   .modal-overlay .modal,
   .page-form,
-  .home-hero,
   .home-projects,
   .preset-card,
   .preset-search {
