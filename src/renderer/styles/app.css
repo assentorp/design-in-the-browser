@@ -1894,14 +1894,13 @@ body,
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
   animation: preset-rise-in 0.3s ease backwards;
   animation-delay: calc(var(--stagger, 0) * 30ms);
 }
 
 .preset-card:hover {
   border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes preset-rise-in {
