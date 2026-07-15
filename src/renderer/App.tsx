@@ -117,12 +117,6 @@ export default function App() {
     });
   }, []);
 
-  // Show config modal on launch
-  useEffect(() => {
-    if (!presetsLoaded || sessions.length > 0) return;
-    setShowConfigModal(true);
-  }, [presetsLoaded]);
-
   // Listen for settings menu trigger
   useEffect(() => {
     const onSettingsOpen = (window as unknown as { onSettingsOpen?: (cb: () => void) => void }).onSettingsOpen;
