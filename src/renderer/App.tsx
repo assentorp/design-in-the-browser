@@ -23,8 +23,10 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 // provides the drag region and clears space for the traffic lights.
 const isMac = navigator.platform.includes('Mac');
 
-// Sentinel id for the always-open Home tab (the projects screen).
+// Sentinel ids for the always-open Home tab and the transient "New" tab
+// (both show the projects screen; New comes from the + button).
 const HOME_TAB = 'home';
+const NEW_TAB = 'new-project';
 
 const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   claude: 'claude',
@@ -73,7 +75,7 @@ export default function App() {
   focusedPaneRef.current = focusedPane;
   const browserZoomRef = useRef<((direction: string) => void) | null>(null);
   const terminalZoomRef = useRef<((direction: string) => void) | null>(null);
-  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [newTabOpen, setNewTabOpen] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showWhatsNewModal, setShowWhatsNewModal] = useState(false);
   const [hasUnseenChanges, setHasUnseenChanges] = useState(false);
@@ -303,10 +305,11 @@ export default function App() {
     pendingCommandsRef.current = remaining;
   }, [sessions]);
 
-  // The Home tab shows the projects screen instead of a session's panes.
-  const activeSession = activeSessionId === HOME_TAB
+  // The Home and New tabs show the projects screen instead of session panes.
+  const activeSession = activeSessionId === HOME_TAB || activeSessionId === NEW_TAB
     ? undefined
     : sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  const newTabActive = activeSessionId === NEW_TAB && newTabOpen;
   if (activeSession) {
     browserWidthRef.current = activeSession.browserWidth;
   }
@@ -395,8 +398,17 @@ export default function App() {
     });
   }, []);
 
+  // "+" opens (or re-focuses) the transient New tab — the projects screen
+  // in its own tab, in place of the old new-project dialog.
   const handleNewSession = useCallback(() => {
-    setShowConfigModal(true);
+    setNewTabOpen(true);
+    setEditActions(null);
+    setActiveSessionId(NEW_TAB);
+  }, []);
+
+  const handleCloseNewTab = useCallback(() => {
+    setNewTabOpen(false);
+    setActiveSessionId((current) => (current === NEW_TAB ? HOME_TAB : current));
   }, []);
 
   const handleCreateProject = useCallback(
@@ -437,7 +449,7 @@ export default function App() {
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(newSession.id);
       setSessionCounter(newIndex);
-      setShowConfigModal(false);
+      setNewTabOpen(false);
 
       // Starter Projects don't run anything in the Dev Server tab — print a
       // banner so the user knows what's serving the page and how it stops.
@@ -641,16 +653,6 @@ export default function App() {
     <div className={`app${isMac ? ' mac' : ''}`}>
       <ConfirmDialogHost />
       {updateBanner}
-      {showConfigModal && (
-        <ProjectConfigModal
-          presets={projectPresets}
-          canClose={true}
-          onClose={() => setShowConfigModal(false)}
-          onCreate={handleCreateProject}
-          onDeletePreset={handleDeletePreset}
-          onUpdatePreset={handleUpdatePreset}
-        />
-      )}
       {showSettingsModal && (
         <SettingsModal onClose={() => setShowSettingsModal(false)} />
       )}
@@ -660,7 +662,11 @@ export default function App() {
       <TabBar
         sessions={sessions}
         activeSessionId={activeSession?.id ?? HOME_TAB}
-        homeActive={!activeSession}
+        homeActive={!activeSession && !newTabActive}
+        newTabOpen={newTabOpen}
+        newTabActive={newTabActive}
+        onSelectNewTab={handleNewSession}
+        onCloseNewTab={handleCloseNewTab}
         onSelectHome={handleSelectHome}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
@@ -672,9 +678,11 @@ export default function App() {
         hasUnseenChanges={hasUnseenChanges}
       />
       {!activeSession ? (
-        // Home tab: the projects screen (also the first-run onboarding host)
+        // Home / New tab: the projects screen (also the first-run onboarding
+        // host). Keyed so each tab keeps its own view state.
         presetsLoaded ? (
           <ProjectConfigModal
+            key={newTabActive ? 'new' : 'home'}
             presets={projectPresets}
             canClose={false}
             onClose={() => {}}
