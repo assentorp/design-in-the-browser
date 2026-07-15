@@ -424,14 +424,7 @@ export default function ProjectConfigModal({
     <div className="project-config">
       <div className="project-config-section">
         <div className="preset-toolbar">
-          <span className="preset-count">
-            Projects
-            {search.trim() && (
-              <span className="preset-count-filtered">
-                {filteredPresets.length} of {presets.length}
-              </span>
-            )}
-          </span>
+          <span className="preset-count">Projects</span>
           <div className="preset-toolbar-actions">
             {canFilter && (
               // One control that morphs: collapsed it's the icon button,
