@@ -2581,6 +2581,14 @@ body,
   transition: all 0.15s ease;
 }
 
+/* Form-scale variant: matches the 36px inputs it sits among
+   (form submits, onboarding continue buttons) */
+.btn.btn-lg {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

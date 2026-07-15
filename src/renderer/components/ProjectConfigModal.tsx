@@ -778,7 +778,7 @@ export default function ProjectConfigModal({
             <span className="form-hint form-hint-warning">{starterError}</span>
           )}
           <div className="project-config-actions">
-            <button type="submit" className="btn btn-primary btn-submit" disabled={!isValid || starterBusy}>
+            <button type="submit" className="btn btn-lg btn-primary btn-submit" disabled={!isValid || starterBusy}>
               {starterBusy
                 ? 'Creating…'
                 : view === 'edit'
@@ -833,7 +833,7 @@ export default function ProjectConfigModal({
                 <span>An AI coding CLI — Claude Code, Cursor, Codex, Antigravity, or Qwen</span>
               </div>
             </div>
-            <button className="btn btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
+            <button className="btn btn-lg btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
               Continue
             </button>
           </div>
@@ -871,7 +871,7 @@ export default function ProjectConfigModal({
                 <p className="onboarding-editor-empty">No editors detected</p>
               )}
             </div>
-            <button className="btn btn-primary onboarding-continue" onClick={handleEditorContinue}>
+            <button className="btn btn-lg btn-primary onboarding-continue" onClick={handleEditorContinue}>
               Continue
             </button>
           </div>
@@ -896,7 +896,7 @@ export default function ProjectConfigModal({
             <p className="onboarding-gate-text">
               Help improve Design In The Browser by sharing anonymous crash reports and usage events via PostHog (EU servers). No personal data, project content, or file paths are collected. You can change this anytime in Settings.
             </p>
-            <button className="btn btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
+            <button className="btn btn-lg btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
               Share with Developers
             </button>
             <button className="onboarding-skip" onClick={() => handleAnalyticsChoice(false)}>
@@ -925,7 +925,7 @@ export default function ProjectConfigModal({
               Get help, share feedback, and stay updated on new features in our Discord.
             </p>
             <button
-              className="btn btn-primary onboarding-continue"
+              className="btn btn-lg btn-primary onboarding-continue"
               onClick={() => {
                 window.open('https://discord.com/invite/dYGPPH6tPC');
                 setDiscordDismissed(true);
