@@ -1857,12 +1857,19 @@ body,
   flex: 1;
   min-width: 0;
   height: 100%;
-  padding: 0 0 0 10px;
+  /* No padding while collapsed — the input must shrink to 0 so the icon
+     isn't squeezed out of the 28px box */
+  padding: 0;
   background: transparent;
   border: none;
   outline: none;
   color: var(--text-primary);
   font-size: 13px;
+  transition: padding 0.2s ease;
+}
+
+.preset-search-field.open .preset-search-input {
+  padding-left: 10px;
 }
 
 .preset-search-input::placeholder {
