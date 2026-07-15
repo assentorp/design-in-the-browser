@@ -180,7 +180,7 @@ body,
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -207,7 +207,7 @@ body,
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -239,7 +239,7 @@ body,
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -814,14 +814,14 @@ body,
 }
 
 .code-editor-save {
-  height: 24px;
+  height: 28px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: #fff;
   background: var(--accent);
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
   transition: opacity 0.15s ease, background 0.15s ease;
 }
@@ -985,7 +985,7 @@ body,
   padding: 0 8px;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1328,11 +1328,11 @@ body,
 }
 
 .edit-queue-send {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: var(--accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
   font-size: 13px;
   font-weight: 500;
@@ -1364,11 +1364,11 @@ body,
 }
 
 .edit-queue-cancel {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -1476,11 +1476,11 @@ body,
 }
 
 .queued-edits-send {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: var(--accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
   font-size: 13px;
   font-weight: 500;
@@ -1496,11 +1496,11 @@ body,
 }
 
 .queued-edits-cancel {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -2074,10 +2074,7 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 28px;
-  padding: 0 12px 0 9px;
-  font-size: 13px;
-  border-radius: 8px;
+  padding-left: 9px;
 }
 
 /* Segmented control (project type) — a recessed track with a raised
@@ -2142,12 +2139,13 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px 6px 6px;
+  height: 28px;
+  padding: 0 10px 0 6px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: color 0.15s ease;
 }
@@ -2261,11 +2259,6 @@ body,
 }
 
 /* Full-width submit anchoring the form — a touch taller than the fields */
-.btn.btn-submit {
-  height: 40px;
-  border-radius: 8px;
-}
-
 /* Full-page form view (startup New/Edit Project): a plain centered column
    on the page surface, with Back pinned to the screen corner. */
 .page-back {
@@ -2501,7 +2494,7 @@ body,
   padding: 0;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2590,12 +2583,14 @@ body,
 }
 
 /* Buttons */
+/* Standard button size across the app: 28px tall, 13px text, 6px radius
+   (the "New Project" button is the reference). */
 .btn {
-  height: 36px;
-  padding: 0 16px;
+  height: 28px;
+  padding: 0 12px;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2694,12 +2689,6 @@ body,
   justify-content: flex-end;
   gap: 8px;
   margin-top: 20px;
-}
-
-.confirm-actions .btn {
-  height: 32px;
-  padding: 0 14px;
-  font-size: 13px;
 }
 
 /* Onboarding skip link (analytics "No thanks", discord "Skip") */
