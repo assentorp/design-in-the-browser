@@ -2909,6 +2909,8 @@ body,
 /* What's New modal */
 .whats-new-modal {
   max-width: 480px;
+  /* Half the default 85vh modal height */
+  max-height: 42vh;
 }
 
 .whats-new-entry {
@@ -2981,7 +2983,7 @@ body,
   background: conic-gradient(from 0deg, rgba(198, 97, 63, 0), var(--accent));
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-ring) - 0.5px), #000 calc(100% - var(--spinner-ring)));
   mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-ring) - 0.5px), #000 calc(100% - var(--spinner-ring)));
-  animation: cli-spin 0.8s linear infinite;
+  animation: cli-spin 0.6s linear infinite;
 }
 
 /* Respect the OS "reduce motion" preference: keep spinners (they convey
