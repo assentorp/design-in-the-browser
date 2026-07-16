@@ -71,10 +71,13 @@ export default function ProjectConfigModal({
   const [view, setView] = useState<View>(hasPresets ? 'list' : 'new');
   const [name, setName] = useState('');
 
-  // Update view when presets become available
+  // Follow the presets: show the list when they become available, and fall
+  // back to the "Create your first project" form when the last one is removed
   useEffect(() => {
     if (hasPresets && view === 'new') {
       setView('list');
+    } else if (!hasPresets && view === 'list') {
+      setView('new');
     }
   }, [hasPresets]);
   const [path, setPath] = useState('');
@@ -92,6 +95,9 @@ export default function ProjectConfigModal({
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  // Advanced form options (model, auto mode, permissions, shell) are tucked
+  // away by default — open when editing a preset that actually uses them
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [isWindows, setIsWindows] = useState(false);
   const [wslAvailable, setWslAvailable] = useState(false);
 
@@ -252,6 +258,12 @@ export default function ProjectConfigModal({
     setDangerouslySkipPermissions(preset.dangerouslySkipPermissions || false);
     setAutoAcceptEdits(preset.autoAcceptEdits || false);
     setCustomCliCommand(preset.customCliCommand || '');
+    setAdvancedOpen(Boolean(
+      preset.claudeModel
+      || preset.dangerouslySkipPermissions
+      || preset.autoAcceptEdits
+      || (preset.shell && preset.shell !== 'default')
+    ));
     setView('edit');
   };
 
@@ -269,6 +281,7 @@ export default function ProjectConfigModal({
     setAutoAcceptEdits(false);
     setCustomCliCommand('');
     setSaveAsPreset(true);
+    setAdvancedOpen(false);
     setProjectType('existing');
     setStarterError(null);
     setStarterBusy(false);
@@ -290,7 +303,7 @@ export default function ProjectConfigModal({
       if (selectedPath) {
         setPath(selectedPath);
         if (!name) {
-          const folderName = selectedPath.split('/').pop() || '';
+          const folderName = selectedPath.split(/[\\/]/).pop() || '';
           setName(folderName);
         }
       }
@@ -599,23 +612,6 @@ export default function ProjectConfigModal({
               </span>
             </div>
           )}
-          <div className="form-group">
-            <label>Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={isStarter ? 'my-first-page' : 'My Project'}
-              className="form-input"
-              autoFocus
-              disabled={starterBusy}
-            />
-            {isStarter && (
-              <span className="form-hint">
-                We'll ask where to save it, then create a folder with this name.
-              </span>
-            )}
-          </div>
           {!isStarter && (
             <div className="form-group">
               <label>Path</label>
@@ -624,8 +620,15 @@ export default function ProjectConfigModal({
                   type="text"
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
+                  onBlur={() => {
+                    // Typing a path by hand fills the name too, like Browse does
+                    if (path.trim() && !name.trim()) {
+                      setName(path.trim().split(/[\\/]/).filter(Boolean).pop() || '');
+                    }
+                  }}
                   placeholder="/path/to/project"
                   className="form-input"
+                  autoFocus
                 />
                 <button type="button" className="browse-btn" onClick={handleBrowse} title="Browse…">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -635,6 +638,23 @@ export default function ProjectConfigModal({
               </div>
             </div>
           )}
+          <div className="form-group">
+            <label>Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={isStarter ? 'my-first-page' : 'My Project'}
+              className="form-input"
+              autoFocus={isStarter}
+              disabled={starterBusy}
+            />
+            {isStarter && (
+              <span className="form-hint">
+                We'll ask where to save it, then create a folder with this name.
+              </span>
+            )}
+          </div>
           {!isStarter && (
             <div className="form-row">
               <div className="form-group">
@@ -659,7 +679,7 @@ export default function ProjectConfigModal({
               </div>
             </div>
           )}
-          <div className={cliTool === 'claude' || cliTool === 'custom' ? 'form-row' : undefined}>
+          <div className={cliTool === 'custom' ? 'form-row' : undefined}>
             <div className="form-group">
               <label>CLI Tool</label>
               <select
@@ -687,84 +707,103 @@ export default function ProjectConfigModal({
                 />
               </div>
             )}
-            {cliTool === 'claude' && (
-              <div className="form-group">
-                <label>Model</label>
-                <select
-                  value={modelIsCustom ? '__custom' : claudeModel}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom') {
-                      setModelIsCustom(true);
-                      setClaudeModel('');
-                    } else {
-                      setModelIsCustom(false);
-                      setClaudeModel(e.target.value);
-                    }
-                  }}
-                  className="form-select"
-                >
-                  <option value="">Default</option>
-                  <option value="fable">Fable</option>
-                  <option value="opus">Opus</option>
-                  <option value="sonnet">Sonnet</option>
-                  <option value="haiku">Haiku</option>
-                  <option value="__custom">Custom…</option>
-                </select>
-                {modelIsCustom && (
-                  <input
-                    type="text"
-                    value={claudeModel}
-                    onChange={(e) => setClaudeModel(e.target.value)}
-                    placeholder="claude-fable-5"
-                    className="form-input"
-                    spellCheck={false}
-                    autoFocus
-                  />
-                )}
-              </div>
-            )}
           </div>
           {cliTool === 'custom' && (
             <span className="form-hint form-hint-pull-up">
               Command to launch your CLI tool (e.g. <code>gsd</code>).
             </span>
           )}
-          {cliTool === 'claude' && (
-            <div className="form-group">
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={autoAcceptEdits}
-                  onChange={(e) => setAutoAcceptEdits(e.target.checked)}
-                />
-                Start in auto mode (auto-accept edits)
-              </label>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={dangerouslySkipPermissions}
-                  onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
-                />
-                Bypass permission prompts
-              </label>
-              {dangerouslySkipPermissions && (
-                <span className="form-hint form-hint-warning">
-                  Skips all permission checks. Only use in trusted projects you fully control.
-                </span>
-              )}
-            </div>
-          )}
-          {isWindows && wslAvailable && (
-            <div className="form-group">
-              <label>Shell</label>
-              <select
-                value={shell}
-                onChange={(e) => setShell(e.target.value as ShellType)}
-                className="form-select"
+          {(cliTool === 'claude' || (isWindows && wslAvailable)) && (
+            <div className="form-advanced">
+              <button
+                type="button"
+                className="form-advanced-toggle"
+                onClick={() => setAdvancedOpen((open) => !open)}
+                aria-expanded={advancedOpen}
               >
-                <option value="default">PowerShell</option>
-                <option value="wsl">WSL (Linux)</option>
-              </select>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+                Advanced options
+              </button>
+              {advancedOpen && (
+                <div className="form-advanced-body">
+                  {cliTool === 'claude' && (
+                    <div className="form-group">
+                      <label>Model</label>
+                      <select
+                        value={modelIsCustom ? '__custom' : claudeModel}
+                        onChange={(e) => {
+                          if (e.target.value === '__custom') {
+                            setModelIsCustom(true);
+                            setClaudeModel('');
+                          } else {
+                            setModelIsCustom(false);
+                            setClaudeModel(e.target.value);
+                          }
+                        }}
+                        className="form-select"
+                      >
+                        <option value="">Default</option>
+                        <option value="fable">Fable</option>
+                        <option value="opus">Opus</option>
+                        <option value="sonnet">Sonnet</option>
+                        <option value="haiku">Haiku</option>
+                        <option value="__custom">Custom…</option>
+                      </select>
+                      {modelIsCustom && (
+                        <input
+                          type="text"
+                          value={claudeModel}
+                          onChange={(e) => setClaudeModel(e.target.value)}
+                          placeholder="claude-fable-5"
+                          className="form-input"
+                          spellCheck={false}
+                          autoFocus
+                        />
+                      )}
+                    </div>
+                  )}
+                  {cliTool === 'claude' && (
+                    <div className="form-group">
+                      <label className="form-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={autoAcceptEdits}
+                          onChange={(e) => setAutoAcceptEdits(e.target.checked)}
+                        />
+                        Start in auto mode (auto-accept edits)
+                      </label>
+                      <label className="form-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={dangerouslySkipPermissions}
+                          onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
+                        />
+                        Bypass permission prompts
+                      </label>
+                      {dangerouslySkipPermissions && (
+                        <span className="form-hint form-hint-warning">
+                          Skips all permission checks. Only use in trusted projects you fully control.
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {isWindows && wslAvailable && (
+                    <div className="form-group">
+                      <label>Shell</label>
+                      <select
+                        value={shell}
+                        onChange={(e) => setShell(e.target.value as ShellType)}
+                        className="form-select"
+                      >
+                        <option value="default">PowerShell</option>
+                        <option value="wsl">WSL (Linux)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {starterError && (
@@ -963,6 +1002,11 @@ export default function ProjectConfigModal({
           )}
           <div className="page-form">
             <h1 className="page-form-title">{title}</h1>
+            {view === 'new' && (
+              <p className="page-form-subtitle">
+                Takes about a minute — everything can be changed later.
+              </p>
+            )}
             {body}
           </div>
         </>

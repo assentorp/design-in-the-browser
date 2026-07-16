@@ -212,6 +212,8 @@ body,
   cursor: pointer;
   transition: all 0.15s ease;
   -webkit-app-region: no-drag;
+  /* Optical: sits ~1px high against the traffic lights / home icon otherwise */
+  transform: translateY(1px);
 }
 
 .tab-bar-icon-btn:hover {
@@ -244,6 +246,8 @@ body,
   cursor: pointer;
   transition: all 0.15s ease;
   -webkit-app-region: no-drag;
+  /* Optical: keep the right-side cluster on one line with the icon buttons */
+  transform: translateY(1px);
 }
 
 .tab-bar-collapse-btn:hover {
@@ -2275,6 +2279,50 @@ body,
   letter-spacing: -0.2px;
   color: var(--text-primary);
   margin: 0 0 20px;
+}
+
+/* Reassuring one-liner under the form title — pulled up against it so the
+   pair reads as one unit (within-group < between-group) */
+.page-form-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: -14px 0 20px;
+}
+
+/* Collapsed-by-default section for rarely-touched options */
+.form-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.form-advanced-toggle:hover {
+  color: var(--text-primary);
+}
+
+.form-advanced-toggle svg {
+  transition: transform 0.15s ease;
+}
+
+.form-advanced-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.form-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+  padding-left: 18px;
+  border-left: 1px solid var(--border-color);
 }
 
 /* Wider panel for the project card grid */
