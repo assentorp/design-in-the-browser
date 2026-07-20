@@ -590,11 +590,179 @@ body,
   border-bottom: 1px solid var(--border-color);
 }
 
+.code-tree-search {
+  position: relative;
+  flex-shrink: 0;
+  padding: 8px 8px 0;
+}
+
+.code-tree-search svg {
+  position: absolute;
+  left: 16px;
+  top: 15px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.code-tree-search input {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px 0 26px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.code-tree-search input::placeholder {
+  color: var(--text-secondary);
+}
+
+.code-tree-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* File-type markers (tree, tree search, quick open) */
+.file-icon {
+  flex-shrink: 0;
+  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-icon-badge {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.file-icon-default {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* Dimmed folder path after the filename in search results */
+.code-tree-result-dir {
+  margin-left: auto;
+  padding-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
 .code-tree-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 4px 0 8px;
+}
+
+/* Cmd+P quick-open palette over the code editor side */
+.quick-open-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 48px;
+}
+
+.quick-open {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, calc(100% - 32px));
+  max-height: min(380px, calc(100% - 96px));
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 12px 28px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: wizard-step-in 0.15s ease-out;
+}
+
+.quick-open input {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.quick-open input:focus {
+  outline: none;
+}
+
+.quick-open input::placeholder {
+  color: var(--text-secondary);
+}
+
+.quick-open-results {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.quick-open-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.quick-open-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.quick-open-row.is-selected {
+  background: var(--bg-tertiary);
+}
+
+.quick-open-name {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+/* Folder path sits inline right after the filename, VS Code style */
+.quick-open-dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.quick-open-match {
+  font-weight: 700;
+  color: #fff;
+}
+
+.quick-open-dir .quick-open-match {
+  color: var(--text-primary);
 }
 
 .code-tree-status {

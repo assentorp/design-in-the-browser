@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 
 import Toolbar from './Toolbar';
 import CodeEditorPanel from './CodeEditorPanel';
 import CodeFileTree from './CodeFileTree';
+import QuickOpen from './QuickOpen';
 import { appConfirm } from './ConfirmDialog';
 import type { AnnotationData, MultiEditData, SessionPendingEdit, ElementCandidate, CodeEditor } from '../../shared/types';
 import { annotationScript } from '../../annotation/injected-script';
@@ -113,8 +114,27 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   // Full-window editor: hides the browser preview so the editor takes the whole
   // window. Always on in project/tree mode; toggleable for the element side panel.
   const [codeFull, setCodeFull] = useState(false);
+  // Cmd/Ctrl+P file palette, available while the code editor side is open
+  const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const [editorPref, setEditorPref] = useState<CodeEditor>('builtin');
   const blockedUrlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cmd/Ctrl+P opens the file palette while the code editor side is showing
+  const codeSideOpen = !!codePanel || codeTreeOpen;
+  useEffect(() => {
+    if (!codeSideOpen) {
+      setQuickOpenVisible(false);
+      return;
+    }
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        setQuickOpenVisible(true);
+      }
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [codeSideOpen]);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const devToolsPlaceholderRef = useRef<HTMLDivElement | null>(null);
   const browserRef = useRef<HTMLDivElement | null>(null);
@@ -1429,6 +1449,16 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
               )}
             </div>
           </div>
+          {quickOpenVisible && (
+            <QuickOpen
+              projectPath={projectPath}
+              onSelect={(rel) => {
+                setQuickOpenVisible(false);
+                openInlineEditor(projectPath.replace(/[\\/]+$/, '') + '/' + rel, 1, 'quick open');
+              }}
+              onClose={() => setQuickOpenVisible(false)}
+            />
+          )}
         </div>
       )}
       </div>
