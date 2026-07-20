@@ -77,6 +77,7 @@ export default function ProjectConfigModal({
     if (hasPresets && view === 'new') {
       setView('list');
     } else if (!hasPresets && view === 'list') {
+      setWizardStep(0);
       setView('new');
     }
   }, [hasPresets]);
@@ -98,6 +99,8 @@ export default function ProjectConfigModal({
   // Advanced form options (model, auto mode, permissions, shell) are tucked
   // away by default — open when editing a preset that actually uses them
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // New-project wizard: index into the current step sequence
+  const [wizardStep, setWizardStep] = useState(0);
   const [isWindows, setIsWindows] = useState(false);
   const [wslAvailable, setWslAvailable] = useState(false);
 
@@ -282,6 +285,7 @@ export default function ProjectConfigModal({
     setCustomCliCommand('');
     setSaveAsPreset(true);
     setAdvancedOpen(false);
+    setWizardStep(0);
     setProjectType('existing');
     setStarterError(null);
     setStarterBusy(false);
@@ -430,7 +434,8 @@ export default function ProjectConfigModal({
     : hasPresets ? 'New Project'
     : 'Create your first project';
 
-  const showBack = view !== 'list' && hasPresets;
+  const wizardCanGoBack = view === 'new' && wizardStep > 0;
+  const showBack = view !== 'list' && (hasPresets || wizardCanGoBack);
 
   // --- List body ---
   const listBody = (
@@ -576,110 +581,78 @@ export default function ProjectConfigModal({
     </div>
   );
 
-  // --- Form body ---
-  const formBody = (
-    <div className="project-config">
-      <form onSubmit={handleSubmit}>
-        <div className="project-config-form">
-          {view === 'new' && (
-            <div className="form-group">
-              <div className="segmented-control" role="radiogroup" aria-label="Project type">
-                <label className={`segmented-option${projectType === 'existing' ? ' active' : ''}`}>
-                  <input
-                    type="radio"
-                    name="project-type"
-                    value="existing"
-                    checked={projectType === 'existing'}
-                    onChange={() => setProjectType('existing')}
-                  />
-                  Existing Project
-                </label>
-                <label className={`segmented-option${projectType === 'starter' ? ' active' : ''}`}>
-                  <input
-                    type="radio"
-                    name="project-type"
-                    value="starter"
-                    checked={projectType === 'starter'}
-                    onChange={() => setProjectType('starter')}
-                  />
-                  Starter Project
-                </label>
-              </div>
-              <span className="form-hint">
-                {projectType === 'existing'
-                  ? 'Point at a folder you already have.'
-                  : 'Create a new folder with a ready-to-edit webpage.'}
-              </span>
-            </div>
-          )}
-          {!isStarter && (
-            <div className="form-group">
-              <label>Path</label>
-              <div className="path-input-wrapper">
-                <input
-                  type="text"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  onBlur={() => {
-                    // Typing a path by hand fills the name too, like Browse does
-                    if (path.trim() && !name.trim()) {
-                      setName(path.trim().split(/[\\/]/).filter(Boolean).pop() || '');
-                    }
-                  }}
-                  placeholder="/path/to/project"
-                  className="form-input"
-                  autoFocus
-                />
-                <button type="button" className="browse-btn" onClick={handleBrowse} title="Browse…">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-          <div className="form-group">
-            <label>Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={isStarter ? 'my-first-page' : 'My Project'}
-              className="form-input"
-              autoFocus={isStarter}
-              disabled={starterBusy}
-            />
-            {isStarter && (
-              <span className="form-hint">
-                We'll ask where to save it, then create a folder with this name.
-              </span>
-            )}
-          </div>
-          {!isStarter && (
-            <div className="form-row">
-              <div className="form-group">
-                <label>Start Command</label>
-                <input
-                  type="text"
-                  value={startCommand}
-                  onChange={(e) => setStartCommand(e.target.value)}
-                  placeholder="npm run dev"
-                  className="form-input"
-                />
-              </div>
-              <div className="form-group">
-                <label>URL</label>
-                <input
-                  type="text"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="http://localhost:3000"
-                  className="form-input"
-                />
-              </div>
-            </div>
-          )}
-          <div className={cliTool === 'custom' ? 'form-row' : undefined}>
+  // --- Shared field chunks (edit form shows them all; the wizard deals them
+  // out one step at a time) ---
+  const pathField = (
+    <div className="form-group">
+      <label>Path</label>
+      <div className="path-input-wrapper">
+        <input
+          type="text"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          onBlur={() => {
+            // Typing a path by hand fills the name too, like Browse does
+            if (path.trim() && !name.trim()) {
+              setName(path.trim().split(/[\\/]/).filter(Boolean).pop() || '');
+            }
+          }}
+          placeholder="/path/to/project"
+          className="form-input"
+          autoFocus
+        />
+        <button type="button" className="browse-btn" onClick={handleBrowse} title="Browse…">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+
+  const nameField = (
+    <div className="form-group">
+      <label>Name</label>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={isStarter ? 'my-first-page' : 'My Project'}
+        className="form-input"
+        autoFocus={isStarter}
+        disabled={starterBusy}
+      />
+    </div>
+  );
+
+  const runFields = (
+    <div className="form-row">
+      <div className="form-group">
+        <label>Start Command</label>
+        <input
+          type="text"
+          value={startCommand}
+          onChange={(e) => setStartCommand(e.target.value)}
+          placeholder="npm run dev"
+          className="form-input"
+        />
+      </div>
+      <div className="form-group">
+        <label>URL</label>
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="http://localhost:3000"
+          className="form-input"
+        />
+      </div>
+    </div>
+  );
+
+  const cliFields = (
+    <>
+      <div className={cliTool === 'custom' ? 'form-row' : undefined}>
             <div className="form-group">
               <label>CLI Tool</label>
               <select
@@ -695,25 +668,25 @@ export default function ProjectConfigModal({
                 <option value="custom">Custom</option>
               </select>
             </div>
-            {cliTool === 'custom' && (
-              <div className="form-group">
-                <label>Command</label>
-                <input
-                  type="text"
-                  value={customCliCommand}
-                  onChange={(e) => setCustomCliCommand(e.target.value)}
-                  placeholder="gsd"
-                  className="form-input"
-                />
-              </div>
-            )}
+        {cliTool === 'custom' && (
+          <div className="form-group">
+            <label>Command</label>
+            <input
+              type="text"
+              value={customCliCommand}
+              onChange={(e) => setCustomCliCommand(e.target.value)}
+              placeholder="gsd"
+              className="form-input"
+            />
           </div>
-          {cliTool === 'custom' && (
-            <span className="form-hint form-hint-pull-up">
-              Command to launch your CLI tool (e.g. <code>gsd</code>).
-            </span>
-          )}
-          {(cliTool === 'claude' || (isWindows && wslAvailable)) && (
+        )}
+      </div>
+      {cliTool === 'custom' && (
+        <span className="form-hint form-hint-pull-up">
+          Command to launch your CLI tool (e.g. <code>gsd</code>).
+        </span>
+      )}
+      {(cliTool === 'claude' || (isWindows && wslAvailable)) && (
             <div className="form-advanced">
               <button
                 type="button"
@@ -806,18 +779,21 @@ export default function ProjectConfigModal({
               )}
             </div>
           )}
-          {starterError && (
-            <span className="form-hint form-hint-warning">{starterError}</span>
-          )}
+    </>
+  );
+
+  // --- Edit form: everything on one page ---
+  const formBody = (
+    <div className="project-config">
+      <form onSubmit={handleSubmit}>
+        <div className="project-config-form">
+          {pathField}
+          {nameField}
+          {runFields}
+          {cliFields}
           <div className="project-config-actions">
-            <button type="submit" className="btn btn-lg btn-primary btn-submit" disabled={!isValid || starterBusy}>
-              {starterBusy
-                ? 'Creating…'
-                : view === 'edit'
-                  ? 'Save Project'
-                  : isStarter
-                    ? 'Choose Location & Create'
-                    : 'Create Project'}
+            <button type="submit" className="btn btn-lg btn-primary btn-submit" disabled={!isValid}>
+              Save Project
             </button>
           </div>
         </div>
@@ -825,7 +801,116 @@ export default function ProjectConfigModal({
     </div>
   );
 
-  const body = view === 'list' ? listBody : formBody;
+  // --- New-project wizard: one question per step ---
+  const wizardStepKeys = isStarter
+    ? ['type', 'name', 'cli']
+    : ['type', 'project', 'run', 'cli'];
+  const wizardLast = wizardStepKeys.length - 1;
+  const stepKey = wizardStepKeys[Math.min(wizardStep, wizardLast)];
+
+  const wizardHeadings: Record<string, { title: string; sub: string }> = {
+    type: {
+      title: hasPresets ? 'New project' : 'Create your first project',
+      sub: 'Everything can be changed later.',
+    },
+    project: {
+      title: 'Where does your project live?',
+      sub: 'Pick the folder and the name fills itself in.',
+    },
+    name: {
+      title: 'What should we call it?',
+      sub: "We'll ask where to save it.",
+    },
+    run: {
+      title: 'How does it start?',
+      sub: 'These defaults fit most apps.',
+    },
+    cli: {
+      title: 'Which AI should do the edits?',
+      sub: 'It runs in a terminal beside the browser.',
+    },
+  };
+
+  const wizardCanContinue =
+    stepKey === 'type' ? true
+    : stepKey === 'project' ? Boolean(path.trim())
+    : stepKey === 'name' ? Boolean(name.trim())
+    : stepKey === 'run' ? Boolean(url.trim())
+    : Boolean(isValid);
+
+  const chooseProjectType = (type: ProjectType) => {
+    setProjectType(type);
+    setWizardStep(1);
+  };
+
+  const handleWizardSubmit = (e: React.FormEvent) => {
+    if (wizardStep < wizardLast) {
+      e.preventDefault();
+      if (wizardCanContinue) setWizardStep(wizardStep + 1);
+      return;
+    }
+    handleSubmit(e);
+  };
+
+  const wizardBody = (
+    <div className="project-config">
+      <form onSubmit={handleWizardSubmit}>
+        <div className="project-config-form wizard-step" key={stepKey}>
+          {stepKey === 'type' && (
+            <div className="wizard-choice-grid">
+              <button type="button" className="wizard-choice" onClick={() => chooseProjectType('existing')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
+                </svg>
+                <span className="wizard-choice-title">Existing project</span>
+                <span className="wizard-choice-sub">Use a folder you already have.</span>
+              </button>
+              <button type="button" className="wizard-choice" onClick={() => chooseProjectType('starter')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v18"></path>
+                  <path d="M3 12h18"></path>
+                </svg>
+                <span className="wizard-choice-title">Starter project</span>
+                <span className="wizard-choice-sub">A fresh page, ready to edit.</span>
+              </button>
+            </div>
+          )}
+          {stepKey === 'project' && (
+            <>
+              {pathField}
+              {nameField}
+            </>
+          )}
+          {stepKey === 'name' && nameField}
+          {stepKey === 'run' && runFields}
+          {stepKey === 'cli' && cliFields}
+          {starterError && (
+            <span className="form-hint form-hint-warning">{starterError}</span>
+          )}
+          {stepKey !== 'type' && (
+            <div className="project-config-actions">
+              <button type="submit" className="btn btn-lg btn-primary btn-submit" disabled={!wizardCanContinue || starterBusy}>
+                {wizardStep < wizardLast
+                  ? 'Continue'
+                  : starterBusy
+                    ? 'Creating…'
+                    : isStarter
+                      ? 'Choose Location & Create'
+                      : 'Create Project'}
+              </button>
+            </div>
+          )}
+        </div>
+      </form>
+      <div className="onboarding-dots wizard-dots">
+        {wizardStepKeys.map((key, i) => (
+          <span key={key} className={`onboarding-dot${i === wizardStep ? ' active' : ''}`} />
+        ))}
+      </div>
+    </div>
+  );
+
+  const body = view === 'list' ? listBody : view === 'new' ? wizardBody : formBody;
 
   // Determine current onboarding step for dot indicators
   const onboardingStep = onboardingCompleted === false ? 0
@@ -993,7 +1078,11 @@ export default function ProjectConfigModal({
         // no panel box — the page is the surface.
         <>
           {showBack && (
-            <button type="button" className="btn-back page-back" onClick={handleBack}>
+            <button
+              type="button"
+              className="btn-back page-back"
+              onClick={wizardCanGoBack ? () => setWizardStep(wizardStep - 1) : handleBack}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="15 18 9 12 15 6"></polyline>
               </svg>
@@ -1001,11 +1090,9 @@ export default function ProjectConfigModal({
             </button>
           )}
           <div className="page-form">
-            <h1 className="page-form-title">{title}</h1>
+            <h1 className="page-form-title">{view === 'new' ? wizardHeadings[stepKey].title : title}</h1>
             {view === 'new' && (
-              <p className="page-form-subtitle">
-                Takes about a minute — everything can be changed later.
-              </p>
+              <p className="page-form-subtitle">{wizardHeadings[stepKey].sub}</p>
             )}
             {body}
           </div>

@@ -2325,6 +2325,76 @@ body,
   border-left: 1px solid var(--border-color);
 }
 
+/* --- New-project wizard --- */
+
+/* Each step slides up softly as it mounts */
+.wizard-step {
+  animation: wizard-step-in 0.18s ease-out;
+}
+
+@keyframes wizard-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.wizard-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.wizard-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wizard-choice:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-secondary);
+}
+
+.wizard-choice:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(198, 97, 63, 0.25);
+}
+
+.wizard-choice svg {
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.wizard-choice-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wizard-choice-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.wizard-dots {
+  margin-top: 32px;
+}
+
 /* Wider panel for the project card grid */
 .modal-close {
   display: flex;
