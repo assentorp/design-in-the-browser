@@ -34,10 +34,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [availableEditors, setAvailableEditors] = useState<CodeEditor[]>([]);
+  const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     window.mainAPI?.getSettings().then(setSettings);
     window.mainAPI?.detectEditors().then(setAvailableEditors);
+    window.mainAPI?.getAppVersion().then(setAppVersion);
   }, []);
 
   const handleChange = async (key: keyof AppSettings, value: number | string | boolean) => {
@@ -210,6 +212,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </span>
             </div>
           </div>
+          {appVersion && (
+            <div className="settings-version">Design In The Browser v{appVersion}</div>
+          )}
         </div>
       </div>
     </div>

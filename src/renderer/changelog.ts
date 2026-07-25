@@ -6,6 +6,23 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.0.0',
+    date: 'July 25, 2026',
+    changes: [
+      'A new Home: projects live on a full-width dashboard in a persistent first tab instead of a floating dialog — with Figma-style cards showing live page previews and favicons, a filter that expands from the toolbar (Cmd+F), and a + tab for new projects',
+      'The window chrome is gone: the native macOS title bar is hidden so the slim tab bar is the top of the app, and native system popups have been replaced with in-app dialogs',
+      'New look: the whole app uses the Inter typeface with refined rendering, and buttons have a subtle top-lit, pressed-in feel',
+      'Creating a project is now a short guided flow instead of one big form — pick Existing or Starter, point at the folder (the name fills itself in), confirm how it starts, choose your AI tool. Enter advances each step, and rarely-used options (model, auto mode, permissions, shell) live under Advanced options',
+      'Cmd+P (Ctrl+P on Windows) in the code editor opens a go-to-file palette, VS Code style: type to filter, matched text highlights, arrow keys + Enter to open',
+      'File tree upgrades: a search box to filter files, and file-type icons (TS, JS, JSON, images, and more) in the tree, search results, and the Cmd+P palette',
+      'Annotations can now include multiple reference images',
+      'Fix screenshots not reaching the CLI in WSL sessions — paths now translate to /mnt form',
+      'Fix the app staying dead after closing and reopening the window on macOS',
+      'Fix project card edit/remove buttons becoming invisible on hover over light page previews',
+      'Fix opening the editor for project paths containing spaces',
+    ],
+  },
+  {
     version: '1.8.0',
     date: 'July 9, 2026',
     changes: [

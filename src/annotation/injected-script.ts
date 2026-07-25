@@ -152,6 +152,34 @@ export const annotationScript = `
       .claude-design-popover-textarea::placeholder {
         color: #666 !important;
       }
+      /* Mention highlighting: the textarea's text is transparent (caret kept)
+         and an aligned overlay repaints it, tinting picked @file / >token
+         mentions so they read as tokens rather than plain text. */
+      .claude-design-popover-textarea.claude-design-has-mention-overlay {
+        color: transparent !important;
+        caret-color: #e5e5e5 !important;
+      }
+      .claude-design-mention-overlay {
+        position: absolute !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+        margin: 0 !important;
+        background: transparent !important;
+        border-style: solid !important;
+        border-color: transparent !important;
+        box-sizing: border-box !important;
+        color: #e5e5e5 !important;
+        white-space: pre-wrap !important;
+        overflow-wrap: break-word !important;
+        text-align: left !important;
+        text-transform: none !important;
+      }
+      .claude-design-mention-overlay .claude-design-mention-chip {
+        color: #eb9b78 !important;
+        background: rgba(198, 97, 63, 0.16) !important;
+        border-radius: 4px !important;
+        box-shadow: 0 0 0 2px rgba(198, 97, 63, 0.16) !important;
+      }
       .claude-design-popover-input-row {
         position: relative !important;
         display: block !important;
@@ -238,32 +266,80 @@ export const annotationScript = `
         border-color: #c6613f !important;
         background: rgba(198, 97, 63, 0.1) !important;
       }
-      .claude-design-popover .claude-design-popover-image-pill {
-        display: none !important;
+      .claude-design-popover .claude-design-popover-images {
+        display: flex !important;
         align-items: center !important;
         gap: 6px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .claude-design-popover .claude-design-popover-thumb {
+        position: relative !important;
+        width: 32px !important;
         height: 32px !important;
-        padding: 0 10px !important;
-        background: rgba(255, 255, 255, 0.1) !important;
-        border: none !important;
+        flex-shrink: 0 !important;
         border-radius: 8px !important;
-        color: #ccc !important;
-        font-size: 12px !important;
-        cursor: pointer !important;
-        transition: all 0.15s !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .claude-design-popover .claude-design-popover-thumb img {
+        width: 32px !important;
+        height: 32px !important;
+        object-fit: cover !important;
+        border-radius: 8px !important;
+        border: 1px solid #4a4a4a !important;
+        display: block !important;
         margin: 0 !important;
       }
-      .claude-design-popover .claude-design-popover-image-pill.active {
+      .claude-design-popover .claude-design-popover-thumb-index {
+        position: absolute !important;
+        right: -3px !important;
+        bottom: -3px !important;
+        min-width: 13px !important;
+        height: 13px !important;
+        padding: 0 3px !important;
+        background: #c6613f !important;
+        border-radius: 7px !important;
+        color: #fff !important;
+        font-size: 9px !important;
+        font-weight: 600 !important;
+        line-height: 13px !important;
+        text-align: center !important;
+        box-sizing: border-box !important;
+      }
+      .claude-design-popover .claude-design-popover-thumb-remove {
+        position: absolute !important;
+        top: -5px !important;
+        right: -5px !important;
+        width: 15px !important;
+        height: 15px !important;
+        background: #333 !important;
+        border: 1px solid #555 !important;
+        border-radius: 50% !important;
+        color: #ccc !important;
+        cursor: pointer !important;
+        display: none !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .claude-design-popover .claude-design-popover-thumb:hover .claude-design-popover-thumb-remove {
         display: flex !important;
       }
-      .claude-design-popover .claude-design-popover-image-pill:hover {
-        background: rgba(239, 68, 68, 0.2) !important;
-        color: #ef4444 !important;
+      .claude-design-popover .claude-design-popover-thumb:hover .claude-design-popover-thumb-index {
+        display: none !important;
       }
-      .claude-design-popover .claude-design-popover-image-pill svg {
-        width: 12px !important;
-        height: 12px !important;
+      .claude-design-popover .claude-design-popover-thumb-remove:hover {
+        background: rgba(239, 68, 68, 0.9) !important;
+        border-color: #ef4444 !important;
+        color: #fff !important;
+      }
+      .claude-design-popover .claude-design-popover-thumb-remove svg {
+        width: 9px !important;
+        height: 9px !important;
         display: block !important;
+        pointer-events: none !important;
       }
       .claude-design-popover-actions {
         position: absolute !important;
@@ -936,6 +1012,38 @@ export const annotationScript = `
       }
       .claude-design-grid-toast .grid-toast-title {
         font-weight: 600;
+      }
+      .claude-design-freeze-badge {
+        position: fixed;
+        bottom: 16px;
+        left: 16px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: rgba(31, 31, 31, 0.92);
+        border: 1px solid rgba(198, 97, 63, 0.5);
+        color: #fff;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 12px;
+        line-height: 1;
+        z-index: 2147483647;
+        pointer-events: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      }
+      .claude-design-freeze-badge svg {
+        width: 12px;
+        height: 12px;
+        display: block;
+        color: #eb9b78;
+      }
+      .claude-design-freeze-badge kbd {
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 4px;
+        padding: 2px 5px;
+        font-family: inherit;
+        font-size: 11px;
       }
       .claude-design-grid-toast .grid-toast-desc {
         color: rgba(255, 255, 255, 0.6);
@@ -2338,11 +2446,81 @@ export const annotationScript = `
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
+    // --- Mention highlight overlay ---
+    // The textarea's own text is made transparent (see CSS); this overlay
+    // repaints it in place, wrapping picked mentions in a tinted chip. Metrics
+    // are copied from the textarea so the glyphs line up exactly.
+    var overlay = document.createElement('div');
+    overlay.className = 'claude-design-mention-overlay';
+    var tcs = getComputedStyle(textarea);
+    var mirrorProps = ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
+      'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+      'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width', 'border-radius'];
+    for (var mp = 0; mp < mirrorProps.length; mp++) {
+      overlay.style.setProperty(mirrorProps[mp], tcs.getPropertyValue(mirrorProps[mp]), 'important');
+    }
+    textarea.parentNode.insertBefore(overlay, textarea.nextSibling);
+    textarea.classList.add('claude-design-has-mention-overlay');
+
+    // Ranges of picked mentions in the current value (prefix + known map key).
+    // Partially edited mentions stop matching and degrade to plain text, which
+    // mirrors how expandMentions treats them at send time.
+    function mentionRanges(value) {
+      var ranges = [];
+      function collect(prefix, map) {
+        if (!map) return;
+        var keys = Object.keys(map);
+        for (var i = 0; i < keys.length; i++) {
+          var needle = prefix + keys[i];
+          var idx = value.indexOf(needle);
+          while (idx !== -1) {
+            ranges.push({ start: idx, end: idx + needle.length });
+            idx = value.indexOf(needle, idx + needle.length);
+          }
+        }
+      }
+      collect('@', textarea.__mentionMap);
+      collect('>', textarea.__tokenMentionMap);
+      ranges.sort(function(a, b) { return a.start - b.start || b.end - a.end; });
+      var merged = [];
+      for (var r = 0; r < ranges.length; r++) {
+        if (!merged.length || ranges[r].start >= merged[merged.length - 1].end) merged.push(ranges[r]);
+      }
+      return merged;
+    }
+
+    function renderOverlay() {
+      var value = textarea.value;
+      var ranges = mentionRanges(value);
+      var html = '';
+      var pos = 0;
+      for (var i = 0; i < ranges.length; i++) {
+        html += escapeHtml(value.substring(pos, ranges[i].start));
+        html += '<span class="claude-design-mention-chip">' +
+          escapeHtml(value.substring(ranges[i].start, ranges[i].end)) + '</span>';
+        pos = ranges[i].end;
+      }
+      html += escapeHtml(value.substring(pos));
+      // A trailing newline needs a visible line for scroll heights to match
+      if (value.charAt(value.length - 1) === '\\n') html += '\\u200b';
+      overlay.innerHTML = html;
+      overlay.style.top = textarea.offsetTop + 'px';
+      overlay.style.left = textarea.offsetLeft + 'px';
+      overlay.style.width = textarea.offsetWidth + 'px';
+      overlay.style.height = textarea.offsetHeight + 'px';
+      overlay.scrollTop = textarea.scrollTop;
+    }
+
+    textarea.addEventListener('input', renderOverlay);
+    textarea.addEventListener('scroll', function() { overlay.scrollTop = textarea.scrollTop; });
+    renderOverlay();
+
     return { removeDropdown: removeDropdown };
   }
 
-  // Reference image state
-  let referenceImageData = null;
+  // Reference images (data URLs) attached to the current popover, in the
+  // order they were added — prompt-side they become [Image #1], [Image #2]…
+  let referenceImagesData = [];
 
   // Position popover relative to anchor element or text selection
   function positionPopover() {
@@ -2417,7 +2595,7 @@ export const annotationScript = `
   function createPopover(el, textSelection) {
     removePopover();
     removeToolbar();
-    referenceImageData = null;
+    referenceImagesData = [];
 
     const rect = textSelection ? textSelection.rect : el.getBoundingClientRect();
     const displaySelector = el ? generateDisplaySelector(el) : null;
@@ -2498,7 +2676,7 @@ export const annotationScript = `
     let listHTML = '';
 
     let inputAreaHTML =
-        '<input type="file" class="claude-design-popover-file" accept="image/*" style="display: none;" />' +
+        '<input type="file" class="claude-design-popover-file" accept="image/*" multiple style="display: none;" />' +
         '<div class="claude-design-popover-input-row">' +
           headerHTML +
           '<textarea class="claude-design-popover-textarea" placeholder="' + placeholder + '"></textarea>' +
@@ -2511,12 +2689,7 @@ export const annotationScript = `
                   '<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>' +
                 '</svg>' +
               '</button>' +
-              '<button class="claude-design-popover-image-pill" data-action="remove-image" title="Remove image">' +
-                'Image' +
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                  '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>' +
-                '</svg>' +
-              '</button>' +
+              '<div class="claude-design-popover-images"></div>' +
             '</div>' +
             '<div class="claude-design-popover-actions-right">' +
               addAnotherButton +
@@ -2611,8 +2784,7 @@ export const annotationScript = `
 
     const textarea = popoverElement.querySelector('textarea');
     const fileInput = popoverElement.querySelector('.claude-design-popover-file');
-    const imageBtn = popoverElement.querySelector('.claude-design-popover-image-btn');
-    const imagePill = popoverElement.querySelector('.claude-design-popover-image-pill');
+    const imagesRow = popoverElement.querySelector('.claude-design-popover-images');
 
     if (textarea && existingNote) {
       textarea.value = existingNote;
@@ -2645,28 +2817,63 @@ export const annotationScript = `
       }
     }
 
-    function handleFile(file) {
-      if (!file || !file.type.startsWith('image/')) return;
+    // One 32px thumbnail per attached image, numbered to match the
+    // [Image #N] labels used in the prompt. Hovering swaps the number
+    // badge for a remove button.
+    function renderImageThumbs() {
+      if (!imagesRow) return;
+      var html = '';
+      for (var ti = 0; ti < referenceImagesData.length; ti++) {
+        html +=
+          '<div class="claude-design-popover-thumb" title="Image #' + (ti + 1) + '">' +
+            '<img src="' + referenceImagesData[ti] + '" alt="" />' +
+            '<span class="claude-design-popover-thumb-index">' + (ti + 1) + '</span>' +
+            '<button class="claude-design-popover-thumb-remove" data-action="remove-image" data-image-index="' + ti + '" title="Remove Image #' + (ti + 1) + '">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">' +
+                '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>' +
+              '</svg>' +
+            '</button>' +
+          '</div>';
+      }
+      imagesRow.innerHTML = html;
+    }
 
-      const reader = new FileReader();
+    function addImageFile(file) {
+      if (!file || !file.type || !file.type.startsWith('image/')) return;
+      var reader = new FileReader();
       reader.onload = function(e) {
-        referenceImageData = e.target.result;
-        imageBtn.style.display = 'none';
-        imagePill.classList.add('active');
+        referenceImagesData.push(e.target.result);
+        renderImageThumbs();
       };
       reader.readAsDataURL(file);
     }
 
-    function removeImage() {
-      referenceImageData = null;
+    function handleFiles(files) {
+      if (!files) return;
+      for (var fi = 0; fi < files.length; fi++) addImageFile(files[fi]);
+    }
+
+    function removeImage(index) {
+      referenceImagesData.splice(index, 1);
       fileInput.value = '';
-      imageBtn.style.display = 'flex';
-      imagePill.classList.remove('active');
+      renderImageThumbs();
     }
 
     fileInput.addEventListener('change', function(e) {
-      if (e.target.files && e.target.files[0]) {
-        handleFile(e.target.files[0]);
+      handleFiles(e.target.files);
+      fileInput.value = '';
+    });
+
+    // Paste images straight into the note (like Claude Code)
+    textarea.addEventListener('paste', function(e) {
+      if (!e.clipboardData || !e.clipboardData.files || e.clipboardData.files.length === 0) return;
+      var imgs = [];
+      for (var pi = 0; pi < e.clipboardData.files.length; pi++) {
+        if (e.clipboardData.files[pi].type.startsWith('image/')) imgs.push(e.clipboardData.files[pi]);
+      }
+      if (imgs.length > 0) {
+        e.preventDefault();
+        handleFiles(imgs);
       }
     });
 
@@ -2687,8 +2894,8 @@ export const annotationScript = `
       e.preventDefault();
       e.stopPropagation();
       textarea.classList.remove('dragover');
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        handleFile(e.dataTransfer.files[0]);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFiles(e.dataTransfer.files);
       }
     });
 
@@ -2711,7 +2918,8 @@ export const annotationScript = `
       }
       if (action === 'browse') fileInput.click();
       if (action === 'remove-image') {
-        removeImage();
+        var imgIdx = target && target.dataset.imageIndex ? parseInt(target.dataset.imageIndex, 10) : 0;
+        removeImage(isNaN(imgIdx) ? 0 : imgIdx);
       }
       if (action === 'remove-item') {
         var idx = target && target.dataset.index ? parseInt(target.dataset.index, 10) : -1;
@@ -2805,7 +3013,7 @@ export const annotationScript = `
 
   function cancelAnnotation() {
     removePopover();
-    referenceImageData = null;
+    referenceImagesData = [];
 
     // Clear area selection
     removeAreaSelection();
@@ -2909,7 +3117,7 @@ export const annotationScript = `
           selector: selector,
         },
         bounds: bounds,
-        referenceImage: referenceImageData,
+        referenceImages: referenceImagesData.slice(),
         request: request,
       };
 
@@ -2944,7 +3152,7 @@ export const annotationScript = `
         },
         selectedText: selectedText,
         bounds: bounds,
-        referenceImage: referenceImageData,
+        referenceImages: referenceImagesData.slice(),
         request: request,
       };
 
@@ -2988,11 +3196,11 @@ export const annotationScript = `
         selector: generateSelector(selectedElement),
       },
       bounds: bounds,
-      referenceImage: referenceImageData,
+      referenceImages: referenceImagesData.slice(),
       request: request,
     };
 
-    console.log('[ClaudeDesign] Sending annotation, has referenceImage:', !!referenceImageData);
+    console.log('[ClaudeDesign] Sending annotation, reference images:', referenceImagesData.length);
 
     // Post message to parent
     window.__claudeDesignSendAnnotation(data);
@@ -3120,7 +3328,31 @@ export const annotationScript = `
     if (rulerLineV) rulerLineV.style.left = e.clientX + 'px';
   }
 
-  function toggleAnimationFreeze() {
+  var freezeBadgeElement = null;
+  function showFreezeBadge() {
+    if (freezeBadgeElement) return;
+    // The badge takes the hints bar's corner — dismiss the hints if still up
+    // (the user has evidently found the shortcut).
+    removeShortcutHints();
+    freezeBadgeElement = document.createElement('div');
+    freezeBadgeElement.className = 'claude-design-freeze-badge';
+    freezeBadgeElement.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+        '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>' +
+      '</svg>' +
+      'Animations frozen <kbd>F</kbd>';
+    document.body.appendChild(freezeBadgeElement);
+  }
+  function removeFreezeBadge() {
+    if (freezeBadgeElement) {
+      freezeBadgeElement.remove();
+      freezeBadgeElement = null;
+    }
+  }
+
+  // quiet: skip the toast (used when unfreezing as a side effect of leaving
+  // annotate mode, where a "resumed" toast would be noise)
+  function toggleAnimationFreeze(quiet) {
     animationsPaused = !animationsPaused;
     var els = document.querySelectorAll('*');
     if (animationsPaused) {
@@ -3128,11 +3360,15 @@ export const annotationScript = `
         el.style.animationPlayState = 'paused';
         el.style.transitionDuration = '0s';
       });
+      showFreezeBadge();
+      if (!quiet) showGridToast('Animations Frozen', 'Press F to resume');
     } else {
       els.forEach(function(el) {
         el.style.animationPlayState = '';
         el.style.transitionDuration = '';
       });
+      removeFreezeBadge();
+      if (!quiet) showGridToast('Animations Resumed', '');
     }
   }
 
@@ -3435,7 +3671,7 @@ export const annotationScript = `
     removeShortcutHints();
     // Unfreeze animations when leaving annotate mode
     if (animationsPaused) {
-      toggleAnimationFreeze();
+      toggleAnimationFreeze(true);
     }
     gKeyDown = false;
     if (altHoverElement) {

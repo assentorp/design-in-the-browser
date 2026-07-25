@@ -24,8 +24,19 @@ body,
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
+  font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Form controls don't inherit the app font by default */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 .app {
@@ -56,6 +67,40 @@ body,
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   -webkit-app-region: drag;
+}
+
+/* macOS: title bar is hidden, traffic lights overlay the top-left corner */
+.app.mac .tab-bar {
+  padding-left: 84px;
+}
+
+/* Home tab: icon-only, always first, can't be closed */
+.tab-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+
+.tab-home:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.tab-home.active {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 .tabs {
@@ -146,7 +191,7 @@ body,
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -173,11 +218,13 @@ body,
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
   -webkit-app-region: no-drag;
+  /* Optical: sits ~1px high against the traffic lights / home icon otherwise */
+  transform: translateY(1px);
 }
 
 .tab-bar-icon-btn:hover {
@@ -205,11 +252,13 @@ body,
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
   -webkit-app-region: no-drag;
+  /* Optical: keep the right-side cluster on one line with the icon buttons */
+  transform: translateY(1px);
 }
 
 .tab-bar-collapse-btn:hover {
@@ -245,6 +294,11 @@ body,
   overflow: hidden;
   position: relative;
   background: var(--bg-primary);
+}
+
+/* Signal that the gutter is drag-selectable while annotating */
+.browser-content.gutter-annotate {
+  cursor: crosshair;
 }
 
 .browser-content.has-viewport {
@@ -301,9 +355,9 @@ body,
 }
 
 .browser-loading-placeholder .browser-loading-spinner {
-  width: 34px;
-  height: 34px;
-  border-width: 3px;
+  --spinner-ring: 2.5px;
+  width: 24px;
+  height: 24px;
 }
 
 .blocked-url-toast {
@@ -485,9 +539,9 @@ body,
   display: flex;
   flex-direction: column;
   min-width: 320px;
-  /* Match the darker CodeMirror surface so the header/chrome reads as one
-     cohesive dark editor rather than a bright bar over near-black code. */
-  background: #0d0d0d;
+  /* Same surface as the CodeMirror theme (editorTheme.ts) so tree, header
+     and code read as one panel. */
+  background: var(--bg-primary);
   border-left: 1px solid var(--border-color);
 }
 
@@ -529,7 +583,7 @@ body,
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: #0d0d0d;
+  background: var(--bg-primary);
   border-right: 1px solid var(--border-color);
 }
 
@@ -547,11 +601,179 @@ body,
   border-bottom: 1px solid var(--border-color);
 }
 
+.code-tree-search {
+  position: relative;
+  flex-shrink: 0;
+  padding: 8px 8px 0;
+}
+
+.code-tree-search svg {
+  position: absolute;
+  left: 16px;
+  top: 15px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.code-tree-search input {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px 0 26px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.code-tree-search input::placeholder {
+  color: var(--text-secondary);
+}
+
+.code-tree-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* File-type markers (tree, tree search, quick open) */
+.file-icon {
+  flex-shrink: 0;
+  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-icon-badge {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.file-icon-default {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* Dimmed folder path after the filename in search results */
+.code-tree-result-dir {
+  margin-left: auto;
+  padding-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
 .code-tree-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 4px 0 8px;
+}
+
+/* Cmd+P quick-open palette over the code editor side */
+.quick-open-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 48px;
+}
+
+.quick-open {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, calc(100% - 32px));
+  max-height: min(380px, calc(100% - 96px));
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 12px 28px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: wizard-step-in 0.15s ease-out;
+}
+
+.quick-open input {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.quick-open input:focus {
+  outline: none;
+}
+
+.quick-open input::placeholder {
+  color: var(--text-secondary);
+}
+
+.quick-open-results {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.quick-open-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.quick-open-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.quick-open-row.is-selected {
+  background: var(--bg-tertiary);
+}
+
+.quick-open-name {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+/* Folder path sits inline right after the filename, VS Code style */
+.quick-open-dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.quick-open-match {
+  font-weight: 700;
+  color: #fff;
+}
+
+.quick-open-dir .quick-open-match {
+  color: var(--text-primary);
 }
 
 .code-tree-status {
@@ -775,14 +997,14 @@ body,
 }
 
 .code-editor-save {
-  height: 24px;
+  height: 28px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: #fff;
   background: var(--accent);
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
   transition: opacity 0.15s ease, background 0.15s ease;
 }
@@ -946,7 +1168,7 @@ body,
   padding: 0 8px;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -957,11 +1179,13 @@ body,
   color: var(--text-primary);
 }
 
-.toolbar-btn.has-tooltip {
+/* Instant labeled tooltip for icon-only buttons: add .has-tooltip and a
+   data-tooltip attribute. Shows below the button. */
+.has-tooltip {
   position: relative;
 }
 
-.toolbar-btn.has-tooltip::after {
+.has-tooltip::after {
   content: attr(data-tooltip);
   position: absolute;
   top: 100%;
@@ -983,7 +1207,7 @@ body,
   z-index: 1000;
 }
 
-.toolbar-btn.has-tooltip:hover::after {
+.has-tooltip:hover::after {
   opacity: 1;
 }
 
@@ -992,6 +1216,14 @@ body,
    left side instead. */
 .toolbar-devtools-btn.has-tooltip::after {
   left: 0;
+  transform: none;
+}
+
+/* Buttons at the panel's right edge: right-align so the tooltip can't be
+   clipped by the window edge. */
+.code-editor-header-actions .has-tooltip::after {
+  left: auto;
+  right: 0;
   transform: none;
 }
 
@@ -1071,9 +1303,11 @@ body,
 .toolbar-code-btn .toolbar-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid transparent;
-  border-top-color: currentColor;
   border-radius: 50%;
+  /* currentColor comet ring, same pattern as .app-loading-spinner */
+  background: conic-gradient(from 0deg, transparent, currentColor);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
   animation: toolbar-spin 0.6s linear infinite;
 }
 
@@ -1277,11 +1511,11 @@ body,
 }
 
 .edit-queue-send {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: var(--accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
   font-size: 13px;
   font-weight: 500;
@@ -1313,11 +1547,11 @@ body,
 }
 
 .edit-queue-cancel {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -1425,11 +1659,11 @@ body,
 }
 
 .queued-edits-send {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: var(--accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
   font-size: 13px;
   font-weight: 500;
@@ -1445,11 +1679,11 @@ body,
 }
 
 .queued-edits-cancel {
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -1687,15 +1921,10 @@ body,
   justify-content: flex-start;
 }
 
-.project-config-page-full .home-hero {
-  margin-top: 5vh;
-  flex-shrink: 0;
-}
-
 .home-projects {
   width: 100%;
   max-width: 1400px;
-  margin: 0 auto;
+  margin: 24px auto 0;
   padding: 0 12px;
   animation: preset-rise-in 0.35s ease backwards;
   animation-delay: 60ms;
@@ -1705,37 +1934,6 @@ body,
 .home-projects .preset-card-grid {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
-}
-
-/* Startup home hero (greeting above the projects panel) */
-.home-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 24px;
-  animation: preset-rise-in 0.35s ease backwards;
-}
-
-.home-hero-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 13px;
-  margin-bottom: 14px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-}
-
-.home-hero-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 6px 0;
-}
-
-.home-hero-subtitle {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-  text-align: center;
 }
 
 .project-config-page .project-config {
@@ -1802,64 +2000,76 @@ body,
 }
 
 /* Muted "3 of 8" suffix shown next to the headline while filtering */
-.preset-count-filtered {
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--text-secondary);
-}
-
 .preset-toolbar-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.preset-filter-btn {
+/* Project filter: one control that morphs between icon button and search
+   field. The icon anchors the right edge; the field grows out to the left. */
+.preset-search-field {
   display: flex;
   align-items: center;
-  justify-content: center;
   width: 28px;
   height: 28px;
-  padding: 0;
+  overflow: hidden;
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
+  transition: width 0.2s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-.preset-filter-btn:hover {
-  color: var(--text-primary);
+.preset-search-field:hover {
   border-color: var(--text-secondary);
 }
 
-.preset-filter-btn.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(198, 97, 63, 0.12);
+.preset-search-field.open {
+  width: 240px;
+  background: var(--bg-primary);
 }
 
-/* Inline filter input in the toolbar — same height as the buttons beside it */
-.form-input.preset-search {
-  width: 220px;
-  height: 28px;
-  padding: 0 10px;
+.preset-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  /* No padding while collapsed — the input must shrink to 0 so the icon
+     isn't squeezed out of the 28px box */
+  padding: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
   font-size: 13px;
-  border-radius: 8px;
-  animation: preset-search-in 0.15s ease;
+  transition: padding 0.2s ease;
 }
 
-@keyframes preset-search-in {
-  from {
-    opacity: 0;
-    transform: translateX(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+.preset-search-field.open .preset-search-input {
+  padding-left: 10px;
+}
+
+.preset-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.preset-search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.preset-search-field:hover .preset-search-icon,
+.preset-search-field.open .preset-search-icon {
+  color: var(--text-primary);
 }
 
 /* Project cards (Figma-style grid with preview thumbnails) */
@@ -1879,14 +2089,13 @@ body,
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
   animation: preset-rise-in 0.3s ease backwards;
   animation-delay: calc(var(--stagger, 0) * 30ms);
 }
 
 .preset-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 @keyframes preset-rise-in {
@@ -1952,6 +2161,19 @@ body,
   background: rgba(20, 20, 20, 0.7);
   color: #ccc;
   backdrop-filter: blur(4px);
+}
+
+/* Hover must keep the dark backdrop — the buttons float over the page
+   thumbnail, which is often white (the generic .preset-item-*:hover rules
+   would swap in a translucent white background and vanish there) */
+.preset-card-actions .preset-item-edit:hover {
+  background: rgba(45, 45, 45, 0.85);
+  color: #fff;
+}
+
+.preset-card-actions .preset-item-delete:hover {
+  background: rgba(127, 29, 29, 0.85);
+  color: #fca5a5;
 }
 
 .preset-card-meta {
@@ -2041,10 +2263,7 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 28px;
-  padding: 0 12px 0 9px;
-  font-size: 13px;
-  border-radius: 8px;
+  padding-left: 9px;
 }
 
 /* Segmented control (project type) — a recessed track with a raised
@@ -2109,12 +2328,13 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px 6px 6px;
+  height: 28px;
+  padding: 0 10px 0 6px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: color 0.15s ease;
 }
@@ -2215,31 +2435,17 @@ body,
   pointer-events: none;
 }
 
-.modal-header-spacer {
-  width: 28px;
-  height: 28px;
-}
-
 /* Title-less header for the project list — just hosts the close button */
-.modal-header-bare {
-  border-bottom: none;
-  min-height: 0;
-  padding: 10px 12px 0;
-}
-
 /* Full-width submit anchoring the form — a touch taller than the fields */
-.btn.btn-submit {
-  height: 40px;
-  border-radius: 8px;
-}
-
 /* Full-page form view (startup New/Edit Project): a plain centered column
    on the page surface, with Back pinned to the screen corner. */
 .page-back {
   position: fixed;
-  top: 20px;
+  /* Below the always-present tab bar (~45px) */
+  top: 57px;
   left: 20px;
   z-index: 10;
+  -webkit-app-region: no-drag;
 }
 
 .page-form {
@@ -2267,11 +2473,121 @@ body,
   margin: 0 0 20px;
 }
 
-/* Wider panel for the project card grid */
-.modal-wide {
-  max-width: 720px;
+/* Reassuring one-liner under the form title — pulled up against it so the
+   pair reads as one unit (within-group < between-group) */
+.page-form-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: -14px 0 20px;
 }
 
+/* Collapsed-by-default section for rarely-touched options */
+.form-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.form-advanced-toggle:hover {
+  color: var(--text-primary);
+}
+
+.form-advanced-toggle svg {
+  transition: transform 0.15s ease;
+}
+
+.form-advanced-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.form-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+  padding-left: 18px;
+  border-left: 1px solid var(--border-color);
+}
+
+/* --- New-project wizard --- */
+
+/* Each step slides up softly as it mounts */
+.wizard-step {
+  animation: wizard-step-in 0.18s ease-out;
+}
+
+@keyframes wizard-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.wizard-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.wizard-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wizard-choice:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-secondary);
+}
+
+.wizard-choice:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(198, 97, 63, 0.25);
+}
+
+.wizard-choice svg {
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.wizard-choice-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wizard-choice-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.wizard-dots {
+  margin-top: 32px;
+}
+
+/* Wider panel for the project card grid */
 .modal-close {
   display: flex;
   align-items: center;
@@ -2333,11 +2649,6 @@ body,
   cursor: pointer;
 }
 
-.settings-label-row input[type="checkbox"] {
-  margin: 0;
-  cursor: pointer;
-}
-
 .settings-description {
   font-size: 12px;
   font-weight: 400;
@@ -2349,6 +2660,16 @@ body,
   color: var(--text-secondary);
   line-height: 1.4;
   opacity: 0.7;
+}
+
+.settings-version {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  text-align: center;
 }
 
 .settings-loading {
@@ -2461,7 +2782,7 @@ body,
   padding: 0;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2496,7 +2817,8 @@ body,
    fills with the accent when checked — native ones render as stark white
    squares on the dark theme. */
 .checkbox-label input[type="checkbox"],
-.form-checkbox-label input[type="checkbox"] {
+.form-checkbox-label input[type="checkbox"],
+.settings-label-row input[type="checkbox"] {
   appearance: none;
   width: 16px;
   height: 16px;
@@ -2511,12 +2833,14 @@ body,
 }
 
 .checkbox-label input[type="checkbox"]:hover:not(:checked),
-.form-checkbox-label input[type="checkbox"]:hover:not(:checked) {
+.form-checkbox-label input[type="checkbox"]:hover:not(:checked),
+.settings-label-row input[type="checkbox"]:hover:not(:checked) {
   border-color: var(--text-secondary);
 }
 
 .checkbox-label input[type="checkbox"]:checked,
-.form-checkbox-label input[type="checkbox"]:checked {
+.form-checkbox-label input[type="checkbox"]:checked,
+.settings-label-row input[type="checkbox"]:checked {
   background-color: var(--accent);
   border-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
@@ -2527,7 +2851,8 @@ body,
 }
 
 .checkbox-label input[type="checkbox"]:focus-visible,
-.form-checkbox-label input[type="checkbox"]:focus-visible {
+.form-checkbox-label input[type="checkbox"]:focus-visible,
+.settings-label-row input[type="checkbox"]:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow:
@@ -2546,15 +2871,25 @@ body,
 }
 
 /* Buttons */
+/* Standard button size across the app: 28px tall, 13px text, 6px radius
+   (the "New Project" button is the reference). */
 .btn {
-  height: 36px;
-  padding: 0 16px;
+  height: 28px;
+  padding: 0 12px;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+/* Form-scale variant: matches the 36px inputs it sits among
+   (form submits, onboarding continue buttons) */
+.btn.btn-lg {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
 }
 
 .btn:disabled {
@@ -2566,23 +2901,129 @@ body,
   transform: translateY(1px);
 }
 
+/* Filled buttons get the molded treatment: a faint top-lit gradient, a 1px
+   inner white outline (brighter along the top edge, like the light catches
+   it), and a tight contact shadow. Pressing sinks the surface. */
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--accent), white 8%),
+    var(--accent)
+  );
   color: white;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--accent-hover), white 8%),
+    var(--accent-hover)
+  );
 }
 
 .btn-secondary {
-  background: var(--bg-tertiary);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--bg-tertiary), white 3%),
+    var(--bg-tertiary)
+  );
   color: var(--text-primary);
   border: 1px solid var(--border-color);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--border-color);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--border-color), white 3%),
+    var(--border-color)
+  );
+}
+
+.btn-danger {
+  background: linear-gradient(180deg, color-mix(in oklch, #a63a35, white 8%), #a63a35);
+  color: white;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in oklch, #8f2f2b, white 8%), #8f2f2b);
+}
+
+/* Press: the lit edge dims and the surface recesses slightly */
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled),
+.btn-danger:active:not(:disabled) {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* In-app confirm dialog (replaces window.confirm) */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Above .modal-overlay (1000) — confirms can be triggered from modals */
+  z-index: 1100;
+  backdrop-filter: blur(3px);
+  animation: modal-overlay-in 0.15s ease;
+}
+
+.confirm-dialog {
+  width: 340px;
+  max-width: calc(100vw - 80px);
+  padding: 20px;
+  background: linear-gradient(180deg, #262626, #222222);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 16px 40px rgba(0, 0, 0, 0.45);
+  animation: confirm-dialog-in 0.15s ease;
+}
+
+@keyframes confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.confirm-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.confirm-message {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
 }
 
 /* Onboarding skip link (analytics "No thanks", discord "Skip") */
@@ -2748,6 +3189,9 @@ body,
   border-bottom: 1px solid var(--border-color);
   font-size: 13px;
   color: var(--text-secondary);
+  /* Sits inside the titlebar drag strip on full-page screens — keep its
+     buttons clickable */
+  -webkit-app-region: no-drag;
 }
 
 .update-banner a {
@@ -2799,9 +3243,10 @@ body,
 .cli-spinner {
   width: 10px;
   height: 10px;
-  border: 2px solid transparent;
-  border-top-color: var(--accent);
   border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(198, 97, 63, 0), var(--accent));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
   animation: cli-spin 0.6s linear infinite;
   flex-shrink: 0;
 }
@@ -2813,6 +3258,8 @@ body,
 /* What's New modal */
 .whats-new-modal {
   max-width: 480px;
+  /* Half the default 85vh modal height */
+  max-height: 42vh;
 }
 
 .whats-new-entry {
@@ -2877,11 +3324,14 @@ body,
 }
 
 .app-loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--text-secondary);
+  --spinner-ring: 2px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
+  /* Comet-style ring: sharp orange leading edge fading out along the tail */
+  background: conic-gradient(from 0deg, rgba(198, 97, 63, 0), var(--accent));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-ring) - 0.5px), #000 calc(100% - var(--spinner-ring)));
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-ring) - 0.5px), #000 calc(100% - var(--spinner-ring)));
   animation: cli-spin 0.6s linear infinite;
 }
 
@@ -2891,11 +3341,13 @@ body,
   .modal-overlay,
   .modal-overlay .modal,
   .page-form,
-  .home-hero,
   .home-projects,
-  .preset-card,
-  .preset-search {
+  .preset-card {
     animation: none;
+  }
+
+  .preset-search-field {
+    transition: none;
   }
 
   .btn:active:not(:disabled) {

@@ -4,11 +4,10 @@ import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared
 // 128px copy of build/icon.png — the full 1024px app icon is 726 KB and was
 // getting bundled into the renderer just to render at 56–64px.
 import appIcon from '../assets/icon-128.png';
+import { appConfirm } from './ConfirmDialog';
 
 interface ProjectConfigModalProps {
   presets: ProjectPreset[];
-  canClose: boolean;
-  onClose: () => void;
   onCreate: (config: {
     name: string;
     path: string;
@@ -61,18 +60,8 @@ const timeAgo = (ts: number): string => {
   return new Date(ts).toLocaleDateString();
 };
 
-const timeGreeting = (): string => {
-  const hour = new Date().getHours();
-  if (hour < 5) return 'Working late';
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-};
-
 export default function ProjectConfigModal({
   presets,
-  canClose,
-  onClose,
   onCreate,
   onDeletePreset,
   onUpdatePreset,
@@ -82,10 +71,14 @@ export default function ProjectConfigModal({
   const [view, setView] = useState<View>(hasPresets ? 'list' : 'new');
   const [name, setName] = useState('');
 
-  // Update view when presets become available
+  // Follow the presets: show the list when they become available, and fall
+  // back to the "Create your first project" form when the last one is removed
   useEffect(() => {
     if (hasPresets && view === 'new') {
       setView('list');
+    } else if (!hasPresets && view === 'list') {
+      setWizardStep(0);
+      setView('new');
     }
   }, [hasPresets]);
   const [path, setPath] = useState('');
@@ -101,7 +94,13 @@ export default function ProjectConfigModal({
   const [customCliCommand, setCustomCliCommand] = useState('');
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  // Advanced form options (model, auto mode, permissions, shell) are tucked
+  // away by default — open when editing a preset that actually uses them
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // New-project wizard: index into the current step sequence
+  const [wizardStep, setWizardStep] = useState(0);
   const [isWindows, setIsWindows] = useState(false);
   const [wslAvailable, setWslAvailable] = useState(false);
 
@@ -262,6 +261,12 @@ export default function ProjectConfigModal({
     setDangerouslySkipPermissions(preset.dangerouslySkipPermissions || false);
     setAutoAcceptEdits(preset.autoAcceptEdits || false);
     setCustomCliCommand(preset.customCliCommand || '');
+    setAdvancedOpen(Boolean(
+      preset.claudeModel
+      || preset.dangerouslySkipPermissions
+      || preset.autoAcceptEdits
+      || (preset.shell && preset.shell !== 'default')
+    ));
     setView('edit');
   };
 
@@ -279,6 +284,8 @@ export default function ProjectConfigModal({
     setAutoAcceptEdits(false);
     setCustomCliCommand('');
     setSaveAsPreset(true);
+    setAdvancedOpen(false);
+    setWizardStep(0);
     setProjectType('existing');
     setStarterError(null);
     setStarterBusy(false);
@@ -300,7 +307,7 @@ export default function ProjectConfigModal({
       if (selectedPath) {
         setPath(selectedPath);
         if (!name) {
-          const folderName = selectedPath.split('/').pop() || '';
+          const folderName = selectedPath.split(/[\\/]/).pop() || '';
           setName(folderName);
         }
       }
@@ -393,11 +400,19 @@ export default function ProjectConfigModal({
     && (cliTool !== 'custom' || customCliCommand.trim());
   const canFilter = presets.length > 3;
 
+  const openSearch = () => {
+    setSearchOpen(true);
+    // The input is always mounted (the field morphs open), so focus explicitly
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
   const toggleSearch = () => {
-    setSearchOpen((open) => {
-      if (open) setSearch('');
-      return !open;
-    });
+    if (searchOpen) {
+      setSearch('');
+      setSearchOpen(false);
+    } else {
+      openSearch();
+    }
   };
 
   // Cmd/Ctrl+F opens the project filter while the list is showing
@@ -407,6 +422,7 @@ export default function ProjectConfigModal({
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -418,89 +434,58 @@ export default function ProjectConfigModal({
     : hasPresets ? 'New Project'
     : 'Create your first project';
 
-  const showBack = view !== 'list' && hasPresets;
-
-  // The project list carries its actions in a toolbar inside the body, so it
-  // gets no title bar — just a close button when shown as a modal. Form views
-  // keep the classic back/title/close header.
-  const panelHeader = view === 'list' ? (
-    canClose ? (
-      <div className="modal-header modal-header-bare">
-        <span className="modal-header-spacer" />
-        <button className="modal-close" onClick={onClose}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-    ) : null
-  ) : (
-    <div className="modal-header">
-      {showBack ? (
-        <button type="button" className="btn-back" onClick={handleBack}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-          Back
-        </button>
-      ) : <span className="modal-header-spacer" />}
-      <h2>{title}</h2>
-      {canClose ? (
-        <button className="modal-close" onClick={onClose}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      ) : <span className="modal-header-spacer" />}
-    </div>
-  );
+  const wizardCanGoBack = view === 'new' && wizardStep > 0;
+  const showBack = view !== 'list' && (hasPresets || wizardCanGoBack);
 
   // --- List body ---
   const listBody = (
     <div className="project-config">
       <div className="project-config-section">
         <div className="preset-toolbar">
-          <span className="preset-count">
-            Projects
-            {search.trim() && (
-              <span className="preset-count-filtered">
-                {filteredPresets.length} of {presets.length}
-              </span>
-            )}
-          </span>
+          <span className="preset-count">Projects</span>
           <div className="preset-toolbar-actions">
-            {searchOpen && (
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.stopPropagation();
-                    if (search) setSearch('');
-                    else setSearchOpen(false);
-                  }
-                }}
-                placeholder="Filter projects…"
-                className="form-input preset-search"
-                autoFocus
-              />
-            )}
             {canFilter && (
-              <button
-                type="button"
-                className={`preset-filter-btn${searchOpen ? ' active' : ''}`}
-                onClick={toggleSearch}
-                title="Filter projects (⌘F)"
-                aria-label="Filter projects"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="7"></circle>
-                  <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
-                </svg>
-              </button>
+              // One control that morphs: collapsed it's the icon button,
+              // open it widens into the filter field with the icon inside.
+              <div className={`preset-search-field${searchOpen ? ' open' : ''}`}>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      if (search) setSearch('');
+                      else setSearchOpen(false);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Collapse when focus leaves and there's no active filter.
+                    // Clicks on the field's own icon are excluded so the
+                    // toggle handler decides instead of fighting the blur.
+                    const toIcon = e.relatedTarget instanceof HTMLElement
+                      && e.relatedTarget.closest('.preset-search-field');
+                    if (!search.trim() && !toIcon) setSearchOpen(false);
+                  }}
+                  placeholder="Filter projects…"
+                  className="preset-search-input"
+                  tabIndex={searchOpen ? 0 : -1}
+                  aria-hidden={!searchOpen}
+                />
+                <button
+                  type="button"
+                  className="preset-search-icon"
+                  onClick={toggleSearch}
+                  title="Filter projects (⌘F)"
+                  aria-label="Filter projects"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
+                  </svg>
+                </button>
+              </div>
             )}
             <button type="button" className="btn btn-primary btn-new-project" onClick={handleNewProject}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -551,9 +536,14 @@ export default function ProjectConfigModal({
                     <button
                       type="button"
                       className="preset-item-btn preset-item-delete"
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        if (confirm(`Remove "${preset.name}"?`)) {
+                        if (await appConfirm({
+                          title: `Remove "${preset.name}"?`,
+                          message: 'This only removes the project from this list — no files are deleted.',
+                          confirmLabel: 'Remove',
+                          danger: true,
+                        })) {
                           onDeletePreset(preset.id);
                         }
                       }}
@@ -591,103 +581,78 @@ export default function ProjectConfigModal({
     </div>
   );
 
-  // --- Form body ---
-  const formBody = (
-    <div className="project-config">
-      <form onSubmit={handleSubmit}>
-        <div className="project-config-form">
-          {view === 'new' && (
-            <div className="form-group">
-              <div className="segmented-control" role="radiogroup" aria-label="Project type">
-                <label className={`segmented-option${projectType === 'existing' ? ' active' : ''}`}>
-                  <input
-                    type="radio"
-                    name="project-type"
-                    value="existing"
-                    checked={projectType === 'existing'}
-                    onChange={() => setProjectType('existing')}
-                  />
-                  Existing Project
-                </label>
-                <label className={`segmented-option${projectType === 'starter' ? ' active' : ''}`}>
-                  <input
-                    type="radio"
-                    name="project-type"
-                    value="starter"
-                    checked={projectType === 'starter'}
-                    onChange={() => setProjectType('starter')}
-                  />
-                  Starter Project
-                </label>
-              </div>
-              <span className="form-hint">
-                {projectType === 'existing'
-                  ? 'Point at a folder you already have.'
-                  : 'Create a new folder with a ready-to-edit webpage.'}
-              </span>
-            </div>
-          )}
-          <div className="form-group">
-            <label>Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={isStarter ? 'my-first-page' : 'My Project'}
-              className="form-input"
-              autoFocus
-              disabled={starterBusy}
-            />
-            {isStarter && (
-              <span className="form-hint">
-                We'll ask where to save it, then create a folder with this name.
-              </span>
-            )}
-          </div>
-          {!isStarter && (
-            <div className="form-group">
-              <label>Path</label>
-              <div className="path-input-wrapper">
-                <input
-                  type="text"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="/path/to/project"
-                  className="form-input"
-                />
-                <button type="button" className="browse-btn" onClick={handleBrowse} title="Browse…">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-          {!isStarter && (
-            <div className="form-row">
-              <div className="form-group">
-                <label>Start Command</label>
-                <input
-                  type="text"
-                  value={startCommand}
-                  onChange={(e) => setStartCommand(e.target.value)}
-                  placeholder="npm run dev"
-                  className="form-input"
-                />
-              </div>
-              <div className="form-group">
-                <label>URL</label>
-                <input
-                  type="text"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="http://localhost:3000"
-                  className="form-input"
-                />
-              </div>
-            </div>
-          )}
-          <div className={cliTool === 'claude' || cliTool === 'custom' ? 'form-row' : undefined}>
+  // --- Shared field chunks (edit form shows them all; the wizard deals them
+  // out one step at a time) ---
+  const pathField = (
+    <div className="form-group">
+      <label>Path</label>
+      <div className="path-input-wrapper">
+        <input
+          type="text"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          onBlur={() => {
+            // Typing a path by hand fills the name too, like Browse does
+            if (path.trim() && !name.trim()) {
+              setName(path.trim().split(/[\\/]/).filter(Boolean).pop() || '');
+            }
+          }}
+          placeholder="/path/to/project"
+          className="form-input"
+          autoFocus
+        />
+        <button type="button" className="browse-btn" onClick={handleBrowse} title="Browse…">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+
+  const nameField = (
+    <div className="form-group">
+      <label>Name</label>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={isStarter ? 'my-first-page' : 'My Project'}
+        className="form-input"
+        autoFocus={isStarter}
+        disabled={starterBusy}
+      />
+    </div>
+  );
+
+  const runFields = (
+    <div className="form-row">
+      <div className="form-group">
+        <label>Start Command</label>
+        <input
+          type="text"
+          value={startCommand}
+          onChange={(e) => setStartCommand(e.target.value)}
+          placeholder="npm run dev"
+          className="form-input"
+        />
+      </div>
+      <div className="form-group">
+        <label>URL</label>
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="http://localhost:3000"
+          className="form-input"
+        />
+      </div>
+    </div>
+  );
+
+  const cliFields = (
+    <>
+      <div className={cliTool === 'custom' ? 'form-row' : undefined}>
             <div className="form-group">
               <label>CLI Tool</label>
               <select
@@ -703,110 +668,132 @@ export default function ProjectConfigModal({
                 <option value="custom">Custom</option>
               </select>
             </div>
-            {cliTool === 'custom' && (
-              <div className="form-group">
-                <label>Command</label>
-                <input
-                  type="text"
-                  value={customCliCommand}
-                  onChange={(e) => setCustomCliCommand(e.target.value)}
-                  placeholder="gsd"
-                  className="form-input"
-                />
-              </div>
-            )}
-            {cliTool === 'claude' && (
-              <div className="form-group">
-                <label>Model</label>
-                <select
-                  value={modelIsCustom ? '__custom' : claudeModel}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom') {
-                      setModelIsCustom(true);
-                      setClaudeModel('');
-                    } else {
-                      setModelIsCustom(false);
-                      setClaudeModel(e.target.value);
-                    }
-                  }}
-                  className="form-select"
-                >
-                  <option value="">Default</option>
-                  <option value="fable">Fable</option>
-                  <option value="opus">Opus</option>
-                  <option value="sonnet">Sonnet</option>
-                  <option value="haiku">Haiku</option>
-                  <option value="__custom">Custom…</option>
-                </select>
-                {modelIsCustom && (
-                  <input
-                    type="text"
-                    value={claudeModel}
-                    onChange={(e) => setClaudeModel(e.target.value)}
-                    placeholder="claude-fable-5"
-                    className="form-input"
-                    spellCheck={false}
-                    autoFocus
-                  />
-                )}
-              </div>
-            )}
+        {cliTool === 'custom' && (
+          <div className="form-group">
+            <label>Command</label>
+            <input
+              type="text"
+              value={customCliCommand}
+              onChange={(e) => setCustomCliCommand(e.target.value)}
+              placeholder="gsd"
+              className="form-input"
+            />
           </div>
-          {cliTool === 'custom' && (
-            <span className="form-hint form-hint-pull-up">
-              Command to launch your CLI tool (e.g. <code>gsd</code>).
-            </span>
-          )}
-          {cliTool === 'claude' && (
-            <div className="form-group">
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={autoAcceptEdits}
-                  onChange={(e) => setAutoAcceptEdits(e.target.checked)}
-                />
-                Start in auto mode (auto-accept edits)
-              </label>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={dangerouslySkipPermissions}
-                  onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
-                />
-                Bypass permission prompts
-              </label>
-              {dangerouslySkipPermissions && (
-                <span className="form-hint form-hint-warning">
-                  Skips all permission checks. Only use in trusted projects you fully control.
-                </span>
+        )}
+      </div>
+      {cliTool === 'custom' && (
+        <span className="form-hint form-hint-pull-up">
+          Command to launch your CLI tool (e.g. <code>gsd</code>).
+        </span>
+      )}
+      {(cliTool === 'claude' || (isWindows && wslAvailable)) && (
+            <div className="form-advanced">
+              <button
+                type="button"
+                className="form-advanced-toggle"
+                onClick={() => setAdvancedOpen((open) => !open)}
+                aria-expanded={advancedOpen}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+                Advanced options
+              </button>
+              {advancedOpen && (
+                <div className="form-advanced-body">
+                  {cliTool === 'claude' && (
+                    <div className="form-group">
+                      <label>Model</label>
+                      <select
+                        value={modelIsCustom ? '__custom' : claudeModel}
+                        onChange={(e) => {
+                          if (e.target.value === '__custom') {
+                            setModelIsCustom(true);
+                            setClaudeModel('');
+                          } else {
+                            setModelIsCustom(false);
+                            setClaudeModel(e.target.value);
+                          }
+                        }}
+                        className="form-select"
+                      >
+                        <option value="">Default</option>
+                        <option value="fable">Fable</option>
+                        <option value="opus">Opus</option>
+                        <option value="sonnet">Sonnet</option>
+                        <option value="haiku">Haiku</option>
+                        <option value="__custom">Custom…</option>
+                      </select>
+                      {modelIsCustom && (
+                        <input
+                          type="text"
+                          value={claudeModel}
+                          onChange={(e) => setClaudeModel(e.target.value)}
+                          placeholder="claude-fable-5"
+                          className="form-input"
+                          spellCheck={false}
+                          autoFocus
+                        />
+                      )}
+                    </div>
+                  )}
+                  {cliTool === 'claude' && (
+                    <div className="form-group">
+                      <label className="form-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={autoAcceptEdits}
+                          onChange={(e) => setAutoAcceptEdits(e.target.checked)}
+                        />
+                        Start in auto mode (auto-accept edits)
+                      </label>
+                      <label className="form-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={dangerouslySkipPermissions}
+                          onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
+                        />
+                        Bypass permission prompts
+                      </label>
+                      {dangerouslySkipPermissions && (
+                        <span className="form-hint form-hint-warning">
+                          Skips all permission checks. Only use in trusted projects you fully control.
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {isWindows && wslAvailable && (
+                    <div className="form-group">
+                      <label>Shell</label>
+                      <select
+                        value={shell}
+                        onChange={(e) => setShell(e.target.value as ShellType)}
+                        className="form-select"
+                      >
+                        <option value="default">PowerShell</option>
+                        <option value="wsl">WSL (Linux)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
-          {isWindows && wslAvailable && (
-            <div className="form-group">
-              <label>Shell</label>
-              <select
-                value={shell}
-                onChange={(e) => setShell(e.target.value as ShellType)}
-                className="form-select"
-              >
-                <option value="default">PowerShell</option>
-                <option value="wsl">WSL (Linux)</option>
-              </select>
-            </div>
-          )}
-          {starterError && (
-            <span className="form-hint form-hint-warning">{starterError}</span>
-          )}
+    </>
+  );
+
+  // --- Edit form: everything on one page ---
+  const formBody = (
+    <div className="project-config">
+      <form onSubmit={handleSubmit}>
+        <div className="project-config-form">
+          {pathField}
+          {nameField}
+          {runFields}
+          {cliFields}
           <div className="project-config-actions">
-            <button type="submit" className="btn btn-primary btn-submit" disabled={!isValid || starterBusy}>
-              {starterBusy
-                ? 'Creating…'
-                : view === 'edit'
-                  ? 'Save Project'
-                  : isStarter
-                    ? 'Choose Location & Create'
-                    : 'Create Project'}
+            <button type="submit" className="btn btn-lg btn-primary btn-submit" disabled={!isValid}>
+              Save Project
             </button>
           </div>
         </div>
@@ -814,210 +801,303 @@ export default function ProjectConfigModal({
     </div>
   );
 
-  const body = view === 'list' ? listBody : formBody;
+  // --- New-project wizard: one question per step ---
+  const wizardStepKeys = isStarter
+    ? ['type', 'name', 'cli']
+    : ['type', 'project', 'run', 'cli'];
+  const wizardLast = wizardStepKeys.length - 1;
+  const stepKey = wizardStepKeys[Math.min(wizardStep, wizardLast)];
 
-  // Full page on startup
-  if (!canClose) {
-    // Determine current onboarding step for dot indicators
-    const onboardingStep = onboardingCompleted === false ? 0
-      : editorChosen === false ? 1
-      : analyticsConsentGiven === false ? 2
-      : discordDismissed === false ? 3
-      : -1;
+  const wizardHeadings: Record<string, { title: string; sub: string }> = {
+    type: {
+      title: hasPresets ? 'New project' : 'Create your first project',
+      sub: 'Everything can be changed later.',
+    },
+    project: {
+      title: 'Where does your project live?',
+      sub: 'Pick the folder and the name fills itself in.',
+    },
+    name: {
+      title: 'What should we call it?',
+      sub: "We'll ask where to save it.",
+    },
+    run: {
+      title: 'How does it start?',
+      sub: 'These defaults fit most apps.',
+    },
+    cli: {
+      title: 'Which AI should do the edits?',
+      sub: 'It runs in a terminal beside the browser.',
+    },
+  };
 
-    const stepDots = (step: number) => (
-      <div className="onboarding-dots">
-        {[0, 1, 2, 3].map((i) => (
-          <span key={i} className={`onboarding-dot${i === step ? ' active' : ''}`} />
+  const wizardCanContinue =
+    stepKey === 'type' ? true
+    : stepKey === 'project' ? Boolean(path.trim())
+    : stepKey === 'name' ? Boolean(name.trim())
+    : stepKey === 'run' ? Boolean(url.trim())
+    : Boolean(isValid);
+
+  const chooseProjectType = (type: ProjectType) => {
+    setProjectType(type);
+    setWizardStep(1);
+  };
+
+  const handleWizardSubmit = (e: React.FormEvent) => {
+    if (wizardStep < wizardLast) {
+      e.preventDefault();
+      if (wizardCanContinue) setWizardStep(wizardStep + 1);
+      return;
+    }
+    handleSubmit(e);
+  };
+
+  const wizardBody = (
+    <div className="project-config">
+      <form onSubmit={handleWizardSubmit}>
+        <div className="project-config-form wizard-step" key={stepKey}>
+          {stepKey === 'type' && (
+            <div className="wizard-choice-grid">
+              <button type="button" className="wizard-choice" onClick={() => chooseProjectType('existing')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
+                </svg>
+                <span className="wizard-choice-title">Existing project</span>
+                <span className="wizard-choice-sub">Use a folder you already have.</span>
+              </button>
+              <button type="button" className="wizard-choice" onClick={() => chooseProjectType('starter')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v18"></path>
+                  <path d="M3 12h18"></path>
+                </svg>
+                <span className="wizard-choice-title">Starter project</span>
+                <span className="wizard-choice-sub">A fresh page, ready to edit.</span>
+              </button>
+            </div>
+          )}
+          {stepKey === 'project' && (
+            <>
+              {pathField}
+              {nameField}
+            </>
+          )}
+          {stepKey === 'name' && nameField}
+          {stepKey === 'run' && runFields}
+          {stepKey === 'cli' && cliFields}
+          {starterError && (
+            <span className="form-hint form-hint-warning">{starterError}</span>
+          )}
+          {stepKey !== 'type' && (
+            <div className="project-config-actions">
+              <button type="submit" className="btn btn-lg btn-primary btn-submit" disabled={!wizardCanContinue || starterBusy}>
+                {wizardStep < wizardLast
+                  ? 'Continue'
+                  : starterBusy
+                    ? 'Creating…'
+                    : isStarter
+                      ? 'Choose Location & Create'
+                      : 'Create Project'}
+              </button>
+            </div>
+          )}
+        </div>
+      </form>
+      <div className="onboarding-dots wizard-dots">
+        {wizardStepKeys.map((key, i) => (
+          <span key={key} className={`onboarding-dot${i === wizardStep ? ' active' : ''}`} />
         ))}
       </div>
-    );
+    </div>
+  );
 
-    // Getting started screen
-    if (onboardingStep === 0) {
-      return (
-        <div className="project-config-page">
-          <div className="onboarding-card">
-            <div className="onboarding-gate">
-              <img className="onboarding-gate-appicon" src={appIcon} alt="Design In The Browser" />
-              <h2 className="onboarding-gate-title">Let's get started</h2>
-              <p className="onboarding-gate-subtitle">Make sure you have the following ready:</p>
-              <div className="onboarding-checklist">
-                <div className="onboarding-checklist-item">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span>A local dev server for your project — or start from a built-in Starter Project</span>
-                </div>
-                <div className="onboarding-checklist-item">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span>An AI coding CLI — Claude Code, Cursor, Codex, Antigravity, or Qwen</span>
-                </div>
-              </div>
-              <button className="btn btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
-                Continue
-              </button>
-            </div>
-          </div>
-          {stepDots(0)}
-        </div>
-      );
-    }
+  const body = view === 'list' ? listBody : view === 'new' ? wizardBody : formBody;
 
-    // Editor selection screen
-    if (onboardingStep === 1) {
-      return (
-        <div className="project-config-page">
-          <div className="onboarding-card">
-            <div className="onboarding-gate">
-              <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 18l6-6-6-6" />
-                <path d="M8 6l-6 6 6 6" />
-              </svg>
-              <h2 className="onboarding-gate-title">Code Editor</h2>
-              <p className="onboarding-gate-text">
-                Choose what the Code button opens. <strong>Built In</strong> lets you browse and edit your project right inside this app — no external editor needed. Or pick one you already have installed.
-              </p>
-              <div className="onboarding-editor-list">
-                {availableEditors.map((editor) => (
-                  <button
-                    key={editor}
-                    className={`onboarding-editor-option${selectedEditor === editor ? ' active' : ''}`}
-                    onClick={() => setSelectedEditor(editor)}
-                  >
-                    {EDITOR_LABELS[editor]}
-                  </button>
-                ))}
-                {availableEditors.length === 0 && (
-                  <p className="onboarding-editor-empty">No editors detected</p>
-                )}
-              </div>
-              <button className="btn btn-primary onboarding-continue" onClick={handleEditorContinue}>
-                Continue
-              </button>
-            </div>
-          </div>
-          {stepDots(1)}
-        </div>
-      );
-    }
+  // Determine current onboarding step for dot indicators
+  const onboardingStep = onboardingCompleted === false ? 0
+    : editorChosen === false ? 1
+    : analyticsConsentGiven === false ? 2
+    : discordDismissed === false ? 3
+    : -1;
 
-    // Share analytics screen
-    if (onboardingStep === 2) {
-      return (
-        <div className="project-config-page">
-          <div className="onboarding-card">
-            <div className="onboarding-gate">
-              <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 20V10" />
-                <path d="M12 20V4" />
-                <path d="M6 20v-6" />
-              </svg>
-              <h2 className="onboarding-gate-title">Share Analytics</h2>
-              <p className="onboarding-gate-text">
-                Help improve Design In The Browser by sharing anonymous crash reports and usage events via PostHog (EU servers). No personal data, project content, or file paths are collected. You can change this anytime in Settings.
-              </p>
-              <button className="btn btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
-                Share with Developers
-              </button>
-              <button className="onboarding-skip" onClick={() => handleAnalyticsChoice(false)}>
-                No thanks
-              </button>
-            </div>
-          </div>
-          {stepDots(2)}
-        </div>
-      );
-    }
+  const stepDots = (step: number) => (
+    <div className="onboarding-dots">
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className={`onboarding-dot${i === step ? ' active' : ''}`} />
+      ))}
+    </div>
+  );
 
-    // Discord screen
-    if (onboardingStep === 3) {
-      return (
-        <div className="project-config-page">
-          <div className="onboarding-card">
-            <div className="onboarding-gate">
-              <svg className="onboarding-gate-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
-                <path d="M14 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
-                <path d="M8.5 17c0 1-1.356 3-1.832 3-.906 0-2.168-3.16-2.668-5.5-.5-2.34-.5-4.5 0-7C4.5 5.5 6.5 4 8.5 3c1.5 1 3 1.5 3.5 1.5s2-0.5 3.5-1.5c2 1 4 2.5 4.5 4.5.5 2.5.5 4.66 0 7-.5 2.34-1.762 5.5-2.668 5.5C16.856 20 15.5 18 15.5 17" />
-              </svg>
-              <h2 className="onboarding-gate-title">Join the Community</h2>
-              <p className="onboarding-gate-text">
-                Get help, share feedback, and stay updated on new features in our Discord.
-              </p>
-              <button
-                className="btn btn-primary onboarding-continue"
-                onClick={() => {
-                  window.open('https://discord.com/invite/dYGPPH6tPC');
-                  setDiscordDismissed(true);
-                  window.mainAPI?.saveSettings({ discordDismissed: true });
-                }}
-              >
-                Join Discord
-              </button>
-              <button
-                className="onboarding-skip"
-                onClick={() => {
-                  setDiscordDismissed(true);
-                  window.mainAPI?.saveSettings({ discordDismissed: true });
-                }}
-              >
-                No thanks
-              </button>
-            </div>
-          </div>
-          {stepDots(3)}
-        </div>
-      );
-    }
-
+  // Getting started screen
+  if (onboardingStep === 0) {
     return (
-      <div className={`project-config-page${view === 'list' ? ' project-config-page-full' : ''}`}>
-        {view === 'list' ? (
-          // Full-width dashboard on startup — no panel chrome around the grid
-          <>
-            <div className="home-hero">
-              <img className="home-hero-icon" src={appIcon} alt="" />
-              <h1 className="home-hero-title">{timeGreeting()}</h1>
-              <p className="home-hero-subtitle">
-                {hasPresets
-                  ? 'Pick up where you left off, or start something new.'
-                  : 'Point at a project and start designing in the browser.'}
-              </p>
-            </div>
-            <div className="home-projects">{body}</div>
-          </>
-        ) : (
-          // Form as a page of its own: back in the screen corner, no hero,
-          // no panel box — the page is the surface.
-          <>
-            {showBack && (
-              <button type="button" className="btn-back page-back" onClick={handleBack}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="15 18 9 12 15 6"></polyline>
+      <div className="project-config-page">
+        <div className="onboarding-card">
+          <div className="onboarding-gate">
+            <img className="onboarding-gate-appicon" src={appIcon} alt="Design In The Browser" />
+            <h2 className="onboarding-gate-title">Let's get started</h2>
+            <p className="onboarding-gate-subtitle">Make sure you have the following ready:</p>
+            <div className="onboarding-checklist">
+              <div className="onboarding-checklist-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
                 </svg>
-                Back
-              </button>
-            )}
-            <div className="page-form">
-              <h1 className="page-form-title">{title}</h1>
-              {body}
+                <span>A local dev server for your project — or start from a built-in Starter Project</span>
+              </div>
+              <div className="onboarding-checklist-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>An AI coding CLI — Claude Code, Cursor, Codex, Antigravity, or Qwen</span>
+              </div>
             </div>
-          </>
-        )}
+            <button className="btn btn-lg btn-primary onboarding-continue" onClick={handleOnboardingContinue}>
+              Continue
+            </button>
+          </div>
+        </div>
+        {stepDots(0)}
       </div>
     );
   }
 
-  // Modal when adding from tab bar
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className={`modal${view === 'list' ? ' modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
-        {panelHeader}
-        <div className="modal-body">{body}</div>
+  // Editor selection screen
+  if (onboardingStep === 1) {
+    return (
+      <div className="project-config-page">
+        <div className="onboarding-card">
+          <div className="onboarding-gate">
+            <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 18l6-6-6-6" />
+              <path d="M8 6l-6 6 6 6" />
+            </svg>
+            <h2 className="onboarding-gate-title">Code Editor</h2>
+            <p className="onboarding-gate-text">
+              Choose what the Code button opens. <strong>Built In</strong> lets you browse and edit your project right inside this app — no external editor needed. Or pick one you already have installed.
+            </p>
+            <div className="onboarding-editor-list">
+              {availableEditors.map((editor) => (
+                <button
+                  key={editor}
+                  className={`onboarding-editor-option${selectedEditor === editor ? ' active' : ''}`}
+                  onClick={() => setSelectedEditor(editor)}
+                >
+                  {EDITOR_LABELS[editor]}
+                </button>
+              ))}
+              {availableEditors.length === 0 && (
+                <p className="onboarding-editor-empty">No editors detected</p>
+              )}
+            </div>
+            <button className="btn btn-lg btn-primary onboarding-continue" onClick={handleEditorContinue}>
+              Continue
+            </button>
+          </div>
+        </div>
+        {stepDots(1)}
       </div>
+    );
+  }
+
+  // Share analytics screen
+  if (onboardingStep === 2) {
+    return (
+      <div className="project-config-page">
+        <div className="onboarding-card">
+          <div className="onboarding-gate">
+            <svg className="onboarding-gate-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 20V10" />
+              <path d="M12 20V4" />
+              <path d="M6 20v-6" />
+            </svg>
+            <h2 className="onboarding-gate-title">Share Analytics</h2>
+            <p className="onboarding-gate-text">
+              Help improve Design In The Browser by sharing anonymous crash reports and usage events via PostHog (EU servers). No personal data, project content, or file paths are collected. You can change this anytime in Settings.
+            </p>
+            <button className="btn btn-lg btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
+              Share with Developers
+            </button>
+            <button className="onboarding-skip" onClick={() => handleAnalyticsChoice(false)}>
+              No thanks
+            </button>
+          </div>
+        </div>
+        {stepDots(2)}
+      </div>
+    );
+  }
+
+  // Discord screen
+  if (onboardingStep === 3) {
+    return (
+      <div className="project-config-page">
+        <div className="onboarding-card">
+          <div className="onboarding-gate">
+            <svg className="onboarding-gate-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
+              <path d="M14 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0" />
+              <path d="M8.5 17c0 1-1.356 3-1.832 3-.906 0-2.168-3.16-2.668-5.5-.5-2.34-.5-4.5 0-7C4.5 5.5 6.5 4 8.5 3c1.5 1 3 1.5 3.5 1.5s2-0.5 3.5-1.5c2 1 4 2.5 4.5 4.5.5 2.5.5 4.66 0 7-.5 2.34-1.762 5.5-2.668 5.5C16.856 20 15.5 18 15.5 17" />
+            </svg>
+            <h2 className="onboarding-gate-title">Join the Community</h2>
+            <p className="onboarding-gate-text">
+              Get help, share feedback, and stay updated on new features in our Discord.
+            </p>
+            <button
+              className="btn btn-lg btn-primary onboarding-continue"
+              onClick={() => {
+                window.open('https://discord.com/invite/dYGPPH6tPC');
+                setDiscordDismissed(true);
+                window.mainAPI?.saveSettings({ discordDismissed: true });
+              }}
+            >
+              Join Discord
+            </button>
+            <button
+              className="onboarding-skip"
+              onClick={() => {
+                setDiscordDismissed(true);
+                window.mainAPI?.saveSettings({ discordDismissed: true });
+              }}
+            >
+              No thanks
+            </button>
+          </div>
+        </div>
+        {stepDots(3)}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`project-config-page${view === 'list' ? ' project-config-page-full' : ''}`}>
+      {view === 'list' ? (
+        // Full-width dashboard (the Home tab) — no hero, no panel chrome,
+        // just the projects grid
+        <div className="home-projects">{body}</div>
+      ) : (
+        // Form as a page of its own: back in the screen corner, no hero,
+        // no panel box — the page is the surface.
+        <>
+          {showBack && (
+            <button
+              type="button"
+              className="btn-back page-back"
+              onClick={wizardCanGoBack ? () => setWizardStep(wizardStep - 1) : handleBack}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              Back
+            </button>
+          )}
+          <div className="page-form">
+            <h1 className="page-form-title">{view === 'new' ? wizardHeadings[stepKey].title : title}</h1>
+            {view === 'new' && (
+              <p className="page-form-subtitle">{wizardHeadings[stepKey].sub}</p>
+            )}
+            {body}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,8 +1,25 @@
 # Contributing to Design In The Browser
 
-Thanks for your interest in contributing! Here's how to get started.
+Design In The Browser is open source under the [MIT license](LICENSE), but it is a **read-only open source project: external contributions are not accepted.**
 
-## Development Setup
+This isn't personal — it's a deliberate choice. The project is built and maintained by a solo developer, and keeping a single copyright holder keeps the project's licensing options simple. Pull requests will be closed with a pointer to this file, regardless of quality.
+
+## What you can do
+
+- **Use it** — the MIT license lets you use, modify, and redistribute the code freely.
+- **Fork it** — if you want to take the project in your own direction, forks are welcome and encouraged. That's what the license is for.
+- **Report bugs** — issues are the best way to help. Describe what happened, what you expected, and how to reproduce it. Include your OS and app version.
+- **Suggest features** — open an issue describing the use case. No promises, but real-world use cases genuinely shape what gets built.
+- **Join the community** — questions and discussion happen on [Discord](https://discord.com/invite/dYGPPH6tPC).
+
+## What will be closed
+
+- Pull requests (including typo fixes and documentation changes)
+- Issues that are patches in disguise ("here's the code, just paste it in")
+
+## Building from source
+
+If you're forking or just want to run the app yourself:
 
 ### Prerequisites
 
@@ -10,16 +27,16 @@ Thanks for your interest in contributing! Here's how to get started.
 - npm
 - macOS, Windows, or Linux
 
-### Getting Started
+### Development
 
 ```bash
 git clone https://github.com/assentorp/design-in-the-browser.git
-cd ditb
+cd design-in-the-browser
 npm install
 npm run dev
 ```
 
-This starts Vite dev server and Electron concurrently with hot reload.
+This starts the Vite dev server and Electron concurrently with hot reload.
 
 ### Building
 
@@ -30,26 +47,4 @@ npm run build:win    # Windows
 npm run build:linux  # Linux
 ```
 
-## How to Contribute
-
-1. **Open an issue first** -- For bugs, describe what happened and how to reproduce. For features, describe the use case.
-2. **Fork and branch** -- Create a branch from `main` with a descriptive name.
-3. **Keep changes focused** -- One fix or feature per PR. Small PRs are reviewed faster.
-4. **Test your changes** -- Run `npm run typecheck` and `npm test` before submitting.
-5. **Submit a PR** -- Describe what changed and why. Link the related issue.
-
-Don't expect your PR to be merged quickly. I'm a solo developer.
-
-## Code Style
-
-- TypeScript throughout
-- Follow existing patterns in the codebase
-- No unnecessary dependencies
-
-## Releases
-
-Releases are handled by the maintainer only. Do not bump versions or create tags in PRs.
-
-## Questions?
-
-Open an issue or join the [Discord](https://discord.com/invite/dYGPPH6tPC).
+Output goes to the `release/` directory.

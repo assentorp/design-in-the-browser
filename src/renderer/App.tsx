@@ -8,6 +8,7 @@ import EditQueuePanel from './components/EditQueuePanel';
 import ProjectConfigModal from './components/ProjectConfigModal';
 import SettingsModal from './components/SettingsModal';
 import WhatsNewModal from './components/WhatsNewModal';
+import ConfirmDialogHost from './components/ConfirmDialog';
 import { changelog } from './changelog';
 import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData } from '../shared/types';
 import { createSession } from '../shared/session';
@@ -17,6 +18,15 @@ document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// The macOS title bar is hidden (traffic lights only), so the renderer
+// provides the drag region and clears space for the traffic lights.
+const isMac = navigator.platform.includes('Mac');
+
+// Sentinel ids for the always-open Home tab and the transient "New" tab
+// (both show the projects screen; New comes from the + button).
+const HOME_TAB = 'home';
+const NEW_TAB = 'new-project';
 
 const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   claude: 'claude',
@@ -65,7 +75,7 @@ export default function App() {
   focusedPaneRef.current = focusedPane;
   const browserZoomRef = useRef<((direction: string) => void) | null>(null);
   const terminalZoomRef = useRef<((direction: string) => void) | null>(null);
-  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [newTabOpen, setNewTabOpen] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showWhatsNewModal, setShowWhatsNewModal] = useState(false);
   const [hasUnseenChanges, setHasUnseenChanges] = useState(false);
@@ -108,12 +118,6 @@ export default function App() {
       setPresetsLoaded(true);
     });
   }, []);
-
-  // Show config modal on launch
-  useEffect(() => {
-    if (!presetsLoaded || sessions.length > 0) return;
-    setShowConfigModal(true);
-  }, [presetsLoaded]);
 
   // Listen for settings menu trigger
   useEffect(() => {
@@ -301,7 +305,11 @@ export default function App() {
     pendingCommandsRef.current = remaining;
   }, [sessions]);
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  // The Home and New tabs show the projects screen instead of session panes.
+  const activeSession = activeSessionId === HOME_TAB || activeSessionId === NEW_TAB
+    ? undefined
+    : sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  const newTabActive = activeSessionId === NEW_TAB && newTabOpen;
   if (activeSession) {
     browserWidthRef.current = activeSession.browserWidth;
   }
@@ -390,8 +398,17 @@ export default function App() {
     });
   }, []);
 
+  // "+" opens (or re-focuses) the transient New tab — the projects screen
+  // in its own tab, in place of the old new-project dialog.
   const handleNewSession = useCallback(() => {
-    setShowConfigModal(true);
+    setNewTabOpen(true);
+    setEditActions(null);
+    setActiveSessionId(NEW_TAB);
+  }, []);
+
+  const handleCloseNewTab = useCallback(() => {
+    setNewTabOpen(false);
+    setActiveSessionId((current) => (current === NEW_TAB ? HOME_TAB : current));
   }, []);
 
   const handleCreateProject = useCallback(
@@ -432,7 +449,7 @@ export default function App() {
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(newSession.id);
       setSessionCounter(newIndex);
-      setShowConfigModal(false);
+      setNewTabOpen(false);
 
       // Starter Projects don't run anything in the Dev Server tab — print a
       // banner so the user knows what's serving the page and how it stops.
@@ -555,21 +572,26 @@ export default function App() {
       // Remove saved session config
       setSessions((prev) => {
         const filtered = prev.filter((s) => s.id !== sessionId);
-        if (filtered.length === 0) {
-          // Show modal to create a new project instead of auto-creating
-          setShowConfigModal(true);
-          return filtered;
-        }
         if (sessionId === activeSessionId) {
-          const index = prev.findIndex((s) => s.id === sessionId);
-          const newActiveIndex = Math.max(0, index - 1);
-          setActiveSessionId(filtered[newActiveIndex]?.id || filtered[0].id);
+          if (filtered.length === 0) {
+            // Last project closed — land on the Home tab
+            setActiveSessionId(HOME_TAB);
+          } else {
+            const index = prev.findIndex((s) => s.id === sessionId);
+            const newActiveIndex = Math.max(0, index - 1);
+            setActiveSessionId(filtered[newActiveIndex]?.id || filtered[0].id);
+          }
         }
         return filtered;
       });
     },
     [activeSessionId, sessions]
   );
+
+  const handleSelectHome = useCallback(() => {
+    setEditActions(null);
+    setActiveSessionId(HOME_TAB);
+  }, []);
 
   const handleSelectSession = useCallback((sessionId: string) => {
     if (sessionId !== activeSessionId) {
@@ -627,42 +649,10 @@ export default function App() {
     </div>
   );
 
-  // Handle case when no active session yet — show full-page config
-  if (sessions.length === 0 || !activeSession) {
-    return (
-      <div className="app">
-        {updateBanner}
-        {presetsLoaded ? (
-          <ProjectConfigModal
-            presets={projectPresets}
-            canClose={false}
-            onClose={() => {}}
-            onCreate={handleCreateProject}
-            onDeletePreset={handleDeletePreset}
-            onUpdatePreset={handleUpdatePreset}
-          />
-        ) : (
-          <div className="app-loading">
-            <div className="app-loading-spinner" />
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className="app">
+    <div className={`app${isMac ? ' mac' : ''}`}>
+      <ConfirmDialogHost />
       {updateBanner}
-      {showConfigModal && (
-        <ProjectConfigModal
-          presets={projectPresets}
-          canClose={true}
-          onClose={() => setShowConfigModal(false)}
-          onCreate={handleCreateProject}
-          onDeletePreset={handleDeletePreset}
-          onUpdatePreset={handleUpdatePreset}
-        />
-      )}
       {showSettingsModal && (
         <SettingsModal onClose={() => setShowSettingsModal(false)} />
       )}
@@ -671,16 +661,38 @@ export default function App() {
       )}
       <TabBar
         sessions={sessions}
-        activeSessionId={activeSessionId}
+        activeSessionId={activeSession?.id ?? HOME_TAB}
+        homeActive={!activeSession && !newTabActive}
+        newTabOpen={newTabOpen}
+        newTabActive={newTabActive}
+        onCloseNewTab={handleCloseNewTab}
+        onSelectHome={handleSelectHome}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
         onCloseSession={handleCloseSession}
-        terminalCollapsed={activeSession.terminalCollapsed}
-        onToggleTerminal={toggleTerminal}
+        terminalCollapsed={activeSession?.terminalCollapsed ?? true}
+        onToggleTerminal={activeSession ? toggleTerminal : undefined}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenWhatsNew={handleOpenWhatsNew}
         hasUnseenChanges={hasUnseenChanges}
       />
+      {!activeSession ? (
+        // Home / New tab: the projects screen (also the first-run onboarding
+        // host). Keyed so each tab keeps its own view state.
+        presetsLoaded ? (
+          <ProjectConfigModal
+            key={newTabActive ? 'new' : 'home'}
+            presets={projectPresets}
+            onCreate={handleCreateProject}
+            onDeletePreset={handleDeletePreset}
+            onUpdatePreset={handleUpdatePreset}
+          />
+        ) : (
+          <div className="app-loading">
+            <div className="app-loading-spinner" />
+          </div>
+        )
+      ) : (
       <div className="panes">
         <div
           className="pane browser-pane"
@@ -735,6 +747,7 @@ export default function App() {
           </Terminal>
         </div>
       </div>
+      )}
     </div>
   );
 }
