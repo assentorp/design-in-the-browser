@@ -7,7 +7,7 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '2.0.0',
-    date: 'July 25, 2026',
+    date: 'July 26, 2026',
     changes: [
       'New name: Design In The Browser is now Dosmos — same app, shorter name. Auto-updates, your settings, and your projects all carry over unchanged',
       'A new Home: projects live on a full-width dashboard in a persistent first tab instead of a floating dialog — with Figma-style cards showing live page previews and favicons, a filter that expands from the toolbar (Cmd+F), and a + tab for new projects',
