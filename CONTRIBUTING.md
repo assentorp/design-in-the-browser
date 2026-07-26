@@ -1,6 +1,6 @@
-# Contributing to Design In The Browser
+# Contributing to Dosmos
 
-Design In The Browser is open source under the [MIT license](LICENSE), but it is a **read-only open source project: external contributions are not accepted.**
+Dosmos is open source under the [MIT license](LICENSE), but it is a **read-only open source project: external contributions are not accepted.**
 
 This isn't personal — it's a deliberate choice. The project is built and maintained by a solo developer, and keeping a single copyright holder keeps the project's licensing options simple. Pull requests will be closed with a pointer to this file, regardless of quality.
 

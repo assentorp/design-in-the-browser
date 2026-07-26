@@ -213,7 +213,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </div>
           </div>
           {appVersion && (
-            <div className="settings-version">Design In The Browser v{appVersion}</div>
+            <div className="settings-version">Dosmos v{appVersion}</div>
           )}
         </div>
       </div>

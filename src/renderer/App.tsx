@@ -456,7 +456,7 @@ export default function App() {
       if (config.usesStaticServer) {
         const banner =
           '\r\n' +
-          '  \x1b[1;36mDesign In The Browser\x1b[0m  \x1b[2m· Starter Project\x1b[0m\r\n' +
+          '  \x1b[1;36mDosmos\x1b[0m  \x1b[2m· Starter Project\x1b[0m\r\n' +
           '\r\n' +
           `  \x1b[32m●\x1b[0m Static server  \x1b[2m${config.url}\x1b[0m\r\n` +
           '  \x1b[32m●\x1b[0m Hot reload    \x1b[2mfile changes auto-refresh the browser\x1b[0m\r\n' +

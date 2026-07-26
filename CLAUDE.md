@@ -1,4 +1,4 @@
-# Claude Context for Design In The Browser
+# Claude Context for Dosmos (formerly "Design In The Browser")
 
 ## IMPORTANT: Instructions for Claude
 
@@ -97,18 +97,20 @@ GitHub Actions builds macOS (arm64 + x64) and Windows, uploads:
 {
   "build": {
     "appId": "com.designinthebrowser.app",
-    "productName": "Design In The Browser",
+    "productName": "Dosmos",
     "publish": {
       "provider": "github",
       "owner": "assentorp",
-      "repo": "design-in-the-browser"
+      "repo": "ditb-releases"
     },
     "win": {
-      "artifactName": "Design-In-The-Browser-Setup-${version}.${ext}"
+      "artifactName": "Dosmos-Setup-${version}.${ext}"
     }
   }
 }
 ```
+
+Note on the rename: the app was renamed to Dosmos, but `appId`, the npm package `name`, the GitHub repos, and the localStorage/userData identifiers deliberately keep the old "designinthebrowser"/"ditb" values — do not "clean these up". The packaged app pins userData to the legacy "Design In The Browser" folder in `src/main/index.ts` so existing users keep their settings.
 
 ### App Settings Interface
 ```typescript

@@ -9,6 +9,12 @@ import { getSettings, saveSettings } from './settings';
 // Disable Chromium's media router to prevent macOS local network permission prompt
 app.commandLine.appendSwitch('disable-features', 'MediaRouter');
 
+// The app was renamed from "Design In The Browser" to "Dosmos". Keep the
+// original userData folder so existing users don't lose settings/presets.
+if (app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'Design In The Browser'));
+}
+
 // Disable hardware acceleration on Windows to prevent gray screen issues
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration();
@@ -73,7 +79,7 @@ function createWindow() {
     height: saved?.height || Math.round(workArea.height * 0.9),
     minWidth: 1000,
     minHeight: 600,
-    title: 'Design In The Browser',
+    title: 'Dosmos',
     icon,
     backgroundColor: '#1a1a1a',
     // On macOS, hide the title bar text but keep the traffic lights and
@@ -129,7 +135,7 @@ function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[Main] Page loaded successfully');
-    mainWindow!.setTitle('Design In The Browser');
+    mainWindow!.setTitle('Dosmos');
     // Chromium remembers per-origin zoom across loads — make sure the app
     // chrome always comes back at 100%.
     mainWindow!.webContents.setZoomLevel(0);
