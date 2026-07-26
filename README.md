@@ -1,4 +1,4 @@
-# Design In The Browser
+# Dosmos
 
 ![icon](https://github.com/user-attachments/assets/b57c4c81-f109-427f-b6e7-454dea817203)
 
@@ -121,7 +121,7 @@ src/
 
 ## Contributing
 
-Design In The Browser is open source but **does not accept external contributions** — see [CONTRIBUTING.md](CONTRIBUTING.md) for the policy, and for what you can do instead (bug reports, feature suggestions, forks).
+Dosmos is open source but **does not accept external contributions** — see [CONTRIBUTING.md](CONTRIBUTING.md) for the policy, and for what you can do instead (bug reports, feature suggestions, forks).
 
 ## License
 

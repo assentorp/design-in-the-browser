@@ -53,7 +53,7 @@
   },
   "build": {
     "appId": "com.designinthebrowser.app",
-    "productName": "Design In The Browser",
+    "productName": "Dosmos",
     "directories": {
       "output": "release"
     },
@@ -68,7 +68,7 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
-      "artifactName": "Design-In-The-Browser-${version}-${arch}-mac.${ext}",
+      "artifactName": "Dosmos-${version}-${arch}-mac.${ext}",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
@@ -76,11 +76,11 @@
       "notarize": true
     },
     "dmg": {
-      "artifactName": "Design-In-The-Browser-${version}-${arch}.${ext}"
+      "artifactName": "Dosmos-${version}-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.png",
-      "artifactName": "Design-In-The-Browser-Setup-${version}.${ext}"
+      "artifactName": "Dosmos-Setup-${version}.${ext}"
     },
     "linux": {
       "icon": "build/icon.png"

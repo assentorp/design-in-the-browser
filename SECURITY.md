@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Design In The Browser, please report it responsibly.
+If you discover a security vulnerability in Dosmos, please report it responsibly.
 
 **Do not open a public issue.**
 
@@ -16,7 +16,7 @@ You'll receive a response within 72 hours. We'll work with you to understand the
 
 ## Scope
 
-This policy covers the Design In The Browser desktop application and its source code. It does not cover third-party dependencies (report those to the respective maintainers).
+This policy covers the Dosmos desktop application and its source code. It does not cover third-party dependencies (report those to the respective maintainers).
 
 ## Supported Versions
 

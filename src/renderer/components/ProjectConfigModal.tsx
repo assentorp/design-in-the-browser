@@ -933,7 +933,7 @@ export default function ProjectConfigModal({
       <div className="project-config-page">
         <div className="onboarding-card">
           <div className="onboarding-gate">
-            <img className="onboarding-gate-appicon" src={appIcon} alt="Design In The Browser" />
+            <img className="onboarding-gate-appicon" src={appIcon} alt="Dosmos" />
             <h2 className="onboarding-gate-title">Let's get started</h2>
             <p className="onboarding-gate-subtitle">Make sure you have the following ready:</p>
             <div className="onboarding-checklist">
@@ -1011,7 +1011,7 @@ export default function ProjectConfigModal({
             </svg>
             <h2 className="onboarding-gate-title">Share Analytics</h2>
             <p className="onboarding-gate-text">
-              Help improve Design In The Browser by sharing anonymous crash reports and usage events via PostHog (EU servers). No personal data, project content, or file paths are collected. You can change this anytime in Settings.
+              Help improve Dosmos by sharing anonymous crash reports and usage events via PostHog (EU servers). No personal data, project content, or file paths are collected. You can change this anytime in Settings.
             </p>
             <button className="btn btn-lg btn-primary onboarding-continue" onClick={() => handleAnalyticsChoice(true)}>
               Share with Developers

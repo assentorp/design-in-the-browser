@@ -1,6 +1,6 @@
 # Privacy
 
-Design In The Browser respects your privacy. Here's what you need to know.
+Dosmos respects your privacy. Here's what you need to know.
 
 ## Analytics
 
