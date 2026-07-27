@@ -11,13 +11,15 @@ No more tab-switching, screenshot-pasting, and explaining which button you mean.
 
 A desktop app for visually annotating elements in a live browser and sending edit instructions directly to an AI coding assistant running in a side-by-side terminal. Point at what you want changed, describe the change, and let the AI handle the code.
 
-**[Download for macOS (Apple Silicon)](https://github.com/assentorp/ditb-releases/releases/download/v1.8.0/Design-In-The-Browser-1.8.0-arm64.dmg)** | **[macOS (Intel)](https://github.com/assentorp/ditb-releases/releases/download/v1.8.0/Design-In-The-Browser-1.8.0-x64.dmg)** | **[Windows](https://github.com/assentorp/ditb-releases/releases/download/v1.8.0/Design-In-The-Browser-Setup-1.8.0.exe)**
+**[Download for macOS (Apple Silicon)](https://github.com/assentorp/ditb-releases/releases/download/v2.0.0/Dosmos-2.0.0-arm64.dmg)** | **[macOS (Intel)](https://github.com/assentorp/ditb-releases/releases/download/v2.0.0/Dosmos-2.0.0-x64.dmg)** | **[Windows](https://github.com/assentorp/ditb-releases/releases/download/v2.0.0/Dosmos-Setup-2.0.0.exe)**
 
-Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://cursor.sh), [Codex](https://github.com/openai/codex), Antigravity, Qwen, or any custom CLI command · v1.8.0 · macOS 13+ / Windows 10+
+All releases: [github.com/assentorp/ditb-releases/releases](https://github.com/assentorp/ditb-releases/releases)
+
+Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://cursor.sh), [Codex](https://github.com/openai/codex), Antigravity, Qwen, or any custom CLI command · v2.0.0 · macOS 13+ / Windows 10+
 
 ## How it works
 
-1. **Open a project** — point at an existing project (path, dev server command, URL), or create a **Starter Project** from a built-in template with zero setup
+1. **Open a project** — a guided flow walks you through pointing at an existing project (folder, dev server command, URL) or spinning up a **Starter Project** from a built-in template with zero setup
 2. **Browse your app** — a built-in browser loads your running dev server (Starter Projects get a built-in static server with hot reload)
 3. **Annotate** — click elements, drag to select areas, or multi-select to describe changes
 4. **AI edits** — annotations are sent as prompts to your CLI tool in the integrated terminal
@@ -29,14 +31,17 @@ Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Curso
 - **Point & Click** — click any element to tell AI what to change, no screenshots needed
 - **Area Select** — drag a box around any area to give AI the visual context it needs
 - **Multi-Edit** — select multiple elements, queue up changes, send them all at once (`Cmd+Shift+E`)
-- **Reference Images** — drop in a design screenshot and AI matches it; images dragged into the terminal attach as real images, not file paths
+- **Reference Images** — drop in one or more design screenshots and AI matches them; images dragged into the terminal attach as real images, not file paths
 - **Design Tokens** — type `>` in a prompt to search your Tailwind tokens with color swatches and insert them directly
 - **File Mentions** — type `@` to autocomplete project file paths into your prompt
 
 ### Built-in code editor
 - **Edit code in place** — clicking an element's "Edit code" button opens its source file right beside the page, with syntax highlighting for JS/TS/JSX/HTML/CSS, `Cmd+S` to save, and a resizable panel
 - **Project editor** — the Code button opens the whole project with a file tree sidebar; prefer an external editor? VS Code, Cursor, Zed, Sublime, WebStorm, and Nova are available in Settings
+- **Go to file** — `Cmd+P` opens a VS Code-style file palette: type to filter, matched text highlights, arrow keys and Enter to open
+- **File tree** — filter the tree with a search box, with file-type icons (TS, JS, JSON, images, and more) in the tree, search results, and the palette
 - **Smart source matching** — component names, data attributes, headings, text, and the URL are cross-checked to find the right file, with a "wrong file?" picker for close calls
+- **Unsaved-change protection** — closing the panel or switching files asks before discarding edits
 
 ### Inspect & measure
 - **CSS Inspector** — hold `Alt` to inspect classes, computed styles, and colors; click to copy values, toggle hex/rgb/hsl
@@ -47,10 +52,13 @@ Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Curso
 - **Responsive Testing** — switch between desktop, tablet, and mobile viewports instantly
 
 ### Workspace
+- **Home dashboard** — projects live on a full-width dashboard in a persistent first tab, with cards showing live page previews and favicons, and a filter that expands from the toolbar (`Cmd+F`)
+- **Guided project setup** — a short step-by-step flow instead of one big form: pick Existing or Starter, point at the folder (the name fills itself in), confirm how it starts, choose your AI tool; model, auto mode, permissions, and shell live under Advanced options
 - **Integrated Terminal** — browser and terminal in one window with multi-tab support, renameable tabs, and zoom
 - **Starter Projects** — spin up a boilerplate landing page with a built-in hot-reloading static server, no framework or dev server needed
 - **Project Presets** — save and switch between project configurations; WSL supported on Windows
-- **Session Tabs** — work on multiple projects simultaneously (`Cmd+1`–`9` to switch)
+- **Session Tabs** — work on multiple projects simultaneously (`Cmd+1`–`9` to switch), plus a `+` tab for new projects
+- **Native-feeling chrome** — the macOS title bar is hidden so the slim tab bar is the top of the app, and system popups are replaced with in-app dialogs
 - **Browser niceties** — right-click context menu, external links open in your default browser, clear cache & reload, context-aware zoom
 - **Auto-Updates** — automatic check and delta updates on startup
 
@@ -68,6 +76,8 @@ Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Curso
 | `Cmd+R` / `Cmd+Shift+R` | Reload / clear cache & reload |
 | `Cmd+=` / `Cmd+-` / `Cmd+0` | Zoom focused pane / reset |
 | `F12` or `Alt+Cmd+I` | Docked DevTools |
+| `Cmd+P` | Go to file (code editor open) |
+| `Cmd+F` | Filter projects (Home) |
 | `Cmd+1`–`Cmd+9` | Switch project tabs |
 
 On Windows, use `Ctrl` in place of `Cmd`.
@@ -80,8 +90,8 @@ On Windows, use `Ctrl` in place of `Cmd`.
 ## Running from source
 
 ```bash
-git clone https://github.com/assentorp/design-in-the-browser.git
-cd design-in-the-browser
+git clone https://github.com/assentorp/dosmos.git
+cd dosmos
 npm install
 npm run dev
 ```

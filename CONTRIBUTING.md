@@ -30,8 +30,8 @@ If you're forking or just want to run the app yourself:
 ### Development
 
 ```bash
-git clone https://github.com/assentorp/design-in-the-browser.git
-cd design-in-the-browser
+git clone https://github.com/assentorp/dosmos.git
+cd dosmos
 npm install
 npm run dev
 ```

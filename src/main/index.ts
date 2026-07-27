@@ -9,11 +9,15 @@ import { getSettings, saveSettings } from './settings';
 // Disable Chromium's media router to prevent macOS local network permission prompt
 app.commandLine.appendSwitch('disable-features', 'MediaRouter');
 
-// The app was renamed from "Design In The Browser" to "Dosmos". Keep the
-// original userData folder so existing users don't lose settings/presets.
-if (app.isPackaged) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'Design In The Browser'));
-}
+// The app was renamed from "Design In The Browser" to "Dosmos". The npm package
+// name is deliberately unchanged, so set the display name explicitly (it drives
+// the macOS app menu in dev builds) and pin userData to the folders that were
+// already in use so existing users don't lose settings/presets.
+app.setName('Dosmos');
+app.setPath(
+  'userData',
+  path.join(app.getPath('appData'), app.isPackaged ? 'Design In The Browser' : 'designinthebrowser')
+);
 
 // Disable hardware acceleration on Windows to prevent gray screen issues
 if (process.platform === 'win32') {
