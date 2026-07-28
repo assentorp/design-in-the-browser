@@ -89,6 +89,10 @@ export type CliTool = 'claude' | 'cursor' | 'antigravity' | 'codex' | 'qwen' | '
 
 export type ShellType = 'default' | 'wsl';
 
+// Claude's --permission-mode values. 'default' means "don't pass the flag".
+// 'auto' is a newer Claude Code mode and is distinct from 'acceptEdits'.
+export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'auto' | 'plan';
+
 // 'builtin' is the in-app CodeMirror editor; the rest launch external editors.
 export type CodeEditor = 'builtin' | 'vscode' | 'cursor' | 'zed' | 'sublime' | 'webstorm' | 'nova';
 export type ExternalEditor = Exclude<CodeEditor, 'builtin'>;
@@ -126,7 +130,10 @@ export interface ProjectPreset {
   shell?: ShellType;
   claudeModel?: string;
   dangerouslySkipPermissions?: boolean;
-  // Start Claude in auto mode (--permission-mode acceptEdits)
+  // Permission mode Claude starts in (--permission-mode). Omitted = default.
+  permissionMode?: ClaudePermissionMode;
+  // Legacy: the old "Start in auto mode" checkbox, which actually passed
+  // acceptEdits. Read for presets saved before permissionMode existed.
   autoAcceptEdits?: boolean;
   customCliCommand?: string;
   // True for Starter Project presets — when opened, the built-in static

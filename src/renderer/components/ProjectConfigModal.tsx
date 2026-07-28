@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { initAnalytics } from '../analytics';
-import type { ProjectPreset, CliTool, ShellType, CodeEditor } from '../../shared/types';
+import type { ProjectPreset, CliTool, ShellType, CodeEditor, ClaudePermissionMode } from '../../shared/types';
 // 128px copy of build/icon.png — the full 1024px app icon is 726 KB and was
 // getting bundled into the renderer just to render at 56–64px.
 import appIcon from '../assets/icon-128.png';
@@ -18,7 +18,7 @@ interface ProjectConfigModalProps {
     saveAsPreset: boolean;
     claudeModel: string;
     dangerouslySkipPermissions: boolean;
-    autoAcceptEdits: boolean;
+    permissionMode: ClaudePermissionMode;
     customCliCommand: string;
     usesStaticServer?: boolean;
   }) => void;
@@ -31,6 +31,18 @@ type ProjectType = 'existing' | 'starter';
 
 // Aliases offered in the Model dropdown; anything else goes through Custom…
 const KNOWN_CLAUDE_MODELS = ['', 'fable', 'opus', 'sonnet', 'haiku'];
+
+const PERMISSION_MODES: { value: ClaudePermissionMode; label: string; hint?: string }[] = [
+  { value: 'default', label: 'Default (ask before each action)' },
+  { value: 'acceptEdits', label: 'Accept edits (file edits run without asking)' },
+  { value: 'auto', label: 'Auto (Claude decides what to run)', hint: 'Requires a recent Claude Code version.' },
+  { value: 'plan', label: 'Plan (research and propose, no changes)' },
+];
+
+// Presets saved before permissionMode existed only had the old "auto mode"
+// checkbox, which passed acceptEdits — keep those projects behaving the same.
+const presetPermissionMode = (preset: ProjectPreset): ClaudePermissionMode =>
+  preset.permissionMode || (preset.autoAcceptEdits ? 'acceptEdits' : 'default');
 
 const presetInitials = (name: string): string => {
   const words = name.trim().split(/[\s\-_./]+/).filter(Boolean);
@@ -90,7 +102,7 @@ export default function ProjectConfigModal({
   const [claudeModel, setClaudeModel] = useState('');
   const [modelIsCustom, setModelIsCustom] = useState(false);
   const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
-  const [autoAcceptEdits, setAutoAcceptEdits] = useState(false);
+  const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>('default');
   const [customCliCommand, setCustomCliCommand] = useState('');
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -242,7 +254,7 @@ export default function ProjectConfigModal({
       saveAsPreset: false,
       claudeModel: preset.claudeModel || '',
       dangerouslySkipPermissions: preset.dangerouslySkipPermissions || false,
-      autoAcceptEdits: preset.autoAcceptEdits || false,
+      permissionMode: presetPermissionMode(preset),
       customCliCommand: preset.customCliCommand || '',
       usesStaticServer: preset.usesStaticServer,
     });
@@ -259,12 +271,12 @@ export default function ProjectConfigModal({
     setClaudeModel(preset.claudeModel || '');
     setModelIsCustom(!KNOWN_CLAUDE_MODELS.includes(preset.claudeModel || ''));
     setDangerouslySkipPermissions(preset.dangerouslySkipPermissions || false);
-    setAutoAcceptEdits(preset.autoAcceptEdits || false);
+    setPermissionMode(presetPermissionMode(preset));
     setCustomCliCommand(preset.customCliCommand || '');
     setAdvancedOpen(Boolean(
       preset.claudeModel
       || preset.dangerouslySkipPermissions
-      || preset.autoAcceptEdits
+      || presetPermissionMode(preset) !== 'default'
       || (preset.shell && preset.shell !== 'default')
     ));
     setView('edit');
@@ -281,7 +293,7 @@ export default function ProjectConfigModal({
     setClaudeModel('');
     setModelIsCustom(false);
     setDangerouslySkipPermissions(false);
-    setAutoAcceptEdits(false);
+    setPermissionMode('default');
     setCustomCliCommand('');
     setSaveAsPreset(true);
     setAdvancedOpen(false);
@@ -343,7 +355,7 @@ export default function ProjectConfigModal({
           saveAsPreset,
           claudeModel: cliTool === 'claude' ? claudeModel.trim() : '',
           dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
-          autoAcceptEdits: cliTool === 'claude' ? autoAcceptEdits : false,
+          permissionMode: cliTool === 'claude' ? permissionMode : 'default',
           customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : '',
           usesStaticServer: true,
         });
@@ -370,7 +382,7 @@ export default function ProjectConfigModal({
         shell,
         claudeModel: cliTool === 'claude' ? claudeModel.trim() : undefined,
         dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : undefined,
-        autoAcceptEdits: cliTool === 'claude' ? autoAcceptEdits : undefined,
+        permissionMode: cliTool === 'claude' && permissionMode !== 'default' ? permissionMode : undefined,
         customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : undefined,
         // Editing must not reset the card's recency in the sorted grid
         lastOpenedAt: presets.find((p) => p.id === editingPresetId)?.lastOpenedAt,
@@ -389,10 +401,12 @@ export default function ProjectConfigModal({
       saveAsPreset: !editingPresetId && saveAsPreset,
       claudeModel: cliTool === 'claude' ? claudeModel.trim() : '',
       dangerouslySkipPermissions: cliTool === 'claude' ? dangerouslySkipPermissions : false,
-      autoAcceptEdits: cliTool === 'claude' ? autoAcceptEdits : false,
+      permissionMode: cliTool === 'claude' ? permissionMode : 'default',
       customCliCommand: cliTool === 'custom' ? customCliCommand.trim() : '',
     });
   };
+
+  const permissionModeHint = PERMISSION_MODES.find((m) => m.value === permissionMode)?.hint;
 
   const isStarter = view === 'new' && projectType === 'starter';
   const isValid = name.trim()
@@ -739,14 +753,20 @@ export default function ProjectConfigModal({
                   )}
                   {cliTool === 'claude' && (
                     <div className="form-group">
-                      <label className="form-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={autoAcceptEdits}
-                          onChange={(e) => setAutoAcceptEdits(e.target.checked)}
-                        />
-                        Start in auto mode (auto-accept edits)
-                      </label>
+                      <label>Permission mode</label>
+                      <select
+                        value={permissionMode}
+                        onChange={(e) => setPermissionMode(e.target.value as ClaudePermissionMode)}
+                        className="form-select"
+                        disabled={dangerouslySkipPermissions}
+                      >
+                        {PERMISSION_MODES.map((mode) => (
+                          <option key={mode.value} value={mode.value}>{mode.label}</option>
+                        ))}
+                      </select>
+                      {!dangerouslySkipPermissions && permissionModeHint && (
+                        <span className="form-hint">{permissionModeHint}</span>
+                      )}
                       <label className="form-checkbox-label">
                         <input
                           type="checkbox"
@@ -757,7 +777,8 @@ export default function ProjectConfigModal({
                       </label>
                       {dangerouslySkipPermissions && (
                         <span className="form-hint form-hint-warning">
-                          Skips all permission checks. Only use in trusted projects you fully control.
+                          Skips all permission checks, so the permission mode above no longer applies.
+                          Only use in trusted projects you fully control.
                         </span>
                       )}
                     </div>

@@ -10,7 +10,7 @@ import SettingsModal from './components/SettingsModal';
 import WhatsNewModal from './components/WhatsNewModal';
 import ConfirmDialogHost from './components/ConfirmDialog';
 import { changelog } from './changelog';
-import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData } from '../shared/types';
+import type { Session, ProjectPreset, CliTool, ShellType, AnnotationData, ClaudePermissionMode } from '../shared/types';
 import { createSession } from '../shared/session';
 
 // Prevent Electron from navigating when files are dragged onto the window
@@ -412,7 +412,7 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(
-    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; autoAcceptEdits: boolean; customCliCommand: string; usesStaticServer?: boolean }) => {
+    (config: { name: string; path: string; startCommand: string; url: string; cliTool: CliTool; shell: ShellType; saveAsPreset: boolean; claudeModel: string; dangerouslySkipPermissions: boolean; permissionMode: ClaudePermissionMode; customCliCommand: string; usesStaticServer?: boolean }) => {
       const newIndex = sessionCounter + 1;
       const newSession = createSession(
         { name: config.name, path: config.path, startCommand: config.startCommand, shell: config.shell },
@@ -479,7 +479,7 @@ export default function App() {
           shell: config.shell,
           claudeModel: config.claudeModel || undefined,
           dangerouslySkipPermissions: config.dangerouslySkipPermissions || undefined,
-          autoAcceptEdits: config.autoAcceptEdits || undefined,
+          permissionMode: config.permissionMode !== 'default' ? config.permissionMode : undefined,
           customCliCommand: config.cliTool === 'custom' ? config.customCliCommand : undefined,
           usesStaticServer: config.usesStaticServer || undefined,
           // Creating a project also opens it, so it's the most recent
@@ -509,8 +509,8 @@ export default function App() {
       if (config.cliTool === 'claude') {
         if (config.claudeModel) cliCommand += ` --model ${config.claudeModel}`;
         if (config.dangerouslySkipPermissions) cliCommand += ' --dangerously-skip-permissions';
-        // Bypass already skips every prompt, so auto mode would be redundant
-        else if (config.autoAcceptEdits) cliCommand += ' --permission-mode acceptEdits';
+        // Bypass already skips every prompt, so a permission mode would be redundant
+        else if (config.permissionMode !== 'default') cliCommand += ` --permission-mode ${config.permissionMode}`;
       }
 
       commands.push({
