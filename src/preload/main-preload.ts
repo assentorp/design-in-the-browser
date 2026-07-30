@@ -162,7 +162,9 @@ const mainAPI: MainAPI = {
 
   clearWebviewCache: () => ipcRenderer.invoke('webview:clear-cache'),
 
-  sendAllEdits: () => ipcRenderer.send('webview:send-all'),
+  // targetId scopes the flush to one project's page; omitting it flushes every
+  // webview (the old behaviour, kept as a fallback before a page is attached).
+  sendAllEdits: (targetId?: number) => ipcRenderer.send('webview:send-all', targetId),
 
   attachDevTools: (targetId: number, bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> => {
     return ipcRenderer.invoke('devtools:attach', { targetId, bounds });
@@ -181,10 +183,11 @@ contextBridge.exposeInMainWorld('mainAPI', mainAPI);
 console.log('[Preload] mainAPI exposed to window');
 
 // Each of these channels has a single renderer consumer, but that consumer
-// re-registers on every React mount (Browser remounts on each project-tab
-// switch) and there is no unsubscribe. Keep exactly one ipcRenderer listener
-// per channel and let re-registration REPLACE the callback, so listeners and
-// stale closures don't accumulate for the app's lifetime.
+// re-registers whenever it changes (every open project keeps a Browser
+// mounted, and the visible one claims these channels on each tab switch) and
+// there is no unsubscribe. Keep exactly one ipcRenderer listener per channel
+// and let re-registration REPLACE the callback, so listeners and stale
+// closures don't accumulate for the app's lifetime.
 function exposeReplaceableListener(globalName: string, channel: string) {
   let current: ((...args: unknown[]) => void) | null = null;
   ipcRenderer.on(channel, (_event, ...args: unknown[]) => current?.(...args));

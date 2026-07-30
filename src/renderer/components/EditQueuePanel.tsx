@@ -1,4 +1,4 @@
-import type { PendingEdit, EditActions } from './Browser';
+import { sendAllEditsToActiveWebview, type PendingEdit, type EditActions } from './Browser';
 
 interface EditQueuePanelProps {
   edits: PendingEdit[];
@@ -36,7 +36,7 @@ export default function EditQueuePanel({ edits, actions, cliRunning }: EditQueue
       <div className="edit-queue-actions">
         <button
           className={`edit-queue-send${cliRunning ? ' edit-queue-send-waiting' : ''}`}
-          onClick={() => window.mainAPI?.sendAllEdits()}
+          onClick={() => sendAllEditsToActiveWebview()}
           title={cliRunning ? 'Claude is busy — click to send anyway' : undefined}
         >
           {cliRunning ? 'Waiting...' : 'Send'}

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { initAnalytics, disableAnalytics } from './analytics';
-import Browser, { type PendingEdit, type EditActions } from './components/Browser';
+import Browser, { sendAllEditsToActiveWebview, type PendingEdit, type EditActions } from './components/Browser';
 import Terminal, { destroyTerminalSession, scrollTerminalToBottom, writeToTerminal } from './components/Terminal';
 import Resizer from './components/Resizer';
 import TabBar from './components/TabBar';
@@ -27,6 +27,10 @@ const isMac = navigator.platform.includes('Mac');
 // (both show the projects screen; New comes from the + button).
 const HOME_TAB = 'home';
 const NEW_TAB = 'new-project';
+
+// Stable empty queue so a project with no pending edits doesn't hand
+// EditQueuePanel a fresh array on every render.
+const NO_EDITS: PendingEdit[] = [];
 
 const CLI_COMMANDS: Record<Exclude<CliTool, 'custom'>, string> = {
   claude: 'claude',
@@ -66,10 +70,9 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [annotateMode, setAnnotateMode] = useState(true);
   const [sessionCounter, setSessionCounter] = useState(0);
-  const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
-  const [editActions, setEditActions] = useState<EditActions | null>(null);
-  const editActionsRef = useRef<EditActions | null>(null);
-  editActionsRef.current = editActions;
+  // Every open project has its own live Browser, so the edit queue is tracked
+  // per session rather than as one "current" queue.
+  const [editStateBySession, setEditStateBySession] = useState<Record<string, { edits: PendingEdit[]; actions: EditActions }>>({});
   const [focusedPane, setFocusedPane] = useState<FocusedPane>('browser');
   const focusedPaneRef = useRef<FocusedPane>('browser');
   focusedPaneRef.current = focusedPane;
@@ -148,8 +151,9 @@ export default function App() {
     const onSendQueuedEdits = (window as unknown as { onSendQueuedEdits?: (cb: () => void) => void }).onSendQueuedEdits;
     if (onSendQueuedEdits) {
       onSendQueuedEdits(() => {
-        // Send directly via main process (bypasses fragile editActions ref)
-        window.mainAPI?.sendAllEdits();
+        // Send directly via main process (bypasses fragile editActions ref),
+        // targeted at the visible project — other projects' pages are alive too
+        sendAllEditsToActiveWebview();
       });
     }
   }, []);
@@ -314,6 +318,11 @@ export default function App() {
     browserWidthRef.current = activeSession.browserWidth;
   }
 
+  // The queue shown in the terminal pane is the visible project's queue.
+  const activeEditState = activeSession ? editStateBySession[activeSession.id] : undefined;
+  const pendingEdits = activeEditState?.edits ?? NO_EDITS;
+  const editActions = activeEditState?.actions ?? null;
+
   const updateSession = useCallback((sessionId: string, updates: Partial<Session>) => {
     setSessions((prev) =>
       prev.map((s) => (s.id === sessionId ? { ...s, ...updates } : s))
@@ -322,12 +331,15 @@ export default function App() {
 
   const handleAnnotation = useCallback((data: AnnotationData) => {
     window.mainAPI?.sendAnnotation(data);
-    // Scroll terminal to bottom so the user sees the new prompt
-    const session = sessionsRef.current.find((s) => s.id === activeSessionId);
+    // Scroll terminal to bottom so the user sees the new prompt. The annotation
+    // names its own session — background projects can annotate too (a queued
+    // edit flushing after a CLI goes idle), and their prompt must not scroll
+    // whatever terminal happens to be on screen.
+    const session = sessionsRef.current.find((s) => s.id === data.sessionId);
     if (session?.cliToolTabId) {
       setTimeout(() => scrollTerminalToBottom(session.cliToolTabId!), 100);
     }
-  }, [activeSessionId]);
+  }, []);
 
   const handleResize = useCallback(
     (delta: number) => {
@@ -349,20 +361,20 @@ export default function App() {
   );
 
   const handleUrlChange = useCallback(
-    (url: string) => {
-      updateSession(activeSessionId, { url });
+    (sessionId: string, url: string) => {
+      updateSession(sessionId, { url });
     },
-    [activeSessionId, updateSession]
+    [updateSession]
   );
 
-  const handlePendingEditsChange = useCallback((edits: PendingEdit[], actions: EditActions) => {
-    setPendingEdits(edits);
-    setEditActions(actions);
-    // Persist to session so edits survive tab switches
+  const handlePendingEditsChange = useCallback((sessionId: string, edits: PendingEdit[], actions: EditActions) => {
+    setEditStateBySession((prev) => ({ ...prev, [sessionId]: { edits, actions } }));
+    // Persist to the session so edits survive a page reload (the webview keeps
+    // them across tab switches, but a reload wipes the injected script's state)
     setSessions((prev) =>
-      prev.map((s) => (s.id === activeSessionId ? { ...s, pendingEdits: edits.map((e) => ({ note: e.note, selector: e.selector, tagName: e.tagName, text: e.text, attributes: e.attributes })) } : s))
+      prev.map((s) => (s.id === sessionId ? { ...s, pendingEdits: edits.map((e) => ({ note: e.note, selector: e.selector, tagName: e.tagName, text: e.text, attributes: e.attributes })) } : s))
     );
-  }, [activeSessionId]);
+  }, []);
 
   const handleAnnotateModeChange = useCallback((enabled: boolean) => {
     setAnnotateMode(enabled);
@@ -379,15 +391,16 @@ export default function App() {
   const toggleTerminalRef = useRef(toggleTerminal);
   toggleTerminalRef.current = toggleTerminal;
 
+  const activeSessionKey = activeSession?.id ?? activeSessionId;
   const handleTerminalTabsChange = useCallback(
     (tabs: Session['terminalTabs'], activeTabId: string, tabCounter: number) => {
-      updateSession(activeSessionId, {
+      updateSession(activeSessionKey, {
         terminalTabs: tabs,
         activeTerminalTabId: activeTabId,
         terminalTabCounter: tabCounter,
       });
     },
-    [activeSessionId, updateSession]
+    [activeSessionKey, updateSession]
   );
 
   const handleOpenWhatsNew = useCallback(() => {
@@ -402,7 +415,6 @@ export default function App() {
   // in its own tab, in place of the old new-project dialog.
   const handleNewSession = useCallback(() => {
     setNewTabOpen(true);
-    setEditActions(null);
     setActiveSessionId(NEW_TAB);
   }, []);
 
@@ -559,10 +571,14 @@ export default function App() {
         window.mainAPI?.stopStaticServer(closing.projectPath);
       }
 
-      // Clear UI state if closing the active session
+      // Drop the closed project's edit queue; its Browser is going away with it
+      setEditStateBySession((prev) => {
+        if (!(sessionId in prev)) return prev;
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
       if (sessionId === activeSessionId) {
-        setPendingEdits([]);
-        setEditActions(null);
         setAnnotateMode(true);
       }
 
@@ -589,20 +605,14 @@ export default function App() {
   );
 
   const handleSelectHome = useCallback(() => {
-    setEditActions(null);
     setActiveSessionId(HOME_TAB);
   }, []);
 
+  // Switching tabs is now just a visibility change: every project keeps its
+  // Browser (and its edit queue) mounted, so there is nothing to restore.
   const handleSelectSession = useCallback((sessionId: string) => {
-    if (sessionId !== activeSessionId) {
-      // Edit actions will be re-created by the Browser component when it mounts
-      setEditActions(null);
-      // Restore pending edits from the target session
-      const targetSession = sessionsRef.current.find((s) => s.id === sessionId);
-      setPendingEdits(targetSession?.pendingEdits || []);
-    }
     setActiveSessionId(sessionId);
-  }, [activeSessionId]);
+  }, []);
 
   // Cmd+1..9 switches project tabs (via menu accelerators)
   useEffect(() => {
@@ -676,7 +686,7 @@ export default function App() {
         onOpenWhatsNew={handleOpenWhatsNew}
         hasUnseenChanges={hasUnseenChanges}
       />
-      {!activeSession ? (
+      {!activeSession && (
         // Home / New tab: the projects screen (also the first-run onboarding
         // host). Keyed so each tab keeps its own view state.
         presetsLoaded ? (
@@ -692,62 +702,76 @@ export default function App() {
             <div className="app-loading-spinner" />
           </div>
         )
-      ) : (
-      <div className="panes">
+      )}
+      {/* Panes stay mounted — including while the projects screen is showing —
+          so every open project keeps its live page instead of reloading it from
+          scratch on the way back. */}
+      <div className="panes" style={activeSession ? undefined : { display: 'none' }}>
         <div
           className="pane browser-pane"
           style={{
-            width: activeSession.terminalCollapsed ? '100%' : `${activeSession.browserWidth}%`,
+            width: activeSession?.terminalCollapsed ? '100%' : `${activeSession?.browserWidth ?? browserWidthRef.current}%`,
           }}
           onMouseDown={() => setFocusedPane('browser')}
         >
-          <Browser
-            key={activeSessionId}
-            sessionId={activeSessionId}
-            url={activeSession.url}
-            onUrlChange={handleUrlChange}
-            annotateMode={annotateMode}
-            onAnnotateModeChange={handleAnnotateModeChange}
-            onPendingEditsChange={handlePendingEditsChange}
-            activeTerminalTabId={activeSession.cliToolTabId || activeSession.activeTerminalTabId}
-            projectPath={activeSession.projectPath}
-            onAnnotation={handleAnnotation}
-            cliRunning={activeSession.cliToolRunning}
-            initialEdits={activeSession.pendingEdits}
-            onZoom={browserZoomRef}
-            onToggleTerminal={toggleTerminal}
-          />
+          {sessions.map((session) => (
+            <div
+              key={session.id}
+              className="browser-host"
+              style={session.id === activeSession?.id ? undefined : { display: 'none' }}
+            >
+              <Browser
+                sessionId={session.id}
+                active={session.id === activeSession?.id}
+                url={session.url}
+                onUrlChange={handleUrlChange}
+                annotateMode={annotateMode}
+                onAnnotateModeChange={handleAnnotateModeChange}
+                onPendingEditsChange={handlePendingEditsChange}
+                activeTerminalTabId={session.cliToolTabId || session.activeTerminalTabId}
+                projectPath={session.projectPath}
+                onAnnotation={handleAnnotation}
+                cliRunning={session.cliToolRunning}
+                initialEdits={session.pendingEdits}
+                onZoom={browserZoomRef}
+                onToggleTerminal={toggleTerminal}
+              />
+            </div>
+          ))}
         </div>
-        {!activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}
+        {activeSession && !activeSession.terminalCollapsed && <Resizer onResize={handleResize} />}
         <div
-          className={`pane terminal-pane ${activeSession.terminalCollapsed ? 'collapsed' : ''}`}
+          className={`pane terminal-pane ${activeSession?.terminalCollapsed ? 'collapsed' : ''}`}
           style={{
-            width: activeSession.terminalCollapsed ? '0%' : `${100 - activeSession.browserWidth}%`,
+            width: activeSession?.terminalCollapsed ? '0%' : `${100 - (activeSession?.browserWidth ?? browserWidthRef.current)}%`,
           }}
           onMouseDown={() => setFocusedPane('terminal')}
         >
-          <Terminal
-            key={activeSessionId}
-            sessionId={activeSessionId}
-            collapsed={activeSession.terminalCollapsed}
-            tabs={activeSession.terminalTabs}
-            activeTabId={activeSession.activeTerminalTabId}
-            tabCounter={activeSession.terminalTabCounter}
-            onTabsChange={handleTerminalTabsChange}
-            projectPath={activeSession.projectPath}
-            shell={activeSession.shell}
-            cliToolTabId={activeSession.cliToolTabId}
-            cliToolRunning={activeSession.cliToolRunning}
-            hasTodoItems={pendingEdits.length > 0}
-            onZoom={terminalZoomRef}
-          >
-            {pendingEdits.length > 0 && (
-              <EditQueuePanel edits={pendingEdits} actions={editActions} cliRunning={activeSession.cliToolRunning} />
-            )}
-          </Terminal>
+          {/* Only the visible project mounts a Terminal — its xterm instance and
+              PTY are cached outside React, so remounting it costs nothing. */}
+          {activeSession && (
+            <Terminal
+              key={activeSession.id}
+              sessionId={activeSession.id}
+              collapsed={activeSession.terminalCollapsed}
+              tabs={activeSession.terminalTabs}
+              activeTabId={activeSession.activeTerminalTabId}
+              tabCounter={activeSession.terminalTabCounter}
+              onTabsChange={handleTerminalTabsChange}
+              projectPath={activeSession.projectPath}
+              shell={activeSession.shell}
+              cliToolTabId={activeSession.cliToolTabId}
+              cliToolRunning={activeSession.cliToolRunning}
+              hasTodoItems={pendingEdits.length > 0}
+              onZoom={terminalZoomRef}
+            >
+              {pendingEdits.length > 0 && (
+                <EditQueuePanel edits={pendingEdits} actions={editActions} cliRunning={activeSession.cliToolRunning} />
+              )}
+            </Terminal>
+          )}
         </div>
       </div>
-      )}
     </div>
   );
 }

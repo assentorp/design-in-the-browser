@@ -228,7 +228,8 @@ export interface MainAPI {
   getPathForFile: (file: File) => string;
   getAppVersion: () => Promise<string>;
   clearWebviewCache: () => Promise<void>;
-  sendAllEdits: () => void;
+  // targetId limits the flush to one project's webview (see webview:send-all)
+  sendAllEdits: (targetId?: number) => void;
   attachDevTools: (targetId: number, bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
   setDevToolsBounds: (targetId: number, bounds: { x: number; y: number; width: number; height: number }) => Promise<void>;
   detachDevTools: (targetId: number) => Promise<void>;

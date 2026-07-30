@@ -282,6 +282,17 @@ textarea {
 }
 
 /* Browser */
+
+/* One host per open project — all mounted, only the active one displayed, so
+   pages (and their scroll position, form state, dev-server socket) survive a
+   tab switch instead of reloading. */
+.browser-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .browser {
   flex: 1;
   min-height: 0;

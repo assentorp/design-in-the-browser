@@ -1773,12 +1773,20 @@ export function setupIPC(win: BrowserWindow) {
   });
 
   // Send all queued edits — execute directly on webview webContents
-  ipcMain.on('webview:send-all', () => {
-    const allContents = webContentsModule.getAllWebContents();
-    for (const contents of allContents) {
-      if (contents.getType() === 'webview') {
-        contents.executeJavaScript('window.__claudeDesignSendAll && window.__claudeDesignSendAll(); true;').catch(() => {});
-      }
+  ipcMain.on('webview:send-all', (_event, targetId?: number) => {
+    const flush = (contents: Electron.WebContents) =>
+      contents.executeJavaScript('window.__claudeDesignSendAll && window.__claudeDesignSendAll(); true;').catch(() => {});
+
+    // Every open project keeps a live webview, so flush only the one the user
+    // is looking at when the renderer tells us which that is.
+    if (typeof targetId === 'number') {
+      const target = webContentsModule.fromId(targetId);
+      if (target && !target.isDestroyed()) flush(target);
+      return;
+    }
+
+    for (const contents of webContentsModule.getAllWebContents()) {
+      if (contents.getType() === 'webview') flush(contents);
     }
   });
 
