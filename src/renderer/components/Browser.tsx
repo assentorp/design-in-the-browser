@@ -60,13 +60,30 @@ export interface EditActions {
   clearAll: () => void;
 }
 
+// webContents id of the visible project's page. Several webviews are alive at
+// once (one per open project), so main-process broadcasts — flushing the edit
+// queue, for one — must target this instead of every webview it can find.
+let activeWebviewContentsId: number | undefined;
+
+export const getActiveWebviewId = () => activeWebviewContentsId;
+
+// Flush the queued edits of the visible project only. Routed through main
+// rather than the EditActions ref, which goes stale across reloads.
+export const sendAllEditsToActiveWebview = () => {
+  window.mainAPI?.sendAllEdits(activeWebviewContentsId);
+};
+
 interface BrowserProps {
   sessionId: string;
+  // Every open project keeps a mounted Browser so its page (and the whole
+  // renderer process behind it) survives tab switches. Only the active one is
+  // visible, owns the window-level shortcuts, and talks to the app chrome.
+  active: boolean;
   url: string;
-  onUrlChange: (url: string) => void;
+  onUrlChange: (sessionId: string, url: string) => void;
   annotateMode: boolean;
   onAnnotateModeChange: (enabled: boolean) => void;
-  onPendingEditsChange: (edits: PendingEdit[], actions: EditActions) => void;
+  onPendingEditsChange: (sessionId: string, edits: PendingEdit[], actions: EditActions) => void;
   activeTerminalTabId: string;
   projectPath: string;
   onAnnotation?: (data: AnnotationData) => void;
@@ -90,7 +107,7 @@ const DEFAULT_VIEWPORT_SIZES: ViewportSizes = {
   mobile: 375,
 };
 
-export default function Browser({ sessionId, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning, initialEdits, onZoom, onToggleTerminal }: BrowserProps) {
+export default function Browser({ sessionId, active, url, onUrlChange, annotateMode, onAnnotateModeChange, onPendingEditsChange, activeTerminalTabId, projectPath, onAnnotation, cliRunning, initialEdits, onZoom, onToggleTerminal }: BrowserProps) {
   const [inputUrl, setInputUrl] = useState(url);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -122,7 +139,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   // Cmd/Ctrl+P opens the file palette while the code editor side is showing
   const codeSideOpen = !!codePanel || codeTreeOpen;
   useEffect(() => {
-    if (!codeSideOpen) {
+    if (!codeSideOpen || !active) {
       setQuickOpenVisible(false);
       return;
     }
@@ -134,7 +151,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [codeSideOpen]);
+  }, [codeSideOpen, active]);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const devToolsPlaceholderRef = useRef<HTMLDivElement | null>(null);
   const browserRef = useRef<HTMLDivElement | null>(null);
@@ -366,7 +383,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     if (!webview) return;
 
     const handleDidNavigate = () => {
-      onUrlChange(webview.getURL());
+      onUrlChange(sessionId, webview.getURL());
       setInputUrl(webview.getURL());
       setCanGoBack(webview.canGoBack());
       setCanGoForward(webview.canGoForward());
@@ -473,7 +490,28 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       webview.removeEventListener('dom-ready', handleDomReady);
       webview.removeEventListener('did-fail-load', handleDidFailLoad);
     };
-  }, [injectAndSetup, onUrlChange]);
+  }, [injectAndSetup, onUrlChange, sessionId]);
+
+  // Publish this page's webContents id while it's the visible one, so
+  // main-process actions (edit-queue flush) hit this project and no other.
+  useEffect(() => {
+    if (!active || !isReady) return;
+    const webview = webviewRef.current;
+    if (!webview) return;
+    try {
+      activeWebviewContentsId = webview.getWebContentsId();
+    } catch {
+      // Guest not attached yet — the next dom-ready re-runs this.
+    }
+    return () => {
+      if (activeWebviewContentsId === undefined) return;
+      try {
+        if (activeWebviewContentsId === webview.getWebContentsId()) activeWebviewContentsId = undefined;
+      } catch {
+        activeWebviewContentsId = undefined;
+      }
+    };
+  }, [active, isReady]);
 
   // Open a file in the embedded VS Code web view
   // Open a file in desktop VS Code — reliable unlike embedded VS Code web Quick Open
@@ -749,7 +787,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
               } else if (msg.type === 'claude-design-toggle-terminal') {
                 onToggleTerminal?.();
               } else if (msg.type === 'claude-design-pending-update') {
-                onPendingEditsChange(msg.items || [], { sendAll: sendAllEdits, removeItem: removeEditItem, clearAll: clearAllEdits });
+                onPendingEditsChange(sessionId, msg.items || [], { sendAll: sendAllEdits, removeItem: removeEditItem, clearAll: clearAllEdits });
               }
             }
           }
@@ -783,8 +821,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   // Capture a preview thumbnail for the project cards on the home screen —
   // once shortly after the page first paints, then refreshed every minute so
   // the card reflects roughly what the project looked like when last open.
+  // Hidden pages are throttled and capture blank, so only the visible project
+  // refreshes its thumbnail — the others keep the one from when they were last open.
   useEffect(() => {
-    if (!hasFirstPaint || !projectPath) return;
+    if (!hasFirstPaint || !projectPath || !active) return;
     const api = getMainAPI();
     if (!api?.saveProjectPreview) return;
     let cancelled = false;
@@ -808,7 +848,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       clearTimeout(settleTimer);
       clearInterval(refreshTimer);
     };
-  }, [hasFirstPaint, projectPath]);
+  }, [hasFirstPaint, projectPath, active]);
 
   // Sync CLI running state to webview so it can auto-queue annotations
   useEffect(() => {
@@ -857,8 +897,9 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         if (annotateMode) {
           const result = await webview.executeJavaScript('window.__claudeDesignEnable && window.__claudeDesignEnable(); true;');
           console.log('[Browser] Enable result:', result);
-          // Focus the webview so ALT+hover works immediately
-          if (annotateModeChanged) {
+          // Focus the webview so ALT+hover works immediately — never from a
+          // background project, which would yank focus out of the visible one.
+          if (annotateModeChanged && active) {
             webview.focus();
           }
         } else {
@@ -870,11 +911,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     };
 
     toggle();
-  }, [annotateMode, isReady]);
+  }, [annotateMode, isReady, active]);
 
   // Forward ALT and F keys to webview when in annotate mode
   useEffect(() => {
-    if (!annotateMode || !isReady) return;
+    if (!annotateMode || !isReady || !active) return;
 
     const webview = webviewRef.current;
     if (!webview) return;
@@ -930,10 +971,11 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
       window.removeEventListener('keyup', handleKeyUp, true);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [annotateMode, isReady]);
+  }, [annotateMode, isReady, active]);
 
   // Cmd+E toggles edit mode when renderer has focus (webview case handled in injected script)
   useEffect(() => {
+    if (!active) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E') && !e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -944,7 +986,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [annotateMode, onAnnotateModeChange, devToolsOpen]);
+  }, [annotateMode, onAnnotateModeChange, devToolsOpen, active]);
 
 
 
@@ -963,13 +1005,17 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
   const toggleDevToolsRef = useRef(toggleDevTools);
   toggleDevToolsRef.current = toggleDevTools;
 
-  // Listen for the Toggle Inspector menu shortcut (Cmd+Alt+I / Ctrl+Shift+I / F12)
+  // Listen for the Toggle Inspector menu shortcut (Cmd+Alt+I / Ctrl+Shift+I / F12).
+  // These preload channels hold a single callback that re-registration replaces,
+  // so only the visible project claims them — otherwise a background Browser
+  // (they all stay mounted now) would answer the menu instead.
   useEffect(() => {
+    if (!active) return;
     const onToggleInspector = (window as unknown as { onToggleInspector?: (cb: () => void) => void }).onToggleInspector;
     if (onToggleInspector) {
       onToggleInspector(() => toggleDevToolsRef.current());
     }
-  }, []);
+  }, [active]);
 
   // Attach DevTools as a top-level WebContentsView in the main process,
   // overlaid on top of the empty placeholder div (placeholder reserves layout space).
@@ -977,7 +1023,10 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const mainAPI = getMainAPI();
     const page = webviewRef.current;
     const placeholder = devToolsPlaceholderRef.current;
-    if (!devToolsOpen || !isReady || !mainAPI || !page || !placeholder) return;
+    // The Inspector is a main-process view overlaid on the window, so it has to
+    // detach while its project is hidden — it would otherwise float above
+    // whichever project the user switched to. Reattaches on the way back.
+    if (!devToolsOpen || !isReady || !active || !mainAPI || !page || !placeholder) return;
 
     let cancelled = false;
     let attachedTargetId: number | null = null;
@@ -1043,7 +1092,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         mainAPI.detachDevTools(attachedTargetId).catch(() => {});
       }
     };
-  }, [devToolsOpen, isReady]);
+  }, [devToolsOpen, isReady, active]);
 
   // Drag handle: resize the docked DevTools panel from the top edge
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1108,8 +1157,8 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     const finalUrl = normalizeUrl(targetUrl);
 
     webview.src = finalUrl;
-    onUrlChange(finalUrl);
-  }, [onUrlChange]);
+    onUrlChange(sessionId, finalUrl);
+  }, [onUrlChange, sessionId]);
 
   const handleUrlSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -1145,6 +1194,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
 
   // Listen for clear cache and reload from menu
   useEffect(() => {
+    if (!active) return;
     const onClearCacheReload = (window as unknown as { onClearCacheReload?: (cb: () => void) => void }).onClearCacheReload;
     if (onClearCacheReload) {
       onClearCacheReload(async () => {
@@ -1155,20 +1205,22 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         webviewRef.current?.reloadIgnoringCache();
       });
     }
-  }, []);
+  }, [active]);
 
   // Listen for Cmd+R reload webview
   useEffect(() => {
+    if (!active) return;
     const onReloadWebview = (window as unknown as { onReloadWebview?: (cb: () => void) => void }).onReloadWebview;
     if (onReloadWebview) {
       onReloadWebview(() => {
         webviewRef.current?.reloadIgnoringCache();
       });
     }
-  }, []);
+  }, [active]);
 
   // Listen for blocked new-window (target="_blank" links)
   useEffect(() => {
+    if (!active) return;
     const onBlockedNewWindow = (window as unknown as { onBlockedNewWindow?: (cb: (url: string) => void) => void }).onBlockedNewWindow;
     if (onBlockedNewWindow) {
       onBlockedNewWindow((url: string) => {
@@ -1177,7 +1229,7 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
         blockedUrlTimerRef.current = setTimeout(() => setBlockedUrl(null), 8000);
       });
     }
-  }, []);
+  }, [active]);
 
   // Webview zoom — apply CSS zoom inside the webview page
   const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
@@ -1205,11 +1257,13 @@ export default function Browser({ sessionId, url, onUrlChange, annotateMode, onA
     applyZoomToWebview(next);
   }, [applyZoomToWebview]);
 
-  // Expose zoom handler to parent via ref
+  // Expose zoom handler to parent via ref — the visible project owns it, so
+  // Cmd+/Cmd- zooms the page the user is looking at.
   useEffect(() => {
-    if (onZoom) onZoom.current = stepZoom;
-    return () => { if (onZoom) onZoom.current = null; };
-  }, [onZoom, stepZoom]);
+    if (!onZoom || !active) return;
+    onZoom.current = stepZoom;
+    return () => { onZoom.current = null; };
+  }, [onZoom, stepZoom, active]);
 
   const toggleAnnotate = useCallback(() => {
     // Entering Edit mode closes the in-app project code view so the two
