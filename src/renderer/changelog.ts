@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.0.1',
+    date: 'August 4, 2026',
+    changes: [
+      'Projects now stay live when you switch tabs — the page keeps its scroll position, form state, and open dev tools instead of reloading from scratch, and each project keeps its own queue of pending edits',
+      'Queued edits now go to the project they belong to: an edit flushing after a background project\'s CLI goes idle no longer lands in whatever project happens to be on screen',
+      'Claude\'s permission mode is now a dropdown under Advanced options — Default, Accept edits, Auto, or Plan — replacing the old "Start in auto mode" checkbox. Existing projects using auto mode keep behaving the same',
+      'The app shows as "Dosmos" in the macOS menu bar during development',
+    ],
+  },
+  {
     version: '2.0.0',
     date: 'July 26, 2026',
     changes: [
