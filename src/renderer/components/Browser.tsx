@@ -120,6 +120,9 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
   const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [devToolsHeight, setDevToolsHeight] = useState(300);
+  // Design mode: direct manipulation of elements (drag-resize, scrub values),
+  // applied as a precise edit instruction through the annotation pipeline.
+  const [designMode, setDesignMode] = useState(false);
   // In-app code editor: opened from an element's "Edit code" popover button.
   const [codePanel, setCodePanel] = useState<{ path: string; fileName: string; content: string; gotoLine?: number; method: string; candidates?: ElementCandidate[]; uncertain?: boolean; nonce: number } | null>(null);
   const [codePanelWidth, setCodePanelWidth] = useState(480);
@@ -629,7 +632,7 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
             var __claudeSignal = console.log.bind(console);
 
             window.addEventListener('message', function(e) {
-              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-edit-code' || e.data.type === 'claude-design-toggle-terminal')) {
+              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-manip-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-edit-code' || e.data.type === 'claude-design-toggle-terminal')) {
                 window.__claudeDesignMessages.push(e.data);
                 __claudeSignal('__claude_msg__');
               }
@@ -784,6 +787,8 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
                 }
               } else if (msg.type === 'claude-design-mode-change') {
                 onAnnotateModeChange(msg.enabled);
+              } else if (msg.type === 'claude-design-manip-mode-change') {
+                setDesignMode(msg.enabled);
               } else if (msg.type === 'claude-design-toggle-terminal') {
                 onToggleTerminal?.();
               } else if (msg.type === 'claude-design-pending-update') {
@@ -988,14 +993,67 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [annotateMode, onAnnotateModeChange, devToolsOpen, active]);
 
+  // Toggle design (direct manipulation) mode in the webview
+  const prevDesignModeRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!isReady) return;
+    const webview = webviewRef.current;
+    if (!webview) return;
+
+    const designModeChanged = prevDesignModeRef.current !== designMode;
+    prevDesignModeRef.current = designMode;
+
+    const toggle = async () => {
+      try {
+        if (designMode) {
+          await webview.executeJavaScript('window.__claudeDesignManipEnable && window.__claudeDesignManipEnable(); true;');
+          // Focus the webview so keyboard nudging works immediately — never
+          // from a background project, which would yank focus away.
+          if (designModeChanged && active) {
+            webview.focus();
+          }
+        } else {
+          await webview.executeJavaScript('window.__claudeDesignManipDisable && window.__claudeDesignManipDisable(); true;');
+        }
+      } catch (err) {
+        console.error('[Browser] Design mode toggle error:', err);
+      }
+    };
+
+    toggle();
+  }, [designMode, isReady, active]);
+
+  // The injected script turns design mode off itself when edit mode comes on
+  // (they both capture clicks); mirror that in renderer state so the toolbar
+  // buttons never both show active.
+  useEffect(() => {
+    if (annotateMode) setDesignMode(false);
+  }, [annotateMode]);
+
+  // Cmd+D toggles design mode when renderer has focus (webview case handled in injected script)
+  useEffect(() => {
+    if (!active) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D') && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        if (devToolsOpen) return;
+        setDesignMode((v) => !v);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [devToolsOpen, active]);
+
 
 
   const toggleDevTools = useCallback(() => {
     setDevToolsOpen((open) => {
       const next = !open;
-      // Edit mode and DevTools are mutually exclusive — annotation captures clicks
-      // that would otherwise reach DevTools' element picker.
+      // Edit/design modes and DevTools are mutually exclusive — both capture
+      // clicks that would otherwise reach DevTools' element picker.
       if (next && annotateMode) onAnnotateModeChange(false);
+      if (next) setDesignMode(false);
       return next;
     });
   }, [annotateMode, onAnnotateModeChange]);
@@ -1276,6 +1334,20 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
     onAnnotateModeChange(!annotateMode);
   }, [annotateMode, onAnnotateModeChange]);
 
+  const toggleDesign = useCallback(() => {
+    setDesignMode((v) => {
+      const next = !v;
+      if (next) {
+        // Design mode replaces Edit mode and the code view in the toolbar
+        setCodeTreeOpen(false);
+        setCodeFull(false);
+        setCodePanelError(null);
+        if (annotateMode) onAnnotateModeChange(false);
+      }
+      return next;
+    });
+  }, [annotateMode, onAnnotateModeChange]);
+
   const toggleCodeView = useCallback(() => {
     const mainAPI = getMainAPI();
     if (!mainAPI) return;
@@ -1340,12 +1412,14 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
         canGoForward={canGoForward}
         isLoading={isLoading}
         annotateMode={annotateMode}
+        designMode={designMode}
         onBack={goBack}
         onForward={goForward}
         onReload={reload}
         onStop={stopLoading}
         onClearCacheReload={clearCacheAndReload}
         onToggleAnnotate={toggleAnnotate}
+        onToggleDesign={toggleDesign}
         onToggleCodeView={toggleCodeView}
         codeViewActive={codeTreeOpen}
         hasEditor={hasEditor}

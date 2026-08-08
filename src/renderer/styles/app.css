@@ -1345,6 +1345,17 @@ textarea {
   background: var(--accent-hover);
 }
 
+/* Design (direct manipulation) mode uses blue to match its in-page overlay */
+.toolbar-design-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.toolbar-design-btn.active:hover {
+  background: #2f6fd6;
+  border-color: #2f6fd6;
+}
+
 .toolbar-kbd {
   display: inline-flex;
   align-items: center;

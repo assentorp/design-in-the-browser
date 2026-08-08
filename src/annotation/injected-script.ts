@@ -55,6 +55,17 @@ export const annotationScript = `
   let selectedText = null;
   let selectedTextRange = null;
 
+  // Design (direct manipulation) mode state
+  let manipMode = false;
+  let manipSelected = null;          // element currently selected for manipulation
+  let manipHoverEl = null;
+  let manipOverlay = null;           // {box, label, handles: {dir: el}}
+  let manipPanel = null;
+  let manipDrag = null;              // active drag: {kind: 'resize'|'move'|'scrub', ...}
+  let manipSuppressClick = false;    // swallow the click that ends a drag
+  let manipChanges = new Map();      // element -> {baseline: {}, inline: {}, current: {}}
+  let manipRepositionQueued = false;
+
   // Area selection state (click-and-drag)
   let areaSelecting = false;
   let areaStartX = 0;
@@ -1075,6 +1086,224 @@ export const annotationScript = `
         border: 2px dashed #c6613f;
         background: rgba(198, 97, 63, 0.08);
         border-radius: 3px;
+      }
+
+      /* ---- Design (direct manipulation) mode ---- */
+      .claude-design-manip-highlight {
+        outline: 1.5px solid rgba(59, 130, 246, 0.9) !important;
+        outline-offset: 1px !important;
+      }
+      .claude-design-manip-target {
+        cursor: move !important;
+      }
+      .claude-design-manip-box {
+        position: fixed !important;
+        pointer-events: none !important;
+        z-index: 2147483645 !important;
+        border: 1.5px solid #3b82f6 !important;
+        box-sizing: border-box !important;
+      }
+      .claude-design-manip-handle {
+        position: fixed !important;
+        width: 9px !important;
+        height: 9px !important;
+        background: #fff !important;
+        border: 1.5px solid #3b82f6 !important;
+        border-radius: 2px !important;
+        box-sizing: border-box !important;
+        pointer-events: auto !important;
+        z-index: 2147483646 !important;
+      }
+      .claude-design-manip-handle[data-dir="n"], .claude-design-manip-handle[data-dir="s"] { cursor: ns-resize !important; }
+      .claude-design-manip-handle[data-dir="e"], .claude-design-manip-handle[data-dir="w"] { cursor: ew-resize !important; }
+      .claude-design-manip-handle[data-dir="ne"], .claude-design-manip-handle[data-dir="sw"] { cursor: nesw-resize !important; }
+      .claude-design-manip-handle[data-dir="nw"], .claude-design-manip-handle[data-dir="se"] { cursor: nwse-resize !important; }
+      .claude-design-manip-sizelabel {
+        position: fixed !important;
+        pointer-events: none !important;
+        z-index: 2147483646 !important;
+        background: #3b82f6 !important;
+        color: #fff !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        line-height: 1 !important;
+        padding: 4px 7px !important;
+        border-radius: 5px !important;
+        white-space: nowrap !important;
+      }
+      .claude-design-manip-panel {
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        width: 232px !important;
+        background: #262626 !important;
+        border: 1px solid #3d3d3d !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45) !important;
+        color: #e5e5e5 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        font-size: 12px !important;
+        line-height: normal !important;
+        text-align: left !important;
+        box-sizing: border-box !important;
+        padding: 0 !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+      }
+      .claude-design-manip-panel *, .claude-design-manip-panel *::before, .claude-design-manip-panel *::after {
+        box-sizing: border-box !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        line-height: normal !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+      }
+      .claude-design-manip-panel-header {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        padding: 10px 12px 8px 12px !important;
+        border-bottom: 1px solid #333 !important;
+      }
+      .claude-design-manip-panel-title {
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #eb9b78 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      .claude-design-manip-panel-close {
+        all: unset !important;
+        cursor: pointer !important;
+        color: #888 !important;
+        font-size: 14px !important;
+        line-height: 1 !important;
+        padding: 2px 4px !important;
+        border-radius: 4px !important;
+      }
+      .claude-design-manip-panel-close:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
+      .claude-design-manip-section {
+        padding: 8px 12px !important;
+        border-bottom: 1px solid #303030 !important;
+      }
+      .claude-design-manip-section:last-of-type { border-bottom: none !important; }
+      .claude-design-manip-section-label {
+        font-size: 10px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        color: #777 !important;
+        margin-bottom: 6px !important;
+      }
+      .claude-design-manip-row {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        margin-bottom: 6px !important;
+      }
+      .claude-design-manip-row:last-child { margin-bottom: 0 !important; }
+      .claude-design-manip-row-label {
+        color: #999 !important;
+        font-size: 11px !important;
+        width: 44px !important;
+        flex-shrink: 0 !important;
+      }
+      .claude-design-manip-quad {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr 1fr !important;
+        gap: 4px !important;
+        flex: 1 !important;
+      }
+      .claude-design-manip-field {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 0 !important;
+        flex: 1 !important;
+        background: #303030 !important;
+        border: 1px solid transparent !important;
+        border-radius: 6px !important;
+        padding: 4px 5px !important;
+        color: #ccc !important;
+        font-size: 11px !important;
+        font-variant-numeric: tabular-nums !important;
+        cursor: ew-resize !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+      }
+      .claude-design-manip-field:hover { border-color: #4a4a4a !important; }
+      .claude-design-manip-field.changed {
+        color: #eb9b78 !important;
+        border-color: rgba(198, 97, 63, 0.55) !important;
+        background: rgba(198, 97, 63, 0.12) !important;
+      }
+      .claude-design-manip-field.scrubbing { border-color: #3b82f6 !important; }
+      .claude-design-manip-field-input {
+        all: unset !important;
+        width: 100% !important;
+        color: #fff !important;
+        font-size: 11px !important;
+        text-align: center !important;
+        cursor: text !important;
+      }
+      .claude-design-manip-color-row input[type="color"] {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 24px !important;
+        height: 24px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: 1px solid #4a4a4a !important;
+        border-radius: 6px !important;
+        background: transparent !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+      }
+      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px !important; }
+      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch { border: none !important; border-radius: 4px !important; }
+      .claude-design-manip-color-row.changed input[type="color"] { border-color: rgba(198, 97, 63, 0.8) !important; }
+      .claude-design-manip-color-hex {
+        color: #999 !important;
+        font-size: 11px !important;
+        font-variant-numeric: tabular-nums !important;
+      }
+      .claude-design-manip-footer {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        padding: 10px 12px !important;
+        border-top: 1px solid #333 !important;
+      }
+      .claude-design-manip-reset {
+        all: unset !important;
+        cursor: pointer !important;
+        color: #999 !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        padding: 6px 10px !important;
+        border-radius: 7px !important;
+        text-align: center !important;
+      }
+      .claude-design-manip-reset:hover { color: #fff !important; background: rgba(255,255,255,0.08) !important; }
+      .claude-design-manip-apply {
+        all: unset !important;
+        cursor: pointer !important;
+        flex: 1 !important;
+        background: #c6613f !important;
+        color: #fff !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        padding: 7px 10px !important;
+        border-radius: 8px !important;
+        text-align: center !important;
+        transition: background 0.15s ease !important;
+      }
+      .claude-design-manip-apply:hover { background: #a8522f !important; }
+      .claude-design-manip-apply.disabled {
+        background: #3a3a3a !important;
+        color: #777 !important;
+        cursor: default !important;
       }
     \`;
     document.head.appendChild(style);
@@ -3611,6 +3840,11 @@ export const annotationScript = `
 
   function enableAnnotateMode() {
     if (annotateMode) return;
+    // Edit mode and design mode are mutually exclusive — both capture clicks
+    if (manipMode) {
+      disableManipMode();
+      notifyManipModeChange(false);
+    }
     annotateMode = true;
     document.body.classList.add('claude-design-crosshair');
 
@@ -3749,6 +3983,786 @@ export const annotationScript = `
     todoMode = true;
   }
 
+  // ============================================================
+  // Design mode: direct manipulation (drag-resize, nudge, scrub)
+  // ============================================================
+  // Tweaks are previewed live as inline styles and tracked per element as
+  // baseline -> current deltas. "Apply" turns the deltas into a precise
+  // edit instruction sent through the normal annotation pipeline.
+
+  var MANIP_PROPS = {
+    'width':            { min: 0, step: 1, unit: 'px' },
+    'height':           { min: 0, step: 1, unit: 'px' },
+    'margin-top':       { step: 1, unit: 'px' },
+    'margin-right':     { step: 1, unit: 'px' },
+    'margin-bottom':    { step: 1, unit: 'px' },
+    'margin-left':      { step: 1, unit: 'px' },
+    'padding-top':      { min: 0, step: 1, unit: 'px' },
+    'padding-right':    { min: 0, step: 1, unit: 'px' },
+    'padding-bottom':   { min: 0, step: 1, unit: 'px' },
+    'padding-left':     { min: 0, step: 1, unit: 'px' },
+    'font-size':        { min: 1, step: 1, unit: 'px' },
+    'font-weight':      { min: 100, max: 900, step: 100, unit: '' },
+    'line-height':      { min: 0, step: 1, unit: 'px' },
+    'letter-spacing':   { step: 0.1, unit: 'px', decimals: 1 },
+    'border-radius':    { min: 0, step: 1, unit: 'px' },
+    'gap':              { min: 0, step: 1, unit: 'px' },
+    'color':            { color: true },
+    'background-color': { color: true }
+  };
+
+  function notifyManipModeChange(enabled) {
+    window.postMessage({ type: 'claude-design-manip-mode-change', enabled: enabled }, '*');
+  }
+
+  function isManipUiTarget(t) {
+    if (!t || !t.closest) return false;
+    return !!t.closest('.claude-design-manip-panel, .claude-design-manip-handle, .claude-design-manip-box, .claude-design-manip-sizelabel, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector');
+  }
+
+  function manipEnsureRecord(el) {
+    var rec = manipChanges.get(el);
+    if (!rec) {
+      var computed = window.getComputedStyle(el);
+      var baseline = {};
+      var inline = {};
+      Object.keys(MANIP_PROPS).forEach(function(p) {
+        baseline[p] = computed.getPropertyValue(p);
+        inline[p] = { value: el.style.getPropertyValue(p), priority: el.style.getPropertyPriority(p) };
+      });
+      rec = { baseline: baseline, inline: inline, current: {} };
+      manipChanges.set(el, rec);
+    }
+    return rec;
+  }
+
+  function manipColorsEqual(a, b) {
+    try {
+      var ca = colorToRgb(a);
+      var cb = colorToRgb(b);
+      return ca.r === cb.r && ca.g === cb.g && ca.b === cb.b && Math.abs(ca.a - cb.a) < 0.02;
+    } catch (err) {
+      return a === b;
+    }
+  }
+
+  function manipRestoreInline(el, rec, prop) {
+    var orig = rec.inline[prop];
+    if (orig && orig.value) {
+      el.style.setProperty(prop, orig.value, orig.priority);
+    } else {
+      el.style.removeProperty(prop);
+    }
+  }
+
+  function manipSetProp(el, prop, cssValue) {
+    var rec = manipEnsureRecord(el);
+    var meta = MANIP_PROPS[prop] || {};
+    var baseVal = rec.baseline[prop];
+    var same;
+    if (meta.color) {
+      same = manipColorsEqual(cssValue, baseVal);
+    } else {
+      var a = parseFloat(cssValue);
+      var b = parseFloat(baseVal);
+      same = (isFinite(a) && isFinite(b)) ? Math.abs(a - b) < 0.05 : cssValue === baseVal;
+    }
+    if (same) {
+      manipRestoreInline(el, rec, prop);
+      delete rec.current[prop];
+    } else {
+      el.style.setProperty(prop, cssValue, 'important');
+      rec.current[prop] = cssValue;
+    }
+    queueManipReposition();
+  }
+
+  function manipCurrentNumeric(el, prop) {
+    var computed = window.getComputedStyle(el);
+    var v = parseFloat(computed.getPropertyValue(prop));
+    if (!isFinite(v)) {
+      if (prop === 'line-height') {
+        v = (parseFloat(computed.getPropertyValue('font-size')) || 16) * 1.2;
+      } else {
+        v = 0;
+      }
+    }
+    return v;
+  }
+
+  function manipTotalChanges() {
+    var total = 0;
+    manipChanges.forEach(function(rec) {
+      total += Object.keys(rec.current).length;
+    });
+    return total;
+  }
+
+  // Set an element's rendered (border-box) size; converts to the content-box
+  // value when the element's box-sizing needs it so the on-screen size matches
+  // the drag exactly.
+  function manipSetSizeFromRect(el, prop, targetPx) {
+    var computed = window.getComputedStyle(el);
+    var v = targetPx;
+    if (computed.getPropertyValue('box-sizing') !== 'border-box') {
+      if (prop === 'width') {
+        v -= (parseFloat(computed.getPropertyValue('padding-left')) || 0) +
+             (parseFloat(computed.getPropertyValue('padding-right')) || 0) +
+             (parseFloat(computed.getPropertyValue('border-left-width')) || 0) +
+             (parseFloat(computed.getPropertyValue('border-right-width')) || 0);
+      } else {
+        v -= (parseFloat(computed.getPropertyValue('padding-top')) || 0) +
+             (parseFloat(computed.getPropertyValue('padding-bottom')) || 0) +
+             (parseFloat(computed.getPropertyValue('border-top-width')) || 0) +
+             (parseFloat(computed.getPropertyValue('border-bottom-width')) || 0);
+      }
+    }
+    manipSetProp(el, prop, Math.max(0, Math.round(v)) + 'px');
+  }
+
+  // ---- Selection overlay (box + resize handles + size label) ----
+
+  function buildManipOverlay() {
+    removeManipOverlay();
+    var box = document.createElement('div');
+    box.className = 'claude-design-manip-box';
+    var label = document.createElement('div');
+    label.className = 'claude-design-manip-sizelabel';
+    var handles = {};
+    ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].forEach(function(dir) {
+      var h = document.createElement('div');
+      h.className = 'claude-design-manip-handle';
+      h.setAttribute('data-dir', dir);
+      h.addEventListener('mousedown', function(e) { startManipResize(e, dir); }, true);
+      document.body.appendChild(h);
+      handles[dir] = h;
+    });
+    document.body.appendChild(box);
+    document.body.appendChild(label);
+    manipOverlay = { box: box, label: label, handles: handles };
+  }
+
+  function removeManipOverlay() {
+    if (!manipOverlay) return;
+    manipOverlay.box.remove();
+    manipOverlay.label.remove();
+    Object.keys(manipOverlay.handles).forEach(function(dir) { manipOverlay.handles[dir].remove(); });
+    manipOverlay = null;
+  }
+
+  function positionManipOverlay() {
+    if (!manipOverlay || !manipSelected || !manipSelected.isConnected) return;
+    var r = manipSelected.getBoundingClientRect();
+    var box = manipOverlay.box;
+    box.style.left = r.left + 'px';
+    box.style.top = r.top + 'px';
+    box.style.width = r.width + 'px';
+    box.style.height = r.height + 'px';
+
+    var label = manipOverlay.label;
+    label.textContent = Math.round(r.width) + ' \\u00d7 ' + Math.round(r.height);
+    var labelTop = r.bottom + 8;
+    if (labelTop > window.innerHeight - 30) labelTop = r.top - 26;
+    label.style.top = labelTop + 'px';
+    label.style.left = Math.max(4, r.left + r.width / 2 - label.offsetWidth / 2) + 'px';
+
+    // Resizing an inline element has no effect, so hide the handles there
+    var isInline = window.getComputedStyle(manipSelected).getPropertyValue('display') === 'inline';
+    var half = 4.5;
+    var centers = {
+      nw: [r.left, r.top], n: [r.left + r.width / 2, r.top], ne: [r.right, r.top],
+      e: [r.right, r.top + r.height / 2], se: [r.right, r.bottom], s: [r.left + r.width / 2, r.bottom],
+      sw: [r.left, r.bottom], w: [r.left, r.top + r.height / 2]
+    };
+    Object.keys(centers).forEach(function(dir) {
+      var h = manipOverlay.handles[dir];
+      h.style.display = isInline ? 'none' : 'block';
+      h.style.left = (centers[dir][0] - half) + 'px';
+      h.style.top = (centers[dir][1] - half) + 'px';
+    });
+  }
+
+  function queueManipReposition() {
+    if (manipRepositionQueued) return;
+    manipRepositionQueued = true;
+    requestAnimationFrame(function() {
+      manipRepositionQueued = false;
+      positionManipOverlay();
+      if (!manipDrag) positionManipPanel();
+    });
+  }
+
+  // ---- Property panel ----
+
+  function manipFieldHtml(prop, title) {
+    return '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
+  }
+
+  function buildManipPanel(el) {
+    removeManipPanel();
+    manipPanel = document.createElement('div');
+    manipPanel.className = 'claude-design-manip-panel';
+
+    var computed = window.getComputedStyle(el);
+    var display = computed.getPropertyValue('display');
+    var showGap = display.indexOf('flex') !== -1 || display.indexOf('grid') !== -1;
+
+    var html = '' +
+      '<div class="claude-design-manip-panel-header">' +
+        '<span class="claude-design-manip-panel-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
+        '<button class="claude-design-manip-panel-close" title="Deselect (Esc)">\\u2715</button>' +
+      '</div>' +
+      '<div class="claude-design-manip-section">' +
+        '<div class="claude-design-manip-section-label">Size</div>' +
+        '<div class="claude-design-manip-row">' +
+          '<span class="claude-design-manip-row-label">W</span>' + manipFieldHtml('width') +
+          '<span class="claude-design-manip-row-label" style="width:20px !important; text-align:right !important;">H</span>' + manipFieldHtml('height') +
+        '</div>' +
+      '</div>' +
+      '<div class="claude-design-manip-section">' +
+        '<div class="claude-design-manip-section-label">Spacing</div>' +
+        '<div class="claude-design-manip-row">' +
+          '<span class="claude-design-manip-row-label">Margin</span>' +
+          '<span class="claude-design-manip-quad">' +
+            manipFieldHtml('margin-top', 'margin-top') + manipFieldHtml('margin-right', 'margin-right') +
+            manipFieldHtml('margin-bottom', 'margin-bottom') + manipFieldHtml('margin-left', 'margin-left') +
+          '</span>' +
+        '</div>' +
+        '<div class="claude-design-manip-row">' +
+          '<span class="claude-design-manip-row-label">Padding</span>' +
+          '<span class="claude-design-manip-quad">' +
+            manipFieldHtml('padding-top', 'padding-top') + manipFieldHtml('padding-right', 'padding-right') +
+            manipFieldHtml('padding-bottom', 'padding-bottom') + manipFieldHtml('padding-left', 'padding-left') +
+          '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="claude-design-manip-section">' +
+        '<div class="claude-design-manip-section-label">Text</div>' +
+        '<div class="claude-design-manip-row">' +
+          '<span class="claude-design-manip-row-label">Size</span>' + manipFieldHtml('font-size') +
+          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Wt</span>' + manipFieldHtml('font-weight') +
+        '</div>' +
+        '<div class="claude-design-manip-row">' +
+          '<span class="claude-design-manip-row-label" title="line-height">Line</span>' + manipFieldHtml('line-height', 'line-height') +
+          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;" title="letter-spacing">Trk</span>' + manipFieldHtml('letter-spacing', 'letter-spacing') +
+        '</div>' +
+      '</div>' +
+      '<div class="claude-design-manip-section">' +
+        '<div class="claude-design-manip-section-label">Style</div>' +
+        '<div class="claude-design-manip-row">' +
+          '<span class="claude-design-manip-row-label">Radius</span>' + manipFieldHtml('border-radius', 'border-radius') +
+          (showGap ? '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Gap</span>' + manipFieldHtml('gap') : '') +
+        '</div>' +
+        '<div class="claude-design-manip-row claude-design-manip-color-row" data-prop="color">' +
+          '<span class="claude-design-manip-row-label">Text</span>' +
+          '<input type="color" data-prop="color">' +
+          '<span class="claude-design-manip-color-hex"></span>' +
+        '</div>' +
+        '<div class="claude-design-manip-row claude-design-manip-color-row" data-prop="background-color">' +
+          '<span class="claude-design-manip-row-label">Fill</span>' +
+          '<input type="color" data-prop="background-color">' +
+          '<span class="claude-design-manip-color-hex"></span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="claude-design-manip-footer">' +
+        '<button class="claude-design-manip-reset">Reset</button>' +
+        '<button class="claude-design-manip-apply disabled">Apply</button>' +
+      '</div>';
+
+    manipPanel.innerHTML = html;
+    document.body.appendChild(manipPanel);
+
+    manipPanel.querySelector('.claude-design-manip-panel-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      manipDeselect();
+    });
+    manipPanel.querySelector('.claude-design-manip-reset').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (manipSelected) manipResetElement(manipSelected);
+    });
+    manipPanel.querySelector('.claude-design-manip-apply').addEventListener('click', function(e) {
+      e.stopPropagation();
+      manipApplyChanges();
+    });
+    manipPanel.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
+      fieldEl.addEventListener('mousedown', function(e) { startManipScrub(e, fieldEl); }, true);
+    });
+    manipPanel.querySelectorAll('input[type="color"]').forEach(function(input) {
+      input.addEventListener('input', function() {
+        if (!manipSelected) return;
+        manipSetProp(manipSelected, input.getAttribute('data-prop'), input.value);
+        refreshManipPanelValues();
+      });
+      input.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+      input.addEventListener('click', function(e) { e.stopPropagation(); });
+    });
+
+    positionManipPanel();
+    refreshManipPanelValues();
+  }
+
+  function removeManipPanel() {
+    if (manipPanel) {
+      manipPanel.remove();
+      manipPanel = null;
+    }
+  }
+
+  function positionManipPanel() {
+    if (!manipPanel || !manipSelected || !manipSelected.isConnected) return;
+    var r = manipSelected.getBoundingClientRect();
+    var w = manipPanel.offsetWidth;
+    var h = manipPanel.offsetHeight;
+    var pad = 12;
+    var left = r.right + pad;
+    if (left + w > window.innerWidth - 8) left = r.left - w - pad;
+    if (left < 8) left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+    var top = Math.min(Math.max(8, r.top), window.innerHeight - h - 8);
+    if (top < 8) top = 8;
+    manipPanel.style.left = left + 'px';
+    manipPanel.style.top = top + 'px';
+  }
+
+  function refreshManipPanelValues() {
+    if (!manipPanel || !manipSelected || !manipSelected.isConnected) return;
+    var el = manipSelected;
+    var computed = window.getComputedStyle(el);
+    var rec = manipChanges.get(el);
+
+    manipPanel.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
+      if (fieldEl.querySelector('input')) return; // being edited by typing
+      var prop = fieldEl.getAttribute('data-prop');
+      var meta = MANIP_PROPS[prop] || {};
+      var raw = computed.getPropertyValue(prop);
+      var v = parseFloat(raw);
+      var text;
+      if (!isFinite(v)) {
+        text = '\\u2013';
+      } else if (meta.decimals) {
+        text = (Math.round(v * 10) / 10).toString();
+      } else {
+        text = Math.round(v).toString();
+      }
+      fieldEl.textContent = text;
+      fieldEl.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
+    });
+
+    manipPanel.querySelectorAll('.claude-design-manip-color-row').forEach(function(row) {
+      var prop = row.getAttribute('data-prop');
+      var input = row.querySelector('input');
+      var hexLabel = row.querySelector('.claude-design-manip-color-hex');
+      var raw = computed.getPropertyValue(prop);
+      var hex = '#000000';
+      try {
+        var c = colorToRgb(raw);
+        hex = rgbToHex(c.r, c.g, c.b);
+      } catch (err) { /* keep default */ }
+      if (document.activeElement !== input) input.value = hex;
+      hexLabel.textContent = hex;
+      row.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
+    });
+
+    var total = manipTotalChanges();
+    var applyBtn = manipPanel.querySelector('.claude-design-manip-apply');
+    applyBtn.textContent = total === 0 ? 'Apply' : 'Apply ' + total + (total === 1 ? ' change' : ' changes');
+    applyBtn.classList.toggle('disabled', total === 0);
+  }
+
+  // ---- Interactions: select, resize, move, scrub, type ----
+
+  function manipSelect(el) {
+    if (!el || el === document.body || el === document.documentElement || isManipUiTarget(el)) return;
+    if (manipSelected === el) return;
+    manipDeselect();
+    manipSelected = el;
+    el.classList.add('claude-design-manip-target');
+    manipEnsureRecord(el);
+    buildManipOverlay();
+    positionManipOverlay();
+    buildManipPanel(el);
+  }
+
+  function manipDeselect() {
+    if (manipSelected) {
+      manipSelected.classList.remove('claude-design-manip-target');
+      // Drop untouched records so the map only tracks real edits
+      var rec = manipChanges.get(manipSelected);
+      if (rec && Object.keys(rec.current).length === 0) manipChanges.delete(manipSelected);
+    }
+    manipSelected = null;
+    removeManipOverlay();
+    removeManipPanel();
+  }
+
+  function manipResetElement(el) {
+    var rec = manipChanges.get(el);
+    if (!rec) return;
+    Object.keys(rec.current).forEach(function(p) {
+      manipRestoreInline(el, rec, p);
+    });
+    rec.current = {};
+    queueManipReposition();
+    refreshManipPanelValues();
+  }
+
+  function startManipResize(e, dir) {
+    if (!manipSelected) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var r = manipSelected.getBoundingClientRect();
+    manipDrag = {
+      kind: 'resize', dir: dir,
+      startX: e.clientX, startY: e.clientY,
+      startW: r.width, startH: r.height,
+      ratio: r.height > 0 ? r.width / r.height : 1
+    };
+  }
+
+  function startManipScrub(e, fieldEl) {
+    if (!manipSelected) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var prop = fieldEl.getAttribute('data-prop');
+    manipDrag = {
+      kind: 'scrub', prop: prop, fieldEl: fieldEl,
+      startX: e.clientX,
+      startVal: manipCurrentNumeric(manipSelected, prop),
+      moved: false
+    };
+    fieldEl.classList.add('scrubbing');
+  }
+
+  function beginManipFieldEdit(fieldEl, prop) {
+    var el = manipSelected;
+    if (!el) return;
+    var meta = MANIP_PROPS[prop] || {};
+    var cur = manipCurrentNumeric(el, prop);
+    var display = meta.decimals ? (Math.round(cur * 10) / 10) : Math.round(cur);
+    fieldEl.innerHTML = '<input class="claude-design-manip-field-input" type="text">';
+    var input = fieldEl.querySelector('input');
+    input.value = String(display);
+    input.focus();
+    input.select();
+
+    var done = false;
+    function commit() {
+      if (done) return;
+      done = true;
+      var v = parseFloat(input.value);
+      if (isFinite(v)) {
+        if (meta.min !== undefined) v = Math.max(meta.min, v);
+        if (meta.max !== undefined) v = Math.min(meta.max, v);
+        if (meta.step === 100) v = Math.round(v / 100) * 100;
+        manipSetProp(el, prop, v + (meta.unit || ''));
+      }
+      refreshManipPanelValues();
+    }
+    input.addEventListener('keydown', function(ev) {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') commit();
+      if (ev.key === 'Escape') { done = true; refreshManipPanelValues(); }
+    });
+    input.addEventListener('blur', commit);
+    input.addEventListener('mousedown', function(ev) { ev.stopPropagation(); });
+  }
+
+  function handleManipMouseOver(e) {
+    if (!manipMode || manipDrag) return;
+    var t = e.target;
+    if (isManipUiTarget(t) || t === document.body || t === document.documentElement || t === manipSelected) return;
+    if (manipHoverEl && manipHoverEl !== t) manipHoverEl.classList.remove('claude-design-manip-highlight');
+    t.classList.add('claude-design-manip-highlight');
+    manipHoverEl = t;
+  }
+
+  function handleManipMouseOut(e) {
+    if (!manipMode) return;
+    if (e.target === manipHoverEl) {
+      manipHoverEl.classList.remove('claude-design-manip-highlight');
+      manipHoverEl = null;
+    }
+  }
+
+  function handleManipMouseDown(e) {
+    if (!manipMode || e.button !== 0) return;
+    // A fresh press starts a new gesture; a suppress flag from a drag whose
+    // click never fired (mousedown/mouseup on different targets) is stale now
+    if (!manipDrag) manipSuppressClick = false;
+    if (isManipUiTarget(e.target)) return;
+    // Dragging anywhere inside the selection nudges it via margins. A press
+    // that never crosses the threshold still selects the child via click.
+    if (manipSelected && (e.target === manipSelected || manipSelected.contains(e.target))) {
+      e.preventDefault();
+      e.stopPropagation();
+      var computed = window.getComputedStyle(manipSelected);
+      manipDrag = {
+        kind: 'move', started: false,
+        startX: e.clientX, startY: e.clientY,
+        startML: parseFloat(computed.getPropertyValue('margin-left')) || 0,
+        startMT: parseFloat(computed.getPropertyValue('margin-top')) || 0
+      };
+    }
+  }
+
+  function handleManipMouseMove(e) {
+    if (!manipMode || !manipDrag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var el = manipSelected;
+    if (!el) return;
+
+    if (manipDrag.kind === 'resize') {
+      var dx = e.clientX - manipDrag.startX;
+      var dy = e.clientY - manipDrag.startY;
+      var dir = manipDrag.dir;
+      if (dir.indexOf('w') !== -1) dx = -dx;
+      if (dir.indexOf('n') !== -1) dy = -dy;
+      var newW = manipDrag.startW + dx;
+      var newH = manipDrag.startH + dy;
+      var isCorner = dir.length === 2;
+      if (e.shiftKey && isCorner) newH = newW / manipDrag.ratio;
+      if (dir === 'n' || dir === 's') {
+        manipSetSizeFromRect(el, 'height', newH);
+      } else if (dir === 'e' || dir === 'w') {
+        manipSetSizeFromRect(el, 'width', newW);
+      } else {
+        manipSetSizeFromRect(el, 'width', newW);
+        manipSetSizeFromRect(el, 'height', newH);
+      }
+      manipDrag.resized = true;
+    } else if (manipDrag.kind === 'move') {
+      var mdx = e.clientX - manipDrag.startX;
+      var mdy = e.clientY - manipDrag.startY;
+      if (!manipDrag.started && Math.abs(mdx) < 4 && Math.abs(mdy) < 4) return;
+      manipDrag.started = true;
+      manipSetProp(el, 'margin-left', Math.round(manipDrag.startML + mdx) + 'px');
+      manipSetProp(el, 'margin-top', Math.round(manipDrag.startMT + mdy) + 'px');
+    } else if (manipDrag.kind === 'scrub') {
+      var sdx = e.clientX - manipDrag.startX;
+      if (Math.abs(sdx) > 2) manipDrag.moved = true;
+      var meta = MANIP_PROPS[manipDrag.prop] || {};
+      var mult = e.shiftKey ? 10 : (e.altKey ? 0.1 : 1);
+      var v = manipDrag.startVal + sdx * (meta.step || 1) * mult;
+      if (meta.min !== undefined) v = Math.max(meta.min, v);
+      if (meta.max !== undefined) v = Math.min(meta.max, v);
+      if (meta.step === 100) v = Math.round(v / 100) * 100;
+      else if (meta.decimals) v = Math.round(v * 10) / 10;
+      else v = Math.round(v);
+      manipSetProp(el, manipDrag.prop, v + (meta.unit || ''));
+    }
+    refreshManipPanelValues();
+  }
+
+  function handleManipMouseUp(e) {
+    if (!manipMode || !manipDrag) return;
+    var drag = manipDrag;
+    manipDrag = null;
+    if (drag.kind === 'scrub') {
+      drag.fieldEl.classList.remove('scrubbing');
+      if (!drag.moved) {
+        beginManipFieldEdit(drag.fieldEl, drag.prop);
+        return;
+      }
+    }
+    // A completed drag must not fall through as a click (it would re-select
+    // whatever element ended up under the cursor)
+    if (drag.kind === 'resize' || drag.kind === 'scrub' || (drag.kind === 'move' && drag.started)) {
+      manipSuppressClick = true;
+    }
+    queueManipReposition();
+    refreshManipPanelValues();
+  }
+
+  function handleManipClick(e) {
+    if (!manipMode) return;
+    // Consume the suppress flag on ANY click, even ones we ignore (e.g. on the
+    // panel) — a drag ending over the panel must not leave a stale flag that
+    // would swallow the user's next element selection.
+    var suppress = manipSuppressClick;
+    manipSuppressClick = false;
+    if (isManipUiTarget(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (suppress) return;
+    var t = e.target;
+    if (t === document.body || t === document.documentElement) {
+      manipDeselect();
+      return;
+    }
+    if (t !== manipSelected) manipSelect(t);
+  }
+
+  function handleManipKeyDown(e) {
+    if (!manipMode) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('.claude-design-manip-panel')) return; // typing in the panel
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (manipDrag) {
+        manipDrag = null;
+      } else if (manipSelected) {
+        manipDeselect();
+      } else {
+        disableManipMode();
+        notifyManipModeChange(false);
+      }
+      return;
+    }
+
+    if (manipSelected && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      e.stopPropagation();
+      var amt = e.shiftKey ? 8 : 1;
+      var computed = window.getComputedStyle(manipSelected);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        var ml = parseFloat(computed.getPropertyValue('margin-left')) || 0;
+        manipSetProp(manipSelected, 'margin-left', Math.round(ml + (e.key === 'ArrowRight' ? amt : -amt)) + 'px');
+      } else {
+        var mt = parseFloat(computed.getPropertyValue('margin-top')) || 0;
+        manipSetProp(manipSelected, 'margin-top', Math.round(mt + (e.key === 'ArrowDown' ? amt : -amt)) + 'px');
+      }
+      refreshManipPanelValues();
+    }
+  }
+
+  // ---- Apply: turn tracked deltas into an edit instruction ----
+
+  function manipElementInfo(el) {
+    var attrs = [];
+    if (el.id) attrs.push('id="' + el.id + '"');
+    if (el.className && typeof el.className === 'string') {
+      var classes = el.className.split(' ').filter(function(c) { return c && c.indexOf('claude-design-') !== 0; }).slice(0, 3).join(' ');
+      if (classes) attrs.push('class="' + classes + '"');
+    }
+    ['data-testid', 'data-component', 'aria-label', 'name', 'href'].forEach(function(attr) {
+      var val = el.getAttribute(attr);
+      if (val) attrs.push(attr + '="' + val.substring(0, 30) + '"');
+    });
+    var rect = el.getBoundingClientRect();
+    var padding = 10;
+    return {
+      tagName: el.tagName.toLowerCase(),
+      text: (el.textContent || '').trim().substring(0, 50),
+      attributes: attrs.join(' '),
+      selector: generateSelector(el),
+      bounds: {
+        x: Math.max(0, Math.floor(rect.left - padding)),
+        y: Math.max(0, Math.floor(rect.top - padding)),
+        width: Math.ceil(rect.width + padding * 2),
+        height: Math.ceil(rect.height + padding * 2)
+      }
+    };
+  }
+
+  function manipNoteFor(rec) {
+    var parts = Object.keys(rec.current).map(function(p) {
+      return p + ': ' + rec.baseline[p] + ' \\u2192 ' + rec.current[p];
+    });
+    return 'Apply these exact CSS changes (they are live-previewed on the element as inline styles, so the screenshot shows the intended result): ' +
+      parts.join('; ') +
+      '. Implement them in the source using the project\\u2019s existing styling approach (classes, Tailwind utilities, CSS variables, rem, etc. \\u2014 convert px where that matches the codebase) and change nothing else about the element.';
+  }
+
+  function manipApplyChanges() {
+    var entries = [];
+    manipChanges.forEach(function(rec, el) {
+      if (Object.keys(rec.current).length === 0 || !el.isConnected) return;
+      entries.push({ el: el, rec: rec });
+    });
+    if (entries.length === 0) return;
+    if (!window.__claudeDesignSendAnnotation) {
+      console.warn('[ClaudeDesign] Send callback not ready, keeping design changes');
+      return;
+    }
+
+    var data;
+    if (entries.length === 1) {
+      var info = manipElementInfo(entries[0].el);
+      data = {
+        url: window.location.href,
+        element: { tagName: info.tagName, text: info.text, attributes: info.attributes, selector: info.selector },
+        bounds: info.bounds,
+        referenceImages: [],
+        request: manipNoteFor(entries[0].rec)
+      };
+    } else {
+      data = {
+        type: 'multi-edit',
+        url: window.location.href,
+        annotations: entries.map(function(entry) {
+          var info = manipElementInfo(entry.el);
+          return {
+            selector: info.selector,
+            tagName: info.tagName,
+            text: info.text,
+            attributes: info.attributes,
+            bounds: info.bounds,
+            note: manipNoteFor(entry.rec)
+          };
+        })
+      };
+    }
+
+    try {
+      window.__claudeDesignSendAnnotation(data);
+    } catch (err) {
+      console.error('[ClaudeDesign] Failed to send design changes:', err);
+      return;
+    }
+
+    // The preview stays applied; re-baseline so further tweaks diff from here
+    entries.forEach(function(entry) { manipChanges.delete(entry.el); });
+    if (manipSelected) manipEnsureRecord(manipSelected);
+    refreshManipPanelValues();
+    showGridToast('Sent to CLI', entries.length === 1 ? '1 element' : entries.length + ' elements');
+  }
+
+  // ---- Mode lifecycle ----
+
+  function enableManipMode() {
+    if (manipMode) return;
+    if (annotateMode) {
+      disableAnnotateMode();
+      if (window.__claudeDesignNotifyModeChange) window.__claudeDesignNotifyModeChange(false);
+    }
+    manipMode = true;
+    document.addEventListener('mouseover', handleManipMouseOver, true);
+    document.addEventListener('mouseout', handleManipMouseOut, true);
+    document.addEventListener('click', handleManipClick, true);
+    document.addEventListener('mousedown', handleManipMouseDown, true);
+    document.addEventListener('mousemove', handleManipMouseMove, true);
+    document.addEventListener('mouseup', handleManipMouseUp, true);
+    document.addEventListener('keydown', handleManipKeyDown, true);
+    window.addEventListener('scroll', queueManipReposition, true);
+    window.addEventListener('resize', queueManipReposition);
+    showGridToast('Design Mode', 'Click an element \\u00b7 drag handles to resize \\u00b7 drag values to scrub \\u00b7 arrows to nudge');
+  }
+
+  function disableManipMode() {
+    if (!manipMode) return;
+    manipMode = false;
+    document.removeEventListener('mouseover', handleManipMouseOver, true);
+    document.removeEventListener('mouseout', handleManipMouseOut, true);
+    document.removeEventListener('click', handleManipClick, true);
+    document.removeEventListener('mousedown', handleManipMouseDown, true);
+    document.removeEventListener('mousemove', handleManipMouseMove, true);
+    document.removeEventListener('mouseup', handleManipMouseUp, true);
+    document.removeEventListener('keydown', handleManipKeyDown, true);
+    window.removeEventListener('scroll', queueManipReposition, true);
+    window.removeEventListener('resize', queueManipReposition);
+    manipDrag = null;
+    manipSuppressClick = false;
+    manipDeselect();
+    if (manipHoverEl) {
+      manipHoverEl.classList.remove('claude-design-manip-highlight');
+      manipHoverEl = null;
+    }
+    // Un-applied tweaks stay tracked (and visible) so toggling the mode
+    // doesn't silently destroy work; Reset or a reload clears them.
+  }
+
   // Set ALT key state from parent window (for when webview doesn't have focus)
   function setAltKeyState(down) {
     if (down && !altKeyDown) {
@@ -3775,6 +4789,17 @@ export const annotationScript = `
         window.__claudeDesignNotifyModeChange(true);
       }
     }
+    // Cmd+D / Ctrl+D: toggle design (direct manipulation) mode
+    if ((e.key === 'd' || e.key === 'D') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      if (manipMode) {
+        disableManipMode();
+        notifyManipModeChange(false);
+      } else {
+        enableManipMode();
+        notifyManipModeChange(true);
+      }
+    }
     // Cmd+L / Ctrl+L: toggle terminal
     if ((e.key === 'l' || e.key === 'L') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
@@ -3786,6 +4811,9 @@ export const annotationScript = `
   window.addEventListener('beforeunload', function() {
     pendingAnnotations.forEach(function(ann) { ann.element = null; });
     pendingAnnotations = [];
+    manipChanges = new Map();
+    manipSelected = null;
+    manipHoverEl = null;
   });
 
   // Expose functions for external control
@@ -3801,5 +4829,8 @@ export const annotationScript = `
   window.__claudeDesignSetAltKey = setAltKeyState;
   window.__claudeDesignToggleFreeze = toggleAnimationFreeze;
   window.__claudeDesignSetGridSizes = setGridSizes;
+  window.__claudeDesignManipEnable = enableManipMode;
+  window.__claudeDesignManipDisable = disableManipMode;
+  window.__claudeDesignManipIsEnabled = function() { return manipMode; };
 })();
 `;

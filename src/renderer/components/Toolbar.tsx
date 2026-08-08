@@ -9,12 +9,14 @@ interface ToolbarProps {
   canGoForward: boolean;
   isLoading: boolean;
   annotateMode: boolean;
+  designMode: boolean;
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
   onStop: () => void;
   onClearCacheReload: () => void;
   onToggleAnnotate: () => void;
+  onToggleDesign: () => void;
   onToggleCodeView: () => void;
   codeViewActive?: boolean;
   hasEditor?: boolean;
@@ -36,12 +38,14 @@ export default function Toolbar({
   canGoForward,
   isLoading,
   annotateMode,
+  designMode,
   onBack,
   onForward,
   onReload,
   onStop,
   onClearCacheReload,
   onToggleAnnotate,
+  onToggleDesign,
   onToggleCodeView,
   codeViewActive = false,
   hasEditor = true,
@@ -283,6 +287,22 @@ export default function Toolbar({
           <polyline points="8 6 2 12 8 18" />
         </svg>
         <span>Code</span>
+      </button>
+
+      <button
+        className={`toolbar-btn toolbar-annotate-btn toolbar-design-btn ${designMode ? 'active' : ''}`}
+        onClick={onToggleDesign}
+        disabled={devToolsOpen}
+        title={
+          devToolsOpen
+            ? 'Close inspector to design'
+            : designMode
+              ? 'Exit Design Mode (Cmd+D)'
+              : 'Enter Design Mode (Cmd+D) — drag, resize and restyle elements directly'
+        }
+      >
+        <kbd className="toolbar-kbd">&#8984;D</kbd>
+        <span>{designMode ? 'Designing' : 'Design'}</span>
       </button>
 
       <button
