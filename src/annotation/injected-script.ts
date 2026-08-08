@@ -63,7 +63,7 @@ export const annotationScript = `
   let manipSuppressClick = false;    // swallow the click that ends a drag
   let manipChanges = new Map();      // element -> {baseline: {}, inline: {}, current: {}}
   let manipRepositionQueued = false;
-  let manipEmbedOpen = true;         // design section expanded state, remembered across popovers
+  let manipFlyoutOpen = false;       // design flyout open state, remembered across popovers
 
   // Area selection state (click-and-drag)
   let areaSelecting = false;
@@ -1122,39 +1122,53 @@ export const annotationScript = `
         border-radius: 5px !important;
         white-space: nowrap !important;
       }
-      /* Design section embedded inside the annotation popover */
-      .claude-design-manip-embed {
+      /* Design flyout: opened from the sliders button in the prompt box.
+         Slides in from the button's direction with a springy ease-out. */
+      .claude-design-manip-flyout {
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        width: 264px !important;
         background: #262626 !important;
         border: 1px solid #4a4a4a !important;
         border-radius: 16px !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
         color: #e5e5e5 !important;
         font-size: 12px !important;
         text-align: left !important;
         box-sizing: border-box !important;
         padding: 0 !important;
-        margin: 0 0 8px 0 !important;
+        margin: 0 !important;
         user-select: none !important;
         -webkit-user-select: none !important;
         overflow: hidden !important;
+        opacity: 0 !important;
+        transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1) !important;
+        will-change: transform, opacity !important;
+        pointer-events: none !important;
       }
-      .claude-design-manip-embed *, .claude-design-manip-embed *::before, .claude-design-manip-embed *::after {
+      .claude-design-manip-flyout.from-up { transform: translateY(14px) scale(0.97) !important; transform-origin: bottom center !important; }
+      .claude-design-manip-flyout.from-right { transform: translateX(-14px) scale(0.97) !important; transform-origin: left center !important; }
+      .claude-design-manip-flyout.from-left { transform: translateX(14px) scale(0.97) !important; transform-origin: right center !important; }
+      .claude-design-manip-flyout.visible {
+        opacity: 1 !important;
+        transform: translate(0, 0) scale(1) !important;
+        pointer-events: auto !important;
+      }
+      .claude-design-manip-flyout *, .claude-design-manip-flyout *::before, .claude-design-manip-flyout *::after {
         box-sizing: border-box !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         line-height: normal !important;
         text-transform: none !important;
         letter-spacing: normal !important;
       }
-      .claude-design-manip-embed-header {
+      .claude-design-manip-flyout-header {
         display: flex !important;
         align-items: center !important;
         gap: 8px !important;
-        padding: 9px 12px !important;
-        cursor: pointer !important;
+        padding: 10px 12px !important;
+        border-bottom: 1px solid #333 !important;
       }
-      .claude-design-manip-embed-header:hover { background: rgba(255,255,255,0.04) !important; }
-      .claude-design-manip-embed.open .claude-design-manip-embed-header { border-bottom: 1px solid #333 !important; }
-      .claude-design-manip-embed-title {
+      .claude-design-manip-flyout-title {
         font-size: 11px !important;
         font-weight: 600 !important;
         color: #eb9b78 !important;
@@ -1163,7 +1177,7 @@ export const annotationScript = `
         text-overflow: ellipsis !important;
         flex: 1 !important;
       }
-      .claude-design-manip-embed-count {
+      .claude-design-manip-flyout-count {
         font-size: 11px !important;
         font-weight: 600 !important;
         color: #eb9b78 !important;
@@ -1172,7 +1186,7 @@ export const annotationScript = `
         padding: 3px 8px !important;
         white-space: nowrap !important;
       }
-      .claude-design-manip-embed-reset {
+      .claude-design-manip-flyout-reset {
         all: unset !important;
         cursor: pointer !important;
         color: #888 !important;
@@ -1181,15 +1195,58 @@ export const annotationScript = `
         padding: 3px 7px !important;
         border-radius: 5px !important;
       }
-      .claude-design-manip-embed-reset:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
-      .claude-design-manip-embed-chevron {
-        color: #777 !important;
-        font-size: 10px !important;
-        transition: transform 0.15s ease !important;
+      .claude-design-manip-flyout-reset:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
+      /* Sliders button in the prompt box that toggles the flyout */
+      .claude-design-popover .claude-design-popover-design-btn {
+        position: relative !important;
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 8px !important;
+        background: transparent !important;
+        border: none !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: background 0.15s ease !important;
+        padding: 0 !important;
+        margin: 0 !important;
       }
-      .claude-design-manip-embed.open .claude-design-manip-embed-chevron { transform: rotate(90deg) !important; }
-      .claude-design-manip-embed-body { display: none !important; }
-      .claude-design-manip-embed.open .claude-design-manip-embed-body { display: block !important; }
+      .claude-design-popover .claude-design-popover-design-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+      }
+      .claude-design-popover .claude-design-popover-design-btn.active {
+        background: rgba(198, 97, 63, 0.2) !important;
+      }
+      .claude-design-popover .claude-design-popover-design-btn svg {
+        width: 18px !important;
+        height: 18px !important;
+        color: #888 !important;
+        display: block !important;
+      }
+      .claude-design-popover .claude-design-popover-design-btn.active svg,
+      .claude-design-popover .claude-design-popover-design-btn.has-changes svg {
+        color: #eb9b78 !important;
+      }
+      .claude-design-popover .claude-design-popover-design-count {
+        position: absolute !important;
+        top: -5px !important;
+        right: -5px !important;
+        min-width: 16px !important;
+        height: 16px !important;
+        padding: 0 4px !important;
+        border-radius: 8px !important;
+        background: #c6613f !important;
+        color: #fff !important;
+        font-size: 10px !important;
+        font-weight: 700 !important;
+        display: none !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+      .claude-design-popover .claude-design-popover-design-btn.has-changes .claude-design-popover-design-count {
+        display: flex !important;
+      }
       .claude-design-manip-section {
         padding: 8px 12px !important;
         border-bottom: 1px solid #303030 !important;
@@ -2830,6 +2887,7 @@ export const annotationScript = `
       positionPopover();
       positionCodeButton();
       positionManipOverlay();
+      positionManipFlyout();
     };
     window.addEventListener('scroll', popoverScrollHandler, true);
 
@@ -2888,18 +2946,27 @@ export const annotationScript = `
     // List is now shown in React panel, not in popover
     let listHTML = '';
 
-    // Design section (resize/scrub/nudge) — element selections only; filled
-    // in by manipAttach/buildManipEmbed after the popover is in the DOM
-    const manipEmbedHTML = (el && !textSelection) ? '<div class="claude-design-manip-embed-slot"></div>' : '';
+    // Sliders button that opens the design flyout — element selections only
+    const designButtonHTML = (el && !textSelection)
+      ? '<button class="claude-design-popover-design-btn" data-action="toggle-design" title="Design controls — resize, spacing, type, color">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>' +
+            '<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>' +
+            '<line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>' +
+            '<line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/>' +
+          '</svg>' +
+          '<span class="claude-design-popover-design-count">0</span>' +
+        '</button>'
+      : '';
 
     let inputAreaHTML =
-        manipEmbedHTML +
         '<input type="file" class="claude-design-popover-file" accept="image/*" multiple style="display: none;" />' +
         '<div class="claude-design-popover-input-row">' +
           headerHTML +
           '<textarea class="claude-design-popover-textarea" placeholder="' + placeholder + '"></textarea>' +
           '<div class="claude-design-popover-actions">' +
             '<div class="claude-design-popover-actions-left">' +
+              designButtonHTML +
               '<button class="claude-design-popover-image-btn" data-action="browse" title="Add image (⌘I)">' +
                 '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                   '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>' +
@@ -2920,16 +2987,17 @@ export const annotationScript = `
 
     document.body.appendChild(popoverElement);
 
-    // Attach direct manipulation: handles on the element, design section in
-    // the popover. Text/area selections don't get one.
+    // Reposition now that we know the actual height
+    positionPopover();
+
+    // Attach direct manipulation: handles on the element, and the design
+    // flyout if it was left open. Runs after positionPopover so the flyout
+    // anchors to the popover's final position. Text/area selections skip it.
     if (el && !textSelection) {
-      manipAttach(el, popoverElement.querySelector('.claude-design-manip-embed-slot'));
+      manipAttach(el);
     } else {
       manipDetach();
     }
-
-    // Reposition now that we know the actual height
-    positionPopover();
 
     // Floating code button at the top-right of the selected element. Clicking it
     // resolves the element's source and asks the renderer to open the in-app
@@ -3146,6 +3214,7 @@ export const annotationScript = `
         // Close popover so user can select another element
         cancelAnnotation();
       }
+      if (action === 'toggle-design') toggleManipFlyout();
       if (action === 'browse') fileInput.click();
       if (action === 'remove-image') {
         var imgIdx = target && target.dataset.imageIndex ? parseInt(target.dataset.imageIndex, 10) : 0;
@@ -3501,6 +3570,7 @@ export const annotationScript = `
     if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
     if (e.target.closest && e.target.closest('.claude-design-class-inspector')) return;
     if (e.target.closest && e.target.closest('.claude-design-manip-handle')) return;
+    if (e.target.closest && e.target.closest('.claude-design-manip-flyout')) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -3759,7 +3829,8 @@ export const annotationScript = `
       e.target.closest('.claude-design-code-btn') ||
       e.target.closest('.claude-design-class-inspector') ||
       e.target.closest('.claude-design-shortcut-hints') ||
-      e.target.closest('.claude-design-manip-handle')
+      e.target.closest('.claude-design-manip-handle') ||
+      e.target.closest('.claude-design-manip-flyout')
     )) return;
 
     mouseDownTarget = e.target;
@@ -4060,7 +4131,7 @@ export const annotationScript = `
 
   function isManipUiTarget(t) {
     if (!t || !t.closest) return false;
-    return !!t.closest('.claude-design-manip-handle, .claude-design-manip-sizelabel, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector, .claude-design-code-btn');
+    return !!t.closest('.claude-design-manip-handle, .claude-design-manip-sizelabel, .claude-design-manip-flyout, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector, .claude-design-code-btn');
   }
 
   function manipEnsureRecord(el) {
@@ -4226,31 +4297,35 @@ export const annotationScript = `
       // Resizing moves the element's rect, so keep the popover glued to it
       if (popoverElement) positionPopover();
       if (codeButtonElement) positionCodeButton();
+      positionManipFlyout();
     });
   }
 
-  // ---- Design section embedded in the annotation popover ----
+  // ---- Design flyout: opened from the sliders button in the prompt box ----
 
   function manipFieldHtml(prop, title) {
     return '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
   }
 
-  function buildManipEmbed(container, el) {
-    manipPanel = container;
-    container.className = 'claude-design-manip-embed' + (manipEmbedOpen ? ' open' : '');
+  function openManipFlyout() {
+    var el = manipSelected;
+    if (!el || !popoverElement) return;
+    if (manipPanel) manipPanel.remove();
+
+    var flyout = document.createElement('div');
+    flyout.className = 'claude-design-manip-flyout';
+    manipPanel = flyout;
 
     var computed = window.getComputedStyle(el);
     var display = computed.getPropertyValue('display');
     var showGap = display.indexOf('flex') !== -1 || display.indexOf('grid') !== -1;
 
     var html = '' +
-      '<div class="claude-design-manip-embed-header">' +
-        '<span class="claude-design-manip-embed-chevron">\\u25b6</span>' +
-        '<span class="claude-design-manip-embed-title">Design</span>' +
-        '<span class="claude-design-manip-embed-count" style="display:none"></span>' +
-        '<button class="claude-design-manip-embed-reset" style="display:none">Reset</button>' +
+      '<div class="claude-design-manip-flyout-header">' +
+        '<span class="claude-design-manip-flyout-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
+        '<span class="claude-design-manip-flyout-count" style="display:none"></span>' +
+        '<button class="claude-design-manip-flyout-reset" style="display:none">Reset</button>' +
       '</div>' +
-      '<div class="claude-design-manip-embed-body">' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Size</div>' +
         '<div class="claude-design-manip-row">' +
@@ -4302,27 +4377,19 @@ export const annotationScript = `
           '<input type="color" data-prop="background-color">' +
           '<span class="claude-design-manip-color-hex"></span>' +
         '</div>' +
-      '</div>' +
       '</div>';
 
-    container.innerHTML = html;
+    flyout.innerHTML = html;
+    document.body.appendChild(flyout);
 
-    container.querySelector('.claude-design-manip-embed-header').addEventListener('click', function(e) {
-      // Reset lives in the header; don't let it toggle the section
-      if (e.target.closest && e.target.closest('.claude-design-manip-embed-reset')) return;
-      e.stopPropagation();
-      manipEmbedOpen = !manipEmbedOpen;
-      container.classList.toggle('open', manipEmbedOpen);
-      if (popoverElement) positionPopover();
-    });
-    container.querySelector('.claude-design-manip-embed-reset').addEventListener('click', function(e) {
+    flyout.querySelector('.claude-design-manip-flyout-reset').addEventListener('click', function(e) {
       e.stopPropagation();
       if (manipSelected) manipResetElement(manipSelected);
     });
-    container.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
+    flyout.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
       fieldEl.addEventListener('mousedown', function(e) { startManipScrub(e, fieldEl); }, true);
     });
-    container.querySelectorAll('input[type="color"]').forEach(function(input) {
+    flyout.querySelectorAll('input[type="color"]').forEach(function(input) {
       input.addEventListener('input', function() {
         if (!manipSelected) return;
         manipSetProp(manipSelected, input.getAttribute('data-prop'), input.value);
@@ -4332,10 +4399,111 @@ export const annotationScript = `
       input.addEventListener('click', function(e) { e.stopPropagation(); });
     });
 
+    // Position first (this also picks the slide-in direction), then animate in
+    positionManipFlyout();
     refreshManipPanelValues();
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (manipPanel === flyout) flyout.classList.add('visible');
+      });
+    });
+    updateManipDesignButton();
+  }
+
+  function closeManipFlyout(immediate) {
+    var panel = manipPanel;
+    if (!panel) return;
+    manipPanel = null;
+    if (immediate) {
+      panel.remove();
+    } else {
+      panel.classList.remove('visible');
+      setTimeout(function() { panel.remove(); }, 320);
+    }
+    updateManipDesignButton();
+  }
+
+  function toggleManipFlyout() {
+    if (manipPanel) {
+      manipFlyoutOpen = false;
+      closeManipFlyout(false);
+    } else {
+      manipFlyoutOpen = true;
+      openManipFlyout();
+    }
+  }
+
+  // Place the flyout above the prompt box or beside it, wherever there is
+  // room — preferring spots that don't cover the selected element (the
+  // popover usually hangs below it, so "up" would land right on it). The
+  // chosen direction drives the slide-in animation.
+  function positionManipFlyout() {
+    if (!manipPanel || !popoverElement) return;
+    var pr = popoverElement.getBoundingClientRect();
+    var er = (manipSelected && manipSelected.isConnected) ? manipSelected.getBoundingClientRect() : null;
+    var w = manipPanel.offsetWidth || 264;
+    var h = manipPanel.offsetHeight || 300;
+    var pad = 10;
+
+    function clampTop(t) { return Math.min(Math.max(8, t), Math.max(8, window.innerHeight - h - 8)); }
+    function clampLeft(l) { return Math.min(Math.max(8, l), Math.max(8, window.innerWidth - w - 8)); }
+    function overlapWithElement(left, top) {
+      if (!er) return 0;
+      var x = Math.max(0, Math.min(left + w, er.right) - Math.max(left, er.left));
+      var y = Math.max(0, Math.min(top + h, er.bottom) - Math.max(top, er.top));
+      return x * y;
+    }
+
+    var candidates = [];
+    if (pr.top - h - pad >= 8) {
+      candidates.push({ dir: 'from-up', left: clampLeft(pr.left), top: pr.top - h - pad });
+    }
+    if (pr.right + pad + w <= window.innerWidth - 8) {
+      candidates.push({ dir: 'from-right', left: pr.right + pad, top: clampTop(pr.top) });
+    }
+    if (pr.left - pad - w >= 8) {
+      candidates.push({ dir: 'from-left', left: pr.left - pad - w, top: clampTop(pr.top) });
+    }
+    // Nothing fits cleanly — fall back to above, clamped into the viewport
+    if (candidates.length === 0) {
+      candidates.push({ dir: 'from-up', left: clampLeft(pr.left), top: Math.max(8, pr.top - h - pad) });
+    }
+
+    var best = candidates[0];
+    var bestOverlap = overlapWithElement(best.left, best.top);
+    for (var ci = 1; ci < candidates.length && bestOverlap > 0; ci++) {
+      var o = overlapWithElement(candidates[ci].left, candidates[ci].top);
+      if (o < bestOverlap) {
+        best = candidates[ci];
+        bestOverlap = o;
+      }
+    }
+
+    if (!manipPanel.classList.contains(best.dir)) {
+      manipPanel.classList.remove('from-up', 'from-right', 'from-left');
+      manipPanel.classList.add(best.dir);
+    }
+    manipPanel.style.left = best.left + 'px';
+    manipPanel.style.top = best.top + 'px';
+  }
+
+  // Sliders button in the prompt box: active while the flyout is open,
+  // badge shows the selected element's pending change count
+  function updateManipDesignButton() {
+    if (!popoverElement) return;
+    var btn = popoverElement.querySelector('.claude-design-popover-design-btn');
+    if (!btn) return;
+    btn.classList.toggle('active', !!manipPanel);
+    var rec = manipSelected ? manipChanges.get(manipSelected) : null;
+    var count = rec ? Object.keys(rec.current).length : 0;
+    btn.classList.toggle('has-changes', count > 0);
+    var badge = btn.querySelector('.claude-design-popover-design-count');
+    if (badge) badge.textContent = String(count);
   }
 
   function refreshManipPanelValues() {
+    // The button badge tracks changes even while the flyout is closed
+    updateManipDesignButton();
     if (!manipPanel || !manipSelected || !manipSelected.isConnected) return;
     var el = manipSelected;
     var computed = window.getComputedStyle(el);
@@ -4376,8 +4544,8 @@ export const annotationScript = `
 
     // Header shows how many tweaks this element carries; Reset appears with them
     var count = rec ? Object.keys(rec.current).length : 0;
-    var countEl = manipPanel.querySelector('.claude-design-manip-embed-count');
-    var resetBtn = manipPanel.querySelector('.claude-design-manip-embed-reset');
+    var countEl = manipPanel.querySelector('.claude-design-manip-flyout-count');
+    var resetBtn = manipPanel.querySelector('.claude-design-manip-flyout-reset');
     if (countEl) {
       countEl.style.display = count > 0 ? '' : 'none';
       countEl.textContent = count + (count === 1 ? ' change' : ' changes');
@@ -4388,26 +4556,27 @@ export const annotationScript = `
   // ---- Interactions: attach, resize, move, scrub, type ----
 
   // Called when the annotation popover opens on an element: puts resize
-  // handles on it and fills the popover's design section.
-  function manipAttach(el, embedContainer) {
+  // handles on it, and reopens the design flyout if it was open before.
+  function manipAttach(el) {
     manipDetach();
     manipSelected = el;
     manipEnsureRecord(el);
     buildManipOverlay();
     positionManipOverlay();
-    if (embedContainer) buildManipEmbed(embedContainer, el);
+    if (manipFlyoutOpen) openManipFlyout();
+    updateManipDesignButton();
   }
 
   // Called when the popover closes. Untouched records are pruned; real
   // tweaks stay tracked (and previewed) so reselecting the element resumes.
   function manipDetach() {
+    closeManipFlyout(true);
     if (manipSelected) {
       var rec = manipChanges.get(manipSelected);
       if (rec && Object.keys(rec.current).length === 0) manipChanges.delete(manipSelected);
     }
     manipSelected = null;
     manipDrag = null;
-    manipPanel = null; // lives inside the popover; removed with it
     removeManipOverlay();
   }
 
