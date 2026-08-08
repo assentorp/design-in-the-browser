@@ -52,7 +52,7 @@ Electron desktop app for visually annotating elements in a browser and sending e
 - `main-preload.ts` - Context bridge exposing mainAPI to renderer
 
 ### Annotation (`src/annotation/`)
-- `injected-script.ts` - Script injected into webview for element selection, annotation UI, @-mention file autocomplete
+- `injected-script.ts` - Script injected into webview for element selection, annotation UI, @-mention file autocomplete, persistent ruler guides (H/V keys)
 
 ## Reference (IPC channels + v1.2.2–v1.2.28 changelog)
 

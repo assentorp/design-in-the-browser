@@ -46,6 +46,61 @@ const normalizeUrl = (raw: string): string => {
   return (isLocal ? 'http://' : 'https://') + targetUrl;
 };
 
+// Persistent ruler guides (H/V keys in annotate mode) are stored per page
+// (origin + pathname) so they survive reloads, navigation, and app restarts.
+// One localStorage key holds all pages, pruned to the most recently used.
+interface StoredGuide {
+  axis: 'h' | 'v';
+  pos: number;
+}
+
+const GUIDES_STORAGE_KEY = 'ditb-guides-v1';
+const GUIDES_MAX_PAGES = 100;
+
+const guidePageKey = (url: string): string | null => {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch {
+    return null;
+  }
+};
+
+const readGuideStore = (): Record<string, { guides: StoredGuide[]; t: number }> => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(GUIDES_STORAGE_KEY) || '');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const loadGuides = (pageKey: string): StoredGuide[] => {
+  const entry = readGuideStore()[pageKey];
+  return entry && Array.isArray(entry.guides) ? entry.guides : [];
+};
+
+const saveGuides = (pageKey: string, guides: StoredGuide[]) => {
+  const store = readGuideStore();
+  if (guides.length === 0) {
+    delete store[pageKey];
+  } else {
+    store[pageKey] = { guides, t: Date.now() };
+  }
+  const keys = Object.keys(store);
+  if (keys.length > GUIDES_MAX_PAGES) {
+    keys
+      .sort((a, b) => (store[a].t || 0) - (store[b].t || 0))
+      .slice(0, keys.length - GUIDES_MAX_PAGES)
+      .forEach((k) => delete store[k]);
+  }
+  try {
+    localStorage.setItem(GUIDES_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Storage full or unavailable — guides just won't persist
+  }
+};
+
 export interface PendingEdit {
   note: string;
   selector: string;
@@ -245,6 +300,20 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
         }
       } catch (err) {
         console.error('[Browser] Failed to inject grid sizes:', err);
+      }
+
+      // Restore persistent ruler guides for this page. Always pushed — an
+      // empty set clears leftovers from the previous route after an in-page
+      // (SPA) navigation, where the JS context survives.
+      try {
+        const pageKey = guidePageKey(webview.getURL());
+        if (pageKey) {
+          await webview.executeJavaScript(
+            `window.__claudeDesignSetGuides && window.__claudeDesignSetGuides(${JSON.stringify(loadGuides(pageKey))}); true;`
+          );
+        }
+      } catch (err) {
+        console.error('[Browser] Failed to inject guides:', err);
       }
 
       // Inject project files for @-mention autocomplete
@@ -629,7 +698,7 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
             var __claudeSignal = console.log.bind(console);
 
             window.addEventListener('message', function(e) {
-              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-edit-code' || e.data.type === 'claude-design-toggle-terminal')) {
+              if (e.data && (e.data.type === 'claude-design-annotation' || e.data.type === 'claude-design-mode-change' || e.data.type === 'claude-design-pending-update' || e.data.type === 'claude-design-edit-code' || e.data.type === 'claude-design-toggle-terminal' || e.data.type === 'claude-design-guides-change')) {
                 window.__claudeDesignMessages.push(e.data);
                 __claudeSignal('__claude_msg__');
               }
@@ -788,6 +857,13 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
                 onToggleTerminal?.();
               } else if (msg.type === 'claude-design-pending-update') {
                 onPendingEditsChange(sessionId, msg.items || [], { sendAll: sendAllEdits, removeItem: removeEditItem, clearAll: clearAllEdits });
+              } else if (msg.type === 'claude-design-guides-change') {
+                // The page reports its own key so a navigation racing this
+                // message can't file the guides under the wrong page.
+                const key = typeof msg.pageKey === 'string' && msg.pageKey
+                  ? msg.pageKey
+                  : guidePageKey(webview.getURL());
+                if (key) saveGuides(key, Array.isArray(msg.guides) ? msg.guides : []);
               }
             }
           }

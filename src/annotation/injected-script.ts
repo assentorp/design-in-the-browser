@@ -34,6 +34,13 @@ export const annotationScript = `
   let rulerLineH = null;
   let rulerLineV = null;
 
+  // Persistent guide state (H/V keys) — document-anchored alignment lines
+  // that survive annotate-mode toggles and (via the host) page reloads
+  let guides = []; // Array of {axis: 'h'|'v', pos, el} — pos in document px
+  let guidesContainer = null;
+  let guideDrag = null; // {guide} while a guide is being dragged
+  let guideLabelElement = null;
+
   // Animation freeze state
   let animationsPaused = false;
 
@@ -1067,6 +1074,65 @@ export const annotationScript = `
         height: 100vh;
         width: 0;
         border-left: 1px dashed rgba(198, 97, 63, 0.5);
+      }
+      .claude-design-guides {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 2147483641;
+      }
+      .claude-design-guide {
+        position: fixed;
+        pointer-events: none;
+      }
+      .claude-design-guides.editable .claude-design-guide {
+        pointer-events: auto;
+      }
+      .claude-design-guide.axis-h {
+        left: 0;
+        width: 100vw;
+        height: 7px;
+        margin-top: -3px;
+        cursor: row-resize;
+      }
+      .claude-design-guide.axis-v {
+        top: 0;
+        height: 100vh;
+        width: 7px;
+        margin-left: -3px;
+        cursor: col-resize;
+      }
+      .claude-design-guide::before {
+        content: '';
+        position: absolute;
+        background: rgba(59, 130, 246, 0.85);
+      }
+      .claude-design-guide.axis-h::before { left: 0; right: 0; top: 3px; height: 1px; }
+      .claude-design-guide.axis-v::before { top: 0; bottom: 0; left: 3px; width: 1px; }
+      .claude-design-guides.editable .claude-design-guide:hover::before,
+      .claude-design-guide.dragging::before {
+        background: #3b82f6;
+        box-shadow: 0 0 3px rgba(59, 130, 246, 0.7);
+      }
+      .claude-design-guide.deleting {
+        opacity: 0.35;
+      }
+      .claude-design-guide-label {
+        position: fixed;
+        background: #1f1f1f;
+        border: 1px solid rgba(59, 130, 246, 0.7);
+        color: #fff;
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        pointer-events: none;
+        z-index: 2147483647;
+        white-space: nowrap;
       }
       .claude-design-area-select {
         position: fixed;
@@ -3216,7 +3282,8 @@ export const annotationScript = `
         (target.closest && target.closest('.claude-design-popover')) ||
         (target.closest && target.closest('.claude-design-toolbar')) ||
         (target.closest && target.closest('.claude-design-code-btn')) ||
-        (target.closest && target.closest('.claude-design-class-inspector'))) return;
+        (target.closest && target.closest('.claude-design-class-inspector')) ||
+        (target.closest && target.closest('.claude-design-guides'))) return;
 
     if (highlightedElement && highlightedElement !== target) {
       highlightedElement.classList.remove('claude-design-highlight');
@@ -3245,6 +3312,7 @@ export const annotationScript = `
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
     if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
     if (e.target.closest && e.target.closest('.claude-design-class-inspector')) return;
+    if (e.target.closest && e.target.closest('.claude-design-guides')) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -3327,6 +3395,189 @@ export const annotationScript = `
     if (rulerLineH) rulerLineH.style.top = e.clientY + 'px';
     if (rulerLineV) rulerLineV.style.left = e.clientX + 'px';
   }
+
+  // Persistent guides (H/V keys) — alignment lines anchored to document
+  // coordinates. Visible at all times, but only editable in annotate mode.
+  function ensureGuidesContainer() {
+    if (!guidesContainer || !guidesContainer.isConnected) {
+      guidesContainer = document.createElement('div');
+      guidesContainer.className = 'claude-design-guides';
+      if (annotateMode) guidesContainer.classList.add('editable');
+      document.body.appendChild(guidesContainer);
+      // If a framework re-render dropped the old container, re-adopt the lines
+      guides.forEach(function(g) {
+        if (g.el) guidesContainer.appendChild(g.el);
+      });
+    }
+    return guidesContainer;
+  }
+
+  function positionGuideEl(guide) {
+    if (!guide.el) return;
+    if (guide.axis === 'h') {
+      guide.el.style.top = (guide.pos - window.scrollY) + 'px';
+    } else {
+      guide.el.style.left = (guide.pos - window.scrollX) + 'px';
+    }
+  }
+
+  function updateGuidePositions() {
+    for (var i = 0; i < guides.length; i++) positionGuideEl(guides[i]);
+  }
+
+  function createGuideEl(guide) {
+    var el = document.createElement('div');
+    el.className = 'claude-design-guide axis-' + guide.axis;
+    guide.el = el;
+    el.addEventListener('mousedown', function(e) {
+      if (!annotateMode || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      startGuideDrag(guide, e);
+    });
+    el.addEventListener('dblclick', function(e) {
+      if (!annotateMode) return;
+      e.preventDefault();
+      e.stopPropagation();
+      removeGuide(guide);
+      notifyGuidesChange();
+    });
+    ensureGuidesContainer().appendChild(el);
+    positionGuideEl(guide);
+  }
+
+  function addGuide(axis, docPos, quiet) {
+    var guide = { axis: axis, pos: Math.round(docPos), el: null };
+    guides.push(guide);
+    createGuideEl(guide);
+    if (!quiet) {
+      showGridToast((axis === 'h' ? 'Horizontal' : 'Vertical') + ' Guide Added', 'Drag to move · Double-click to remove');
+    }
+    return guide;
+  }
+
+  function removeGuide(guide) {
+    var idx = guides.indexOf(guide);
+    if (idx !== -1) guides.splice(idx, 1);
+    if (guide.el) {
+      guide.el.remove();
+      guide.el = null;
+    }
+  }
+
+  function clearGuides() {
+    while (guides.length) removeGuide(guides[0]);
+  }
+
+  // Replace all guides with the host-provided set (persistence across reloads)
+  function setGuides(arr) {
+    clearGuides();
+    if (Array.isArray(arr)) {
+      arr.forEach(function(g) {
+        if (g && (g.axis === 'h' || g.axis === 'v') && typeof g.pos === 'number' && isFinite(g.pos)) {
+          addGuide(g.axis, g.pos, true);
+        }
+      });
+    }
+  }
+
+  function showGuideLabel(guide, clientX, clientY) {
+    if (!guideLabelElement) {
+      guideLabelElement = document.createElement('div');
+      guideLabelElement.className = 'claude-design-guide-label';
+      document.body.appendChild(guideLabelElement);
+    }
+    guideLabelElement.textContent = (guide.axis === 'h' ? 'y: ' : 'x: ') + guide.pos + 'px';
+    guideLabelElement.style.left = (clientX + 12) + 'px';
+    guideLabelElement.style.top = (clientY + 12) + 'px';
+  }
+
+  function removeGuideLabel() {
+    if (guideLabelElement) {
+      guideLabelElement.remove();
+      guideLabelElement = null;
+    }
+  }
+
+  function startGuideDrag(guide, e) {
+    guideDrag = { guide: guide };
+    guide.el.classList.add('dragging');
+    document.addEventListener('mousemove', handleGuideDragMove, true);
+    document.addEventListener('mouseup', handleGuideDragUp, true);
+    showGuideLabel(guide, e.clientX, e.clientY);
+  }
+
+  function guideDraggedOffViewport(guide, e) {
+    return guide.axis === 'h'
+      ? (e.clientY < 0 || e.clientY > window.innerHeight)
+      : (e.clientX < 0 || e.clientX > window.innerWidth);
+  }
+
+  function handleGuideDragMove(e) {
+    if (!guideDrag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var guide = guideDrag.guide;
+    if (guide.axis === 'h') {
+      guide.pos = Math.round(e.clientY + window.scrollY);
+    } else {
+      guide.pos = Math.round(e.clientX + window.scrollX);
+    }
+    guide.el.classList.toggle('deleting', guideDraggedOffViewport(guide, e));
+    positionGuideEl(guide);
+    showGuideLabel(guide, e.clientX, e.clientY);
+  }
+
+  function handleGuideDragUp(e) {
+    if (!guideDrag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var guide = guideDrag.guide;
+    endGuideDrag();
+    // Dragging a guide off the viewport edge deletes it (like design tools)
+    if (guideDraggedOffViewport(guide, e)) removeGuide(guide);
+    notifyGuidesChange();
+  }
+
+  function endGuideDrag() {
+    if (guideDrag && guideDrag.guide.el) {
+      guideDrag.guide.el.classList.remove('dragging');
+      guideDrag.guide.el.classList.remove('deleting');
+    }
+    guideDrag = null;
+    removeGuideLabel();
+    document.removeEventListener('mousemove', handleGuideDragMove, true);
+    document.removeEventListener('mouseup', handleGuideDragUp, true);
+  }
+
+  function notifyGuidesChange() {
+    window.postMessage({
+      type: 'claude-design-guides-change',
+      pageKey: location.origin + location.pathname,
+      guides: guides.map(function(g) { return { axis: g.axis, pos: g.pos }; }),
+    }, '*');
+  }
+
+  function handleGuideKeys(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+    if (e.key === 'h' || e.key === 'H') {
+      e.preventDefault();
+      addGuide('h', lastMouseY + window.scrollY);
+      notifyGuidesChange();
+    } else if (e.key === 'v' || e.key === 'V') {
+      e.preventDefault();
+      addGuide('v', lastMouseX + window.scrollX);
+      notifyGuidesChange();
+    }
+  }
+
+  // Keep guides pinned to their document position while the page scrolls.
+  // Registered once at init — guides stay visible outside annotate mode.
+  window.addEventListener('scroll', function() {
+    if (guides.length) updateGuidePositions();
+  }, { passive: true });
 
   var freezeBadgeElement = null;
   function showFreezeBadge() {
@@ -3461,7 +3712,7 @@ export const annotationScript = `
     removeShortcutHints();
     shortcutHintsElement = document.createElement('div');
     shortcutHintsElement.className = 'claude-design-shortcut-hints';
-    shortcutHintsElement.innerHTML = '<span><kbd>Drag</kbd> Select area</span><span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span><span><kbd>Shift+G</kbd> Grid overlay</span><span><kbd>F</kbd> Freeze animations</span>';
+    shortcutHintsElement.innerHTML = '<span><kbd>Drag</kbd> Select area</span><span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler crosshair</span><span><kbd>H</kbd>/<kbd>V</kbd> Add guide</span><span><kbd>Shift+G</kbd> Grid overlay</span><span><kbd>F</kbd> Freeze animations</span>';
     document.body.appendChild(shortcutHintsElement);
     // Trigger fade-in on next frame
     requestAnimationFrame(function() {
@@ -3494,7 +3745,8 @@ export const annotationScript = `
       e.target.closest('.claude-design-toolbar') ||
       e.target.closest('.claude-design-code-btn') ||
       e.target.closest('.claude-design-class-inspector') ||
-      e.target.closest('.claude-design-shortcut-hints')
+      e.target.closest('.claude-design-shortcut-hints') ||
+      e.target.closest('.claude-design-guides')
     )) return;
 
     mouseDownTarget = e.target;
@@ -3626,9 +3878,13 @@ export const annotationScript = `
     document.addEventListener('mousemove', handleMouseMoveForRuler, true);
     document.addEventListener('keydown', handleFKey, true);
     document.addEventListener('keydown', handleShiftGKey, true);
+    document.addEventListener('keydown', handleGuideKeys, true);
     document.addEventListener('mousedown', handleAreaMouseDown, true);
     document.addEventListener('mousemove', handleAreaMouseMove, true);
     document.addEventListener('mouseup', handleAreaMouseUp, true);
+
+    // Make persistent guides grabbable while annotating
+    if (guidesContainer) guidesContainer.classList.add('editable');
 
     // Restore visual highlights for any surviving pending annotations
     if (pendingAnnotations.length > 0) {
@@ -3662,12 +3918,16 @@ export const annotationScript = `
     document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
     document.removeEventListener('keydown', handleFKey, true);
     document.removeEventListener('keydown', handleShiftGKey, true);
+    document.removeEventListener('keydown', handleGuideKeys, true);
     document.removeEventListener('mousedown', handleAreaMouseDown, true);
     document.removeEventListener('mousemove', handleAreaMouseMove, true);
     document.removeEventListener('mouseup', handleAreaMouseUp, true);
     removeAreaSelection();
     removeRulerGuides();
     removeGridOverlay();
+    // Persistent guides stay visible, but stop being interactive
+    endGuideDrag();
+    if (guidesContainer) guidesContainer.classList.remove('editable');
     removeShortcutHints();
     // Unfreeze animations when leaving annotate mode
     if (animationsPaused) {
@@ -3801,5 +4061,7 @@ export const annotationScript = `
   window.__claudeDesignSetAltKey = setAltKeyState;
   window.__claudeDesignToggleFreeze = toggleAnimationFreeze;
   window.__claudeDesignSetGridSizes = setGridSizes;
+  window.__claudeDesignSetGuides = setGuides;
+  window.__claudeDesignClearGuides = function() { clearGuides(); notifyGuidesChange(); };
 })();
 `;
