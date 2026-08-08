@@ -9,14 +9,12 @@ interface ToolbarProps {
   canGoForward: boolean;
   isLoading: boolean;
   annotateMode: boolean;
-  designMode: boolean;
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
   onStop: () => void;
   onClearCacheReload: () => void;
   onToggleAnnotate: () => void;
-  onToggleDesign: () => void;
   onToggleCodeView: () => void;
   codeViewActive?: boolean;
   hasEditor?: boolean;
@@ -38,14 +36,12 @@ export default function Toolbar({
   canGoForward,
   isLoading,
   annotateMode,
-  designMode,
   onBack,
   onForward,
   onReload,
   onStop,
   onClearCacheReload,
   onToggleAnnotate,
-  onToggleDesign,
   onToggleCodeView,
   codeViewActive = false,
   hasEditor = true,
@@ -290,22 +286,6 @@ export default function Toolbar({
       </button>
 
       <button
-        className={`toolbar-btn toolbar-annotate-btn toolbar-design-btn ${designMode ? 'active' : ''}`}
-        onClick={onToggleDesign}
-        disabled={devToolsOpen}
-        title={
-          devToolsOpen
-            ? 'Close inspector to design'
-            : designMode
-              ? 'Exit Design Mode (Cmd+D)'
-              : 'Enter Design Mode (Cmd+D) — drag, resize and restyle elements directly'
-        }
-      >
-        <kbd className="toolbar-kbd">&#8984;D</kbd>
-        <span>{designMode ? 'Designing' : 'Design'}</span>
-      </button>
-
-      <button
         className={`toolbar-btn toolbar-annotate-btn ${annotateMode ? 'active' : ''}`}
         onClick={onToggleAnnotate}
         disabled={devToolsOpen}
@@ -314,7 +294,7 @@ export default function Toolbar({
             ? 'Close inspector to edit'
             : annotateMode
               ? 'Exit Edit Mode (Cmd+E)'
-              : 'Enter Edit Mode (Cmd+E)'
+              : 'Enter Edit Mode (Cmd+E) — annotate, drag, resize and restyle elements'
         }
       >
         <kbd className="toolbar-kbd">&#8984;E</kbd>

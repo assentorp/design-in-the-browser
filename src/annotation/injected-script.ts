@@ -55,16 +55,15 @@ export const annotationScript = `
   let selectedText = null;
   let selectedTextRange = null;
 
-  // Design (direct manipulation) mode state
-  let manipMode = false;
-  let manipSelected = null;          // element currently selected for manipulation
-  let manipHoverEl = null;
-  let manipOverlay = null;           // {box, label, handles: {dir: el}}
-  let manipPanel = null;
+  // Direct manipulation state (attached to the Edit-mode element selection)
+  let manipSelected = null;          // element the popover + handles are attached to
+  let manipOverlay = null;           // {label, handles: {dir: el}}
+  let manipPanel = null;             // design section embedded in the popover
   let manipDrag = null;              // active drag: {kind: 'resize'|'move'|'scrub', ...}
   let manipSuppressClick = false;    // swallow the click that ends a drag
   let manipChanges = new Map();      // element -> {baseline: {}, inline: {}, current: {}}
   let manipRepositionQueued = false;
+  let manipEmbedOpen = true;         // design section expanded state, remembered across popovers
 
   // Area selection state (click-and-drag)
   let areaSelecting = false;
@@ -270,8 +269,13 @@ export const annotationScript = `
       .claude-design-popover .claude-design-popover-add-another svg {
         flex-shrink: 0 !important;
       }
-      .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *):not(.claude-design-class-inspector):not(.claude-design-class-inspector *) {
+      .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *):not(.claude-design-class-inspector):not(.claude-design-class-inspector *):not(.claude-design-manip-handle):not(.claude-design-selected):not(.claude-design-selected *) {
         cursor: crosshair !important;
+      }
+      /* The selected element can be dragged to nudge it via margins */
+      .claude-design-crosshair .claude-design-selected,
+      .claude-design-crosshair .claude-design-selected * {
+        cursor: move !important;
       }
       .claude-design-popover-textarea.dragover {
         border-color: #c6613f !important;
@@ -1088,27 +1092,13 @@ export const annotationScript = `
         border-radius: 3px;
       }
 
-      /* ---- Design (direct manipulation) mode ---- */
-      .claude-design-manip-highlight {
-        outline: 1.5px solid rgba(59, 130, 246, 0.9) !important;
-        outline-offset: 1px !important;
-      }
-      .claude-design-manip-target {
-        cursor: move !important;
-      }
-      .claude-design-manip-box {
-        position: fixed !important;
-        pointer-events: none !important;
-        z-index: 2147483645 !important;
-        border: 1.5px solid #3b82f6 !important;
-        box-sizing: border-box !important;
-      }
+      /* ---- Direct manipulation (part of Edit mode) ---- */
       .claude-design-manip-handle {
         position: fixed !important;
         width: 9px !important;
         height: 9px !important;
         background: #fff !important;
-        border: 1.5px solid #3b82f6 !important;
+        border: 1.5px solid #c6613f !important;
         border-radius: 2px !important;
         box-sizing: border-box !important;
         pointer-events: auto !important;
@@ -1122,7 +1112,7 @@ export const annotationScript = `
         position: fixed !important;
         pointer-events: none !important;
         z-index: 2147483646 !important;
-        background: #3b82f6 !important;
+        background: #c6613f !important;
         color: #fff !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         font-size: 11px !important;
@@ -1132,57 +1122,74 @@ export const annotationScript = `
         border-radius: 5px !important;
         white-space: nowrap !important;
       }
-      .claude-design-manip-panel {
-        position: fixed !important;
-        z-index: 2147483647 !important;
-        width: 232px !important;
+      /* Design section embedded inside the annotation popover */
+      .claude-design-manip-embed {
         background: #262626 !important;
-        border: 1px solid #3d3d3d !important;
-        border-radius: 12px !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45) !important;
+        border: 1px solid #4a4a4a !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
         color: #e5e5e5 !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         font-size: 12px !important;
-        line-height: normal !important;
         text-align: left !important;
         box-sizing: border-box !important;
         padding: 0 !important;
+        margin: 0 0 8px 0 !important;
         user-select: none !important;
         -webkit-user-select: none !important;
+        overflow: hidden !important;
       }
-      .claude-design-manip-panel *, .claude-design-manip-panel *::before, .claude-design-manip-panel *::after {
+      .claude-design-manip-embed *, .claude-design-manip-embed *::before, .claude-design-manip-embed *::after {
         box-sizing: border-box !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         line-height: normal !important;
         text-transform: none !important;
         letter-spacing: normal !important;
       }
-      .claude-design-manip-panel-header {
+      .claude-design-manip-embed-header {
         display: flex !important;
         align-items: center !important;
-        justify-content: space-between !important;
         gap: 8px !important;
-        padding: 10px 12px 8px 12px !important;
-        border-bottom: 1px solid #333 !important;
+        padding: 9px 12px !important;
+        cursor: pointer !important;
       }
-      .claude-design-manip-panel-title {
+      .claude-design-manip-embed-header:hover { background: rgba(255,255,255,0.04) !important; }
+      .claude-design-manip-embed.open .claude-design-manip-embed-header { border-bottom: 1px solid #333 !important; }
+      .claude-design-manip-embed-title {
         font-size: 11px !important;
         font-weight: 600 !important;
         color: #eb9b78 !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
+        flex: 1 !important;
       }
-      .claude-design-manip-panel-close {
+      .claude-design-manip-embed-count {
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #eb9b78 !important;
+        background: rgba(198, 97, 63, 0.16) !important;
+        border-radius: 10px !important;
+        padding: 3px 8px !important;
+        white-space: nowrap !important;
+      }
+      .claude-design-manip-embed-reset {
         all: unset !important;
         cursor: pointer !important;
         color: #888 !important;
-        font-size: 14px !important;
-        line-height: 1 !important;
-        padding: 2px 4px !important;
-        border-radius: 4px !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        padding: 3px 7px !important;
+        border-radius: 5px !important;
       }
-      .claude-design-manip-panel-close:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
+      .claude-design-manip-embed-reset:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
+      .claude-design-manip-embed-chevron {
+        color: #777 !important;
+        font-size: 10px !important;
+        transition: transform 0.15s ease !important;
+      }
+      .claude-design-manip-embed.open .claude-design-manip-embed-chevron { transform: rotate(90deg) !important; }
+      .claude-design-manip-embed-body { display: none !important; }
+      .claude-design-manip-embed.open .claude-design-manip-embed-body { display: block !important; }
       .claude-design-manip-section {
         padding: 8px 12px !important;
         border-bottom: 1px solid #303030 !important;
@@ -1238,7 +1245,7 @@ export const annotationScript = `
         border-color: rgba(198, 97, 63, 0.55) !important;
         background: rgba(198, 97, 63, 0.12) !important;
       }
-      .claude-design-manip-field.scrubbing { border-color: #3b82f6 !important; }
+      .claude-design-manip-field.scrubbing { border-color: #c6613f !important; }
       .claude-design-manip-field-input {
         all: unset !important;
         width: 100% !important;
@@ -1267,43 +1274,6 @@ export const annotationScript = `
         color: #999 !important;
         font-size: 11px !important;
         font-variant-numeric: tabular-nums !important;
-      }
-      .claude-design-manip-footer {
-        display: flex !important;
-        align-items: center !important;
-        gap: 6px !important;
-        padding: 10px 12px !important;
-        border-top: 1px solid #333 !important;
-      }
-      .claude-design-manip-reset {
-        all: unset !important;
-        cursor: pointer !important;
-        color: #999 !important;
-        font-size: 12px !important;
-        font-weight: 500 !important;
-        padding: 6px 10px !important;
-        border-radius: 7px !important;
-        text-align: center !important;
-      }
-      .claude-design-manip-reset:hover { color: #fff !important; background: rgba(255,255,255,0.08) !important; }
-      .claude-design-manip-apply {
-        all: unset !important;
-        cursor: pointer !important;
-        flex: 1 !important;
-        background: #c6613f !important;
-        color: #fff !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        padding: 7px 10px !important;
-        border-radius: 8px !important;
-        text-align: center !important;
-        transition: background 0.15s ease !important;
-      }
-      .claude-design-manip-apply:hover { background: #a8522f !important; }
-      .claude-design-manip-apply.disabled {
-        background: #3a3a3a !important;
-        color: #777 !important;
-        cursor: default !important;
       }
     \`;
     document.head.appendChild(style);
@@ -2770,7 +2740,20 @@ export const annotationScript = `
       top = rect.top - popHeight - 10;
     }
     if (top < 10) {
-      // No room above either — anchor to bottom of viewport, overlapping element
+      // No room above or below — try beside the element (right, then left)
+      // so it and its resize handles stay visible under the taller popover
+      var sideTop = Math.max(10, Math.min(rect.top, window.innerHeight - popHeight - 10));
+      if (rect.right + 330 <= window.innerWidth) {
+        popoverElement.style.top = sideTop + 'px';
+        popoverElement.style.left = (rect.right + 14) + 'px';
+        return;
+      }
+      if (rect.left - 334 >= 0) {
+        popoverElement.style.top = sideTop + 'px';
+        popoverElement.style.left = (rect.left - 334) + 'px';
+        return;
+      }
+      // Nowhere else — anchor to bottom of viewport, overlapping element
       top = window.innerHeight - popHeight - 10;
     }
 
@@ -2842,10 +2825,11 @@ export const annotationScript = `
     popoverElement.style.top = (rect.bottom + 10) + 'px';
     popoverElement.style.left = left + 'px';
 
-    // Add scroll listener to reposition popover and code button
+    // Add scroll listener to reposition popover, code button, and handles
     popoverScrollHandler = function() {
       positionPopover();
       positionCodeButton();
+      positionManipOverlay();
     };
     window.addEventListener('scroll', popoverScrollHandler, true);
 
@@ -2904,7 +2888,12 @@ export const annotationScript = `
     // List is now shown in React panel, not in popover
     let listHTML = '';
 
+    // Design section (resize/scrub/nudge) — element selections only; filled
+    // in by manipAttach/buildManipEmbed after the popover is in the DOM
+    const manipEmbedHTML = (el && !textSelection) ? '<div class="claude-design-manip-embed-slot"></div>' : '';
+
     let inputAreaHTML =
+        manipEmbedHTML +
         '<input type="file" class="claude-design-popover-file" accept="image/*" multiple style="display: none;" />' +
         '<div class="claude-design-popover-input-row">' +
           headerHTML +
@@ -2930,6 +2919,14 @@ export const annotationScript = `
     popoverElement.innerHTML = inputAreaHTML + listHTML;
 
     document.body.appendChild(popoverElement);
+
+    // Attach direct manipulation: handles on the element, design section in
+    // the popover. Text/area selections don't get one.
+    if (el && !textSelection) {
+      manipAttach(el, popoverElement.querySelector('.claude-design-manip-embed-slot'));
+    } else {
+      manipDetach();
+    }
 
     // Reposition now that we know the actual height
     positionPopover();
@@ -3136,11 +3133,15 @@ export const annotationScript = `
       if (action === 'send-all') sendAllAnnotations();
       if (action === 'enter-list-mode') {
         todoMode = true;
-        // Save current note if there's text, then close popover to select another element
+        // Save current note and/or design tweaks, then close popover to select another element
         var ta = popoverElement && popoverElement.querySelector('textarea');
-        var currentNote = ta && expandMentions(ta.value.trim(), ta);
-        if (currentNote && selectedElement) {
-          savePendingAnnotation(selectedElement, currentNote);
+        var currentTyped = (ta && expandMentions(ta.value.trim(), ta)) || '';
+        if (selectedElement) {
+          var currentNote = composeNoteWithDeltas(selectedElement, currentTyped);
+          if (currentNote) {
+            savePendingAnnotation(selectedElement, currentNote);
+            manipConsumeDeltas(selectedElement);
+          }
         }
         // Close popover so user can select another element
         cancelAnnotation();
@@ -3161,10 +3162,14 @@ export const annotationScript = `
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
         e.preventDefault();
         if (todoMode || pendingAnnotations.length > 0) {
-          // Save current note first if there's text, then send all
-          var currentNote = expandMentions(textarea.value.trim(), textarea);
-          if (currentNote && selectedElement) {
-            savePendingAnnotation(selectedElement, currentNote);
+          // Save current note/tweaks first, then send all
+          var currentTyped = expandMentions(textarea.value.trim(), textarea);
+          if (selectedElement) {
+            var currentNote = composeNoteWithDeltas(selectedElement, currentTyped);
+            if (currentNote) {
+              savePendingAnnotation(selectedElement, currentNote);
+              manipConsumeDeltas(selectedElement);
+            }
           }
           sendAllAnnotations();
         } else {
@@ -3180,7 +3185,8 @@ export const annotationScript = `
       // Cmd/Ctrl+Shift+Enter: Add to list (enter list mode and save)
       if (e.key === 'Enter' && e.shiftKey && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        var note = expandMentions(textarea.value.trim(), textarea);
+        var typedNote = expandMentions(textarea.value.trim(), textarea);
+        var note = selectedElement ? composeNoteWithDeltas(selectedElement, typedNote) : typedNote;
         if (!note) {
           textarea.focus();
           return;
@@ -3190,6 +3196,7 @@ export const annotationScript = `
         }
         if (selectedElement) {
           savePendingAnnotation(selectedElement, note);
+          manipConsumeDeltas(selectedElement);
         }
         cancelAnnotation();
         return;
@@ -3241,6 +3248,7 @@ export const annotationScript = `
   }
 
   function cancelAnnotation() {
+    manipDetach();
     removePopover();
     referenceImagesData = [];
 
@@ -3268,28 +3276,32 @@ export const annotationScript = `
     if (!popoverElement) return;
 
     const textarea = popoverElement.querySelector('textarea');
-    const note = textarea && expandMentions(textarea.value.trim(), textarea);
-
-    if (!note) {
-      textarea && textarea.focus();
-      return;
-    }
+    const typed = (textarea && expandMentions(textarea.value.trim(), textarea)) || '';
 
     // Handle area selection - sends immediately
     if (areaSelectedRect) {
+      if (!typed) { textarea && textarea.focus(); return; }
       sendAnnotation();
       return;
     }
 
     // Handle text selection - still sends immediately
     if (selectedText && selectedTextRange) {
+      if (!typed) { textarea && textarea.focus(); return; }
       sendAnnotation();
       return;
     }
 
-    // For element selection - save locally and close popover to select another element
+    // For element selection - save locally (typed note + design tweaks
+    // folded into one instruction) and close popover to select another element
     if (selectedElement) {
+      const note = composeNoteWithDeltas(selectedElement, typed);
+      if (!note) {
+        textarea && textarea.focus();
+        return;
+      }
       savePendingAnnotation(selectedElement, note);
+      manipConsumeDeltas(selectedElement);
       cancelAnnotation();
     }
   }
@@ -3298,7 +3310,13 @@ export const annotationScript = `
     if (!popoverElement) return;
 
     const textarea = popoverElement.querySelector('textarea');
-    const request = textarea && expandMentions(textarea.value.trim(), textarea);
+    const typed = (textarea && expandMentions(textarea.value.trim(), textarea)) || '';
+
+    // Element selections may send with an empty note when there are design
+    // tweaks — the deltas ARE the instruction. Text/area selections need text.
+    const request = (selectedElement && !selectedText && !areaSelectedRect)
+      ? composeNoteWithDeltas(selectedElement, typed)
+      : typed;
 
     if (!request) {
       textarea && textarea.focus();
@@ -3434,6 +3452,9 @@ export const annotationScript = `
     // Post message to parent
     window.__claudeDesignSendAnnotation(data);
 
+    // Deltas went out with this note; keep the preview, stop tracking them
+    manipConsumeDeltas(selectedElement);
+
     cancelAnnotation();
   }
 
@@ -3470,13 +3491,23 @@ export const annotationScript = `
   function handleClick(e) {
     if (areaSelecting) return;
     if (!annotateMode) return;
+    // Consume the drag-suppress flag on ANY click, even ones we ignore — a
+    // drag ending over the popover must not leave a stale flag that would
+    // swallow the user's next real click.
+    var suppressManip = manipSuppressClick;
+    manipSuppressClick = false;
     if (e.target.closest && e.target.closest('.claude-design-popover')) return;
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
     if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
     if (e.target.closest && e.target.closest('.claude-design-class-inspector')) return;
+    if (e.target.closest && e.target.closest('.claude-design-manip-handle')) return;
 
     e.preventDefault();
     e.stopPropagation();
+
+    // The click that ends a resize/nudge/scrub drag is part of that gesture,
+    // not a click-outside — the popover stays open
+    if (suppressManip) return;
 
     // If popover is open, clicking outside cancels it
     if (selectedElement && popoverElement) {
@@ -3690,7 +3721,7 @@ export const annotationScript = `
     removeShortcutHints();
     shortcutHintsElement = document.createElement('div');
     shortcutHintsElement.className = 'claude-design-shortcut-hints';
-    shortcutHintsElement.innerHTML = '<span><kbd>Drag</kbd> Select area</span><span><kbd>Alt</kbd> Inspect element</span><span><kbd>G</kbd> Ruler guides</span><span><kbd>Shift+G</kbd> Grid overlay</span><span><kbd>F</kbd> Freeze animations</span>';
+    shortcutHintsElement.innerHTML = '<span><kbd>Click</kbd> Select \\u00b7 then drag handles, scrub values, arrow-nudge</span><span><kbd>Drag</kbd> Select area</span><span><kbd>Alt</kbd> Inspect element</span><span><kbd>Shift+G</kbd> Grid</span><span><kbd>F</kbd> Freeze animations</span>';
     document.body.appendChild(shortcutHintsElement);
     // Trigger fade-in on next frame
     requestAnimationFrame(function() {
@@ -3718,12 +3749,17 @@ export const annotationScript = `
   function handleAreaMouseDown(e) {
     if (!annotateMode || altKeyDown || gKeyDown) return;
     if (e.button !== 0) return;
+    // A drag starting on the selected element (or its handles) is a
+    // nudge/resize gesture, not an area-select marquee
+    if (manipDrag) return;
+    if (manipSelected && (e.target === manipSelected || manipSelected.contains(e.target))) return;
     if (e.target.closest && (
       e.target.closest('.claude-design-popover') ||
       e.target.closest('.claude-design-toolbar') ||
       e.target.closest('.claude-design-code-btn') ||
       e.target.closest('.claude-design-class-inspector') ||
-      e.target.closest('.claude-design-shortcut-hints')
+      e.target.closest('.claude-design-shortcut-hints') ||
+      e.target.closest('.claude-design-manip-handle')
     )) return;
 
     mouseDownTarget = e.target;
@@ -3840,11 +3876,6 @@ export const annotationScript = `
 
   function enableAnnotateMode() {
     if (annotateMode) return;
-    // Edit mode and design mode are mutually exclusive — both capture clicks
-    if (manipMode) {
-      disableManipMode();
-      notifyManipModeChange(false);
-    }
     annotateMode = true;
     document.body.classList.add('claude-design-crosshair');
 
@@ -3860,6 +3891,14 @@ export const annotationScript = `
     document.addEventListener('mousemove', handleMouseMoveForRuler, true);
     document.addEventListener('keydown', handleFKey, true);
     document.addEventListener('keydown', handleShiftGKey, true);
+    // Direct manipulation (resize/nudge/scrub) — must register before the
+    // area-select handlers so a drag on the selected element wins over marquee
+    document.addEventListener('mousedown', handleManipMouseDown, true);
+    document.addEventListener('mousemove', handleManipMouseMove, true);
+    document.addEventListener('mouseup', handleManipMouseUp, true);
+    document.addEventListener('keydown', handleManipKeyDown, true);
+    window.addEventListener('scroll', queueManipReposition, true);
+    window.addEventListener('resize', queueManipReposition);
     document.addEventListener('mousedown', handleAreaMouseDown, true);
     document.addEventListener('mousemove', handleAreaMouseMove, true);
     document.addEventListener('mouseup', handleAreaMouseUp, true);
@@ -3896,6 +3935,13 @@ export const annotationScript = `
     document.removeEventListener('mousemove', handleMouseMoveForRuler, true);
     document.removeEventListener('keydown', handleFKey, true);
     document.removeEventListener('keydown', handleShiftGKey, true);
+    document.removeEventListener('mousedown', handleManipMouseDown, true);
+    document.removeEventListener('mousemove', handleManipMouseMove, true);
+    document.removeEventListener('mouseup', handleManipMouseUp, true);
+    document.removeEventListener('keydown', handleManipKeyDown, true);
+    window.removeEventListener('scroll', queueManipReposition, true);
+    window.removeEventListener('resize', queueManipReposition);
+    manipSuppressClick = false;
     document.removeEventListener('mousedown', handleAreaMouseDown, true);
     document.removeEventListener('mousemove', handleAreaMouseMove, true);
     document.removeEventListener('mouseup', handleAreaMouseUp, true);
@@ -3984,11 +4030,12 @@ export const annotationScript = `
   }
 
   // ============================================================
-  // Design mode: direct manipulation (drag-resize, nudge, scrub)
+  // Direct manipulation: drag-resize, nudge, scrub (part of Edit mode)
   // ============================================================
-  // Tweaks are previewed live as inline styles and tracked per element as
-  // baseline -> current deltas. "Apply" turns the deltas into a precise
-  // edit instruction sent through the normal annotation pipeline.
+  // Selecting an element attaches resize handles and embeds a design section
+  // in the annotation popover. Tweaks preview live as inline styles and are
+  // tracked per element as baseline -> current deltas; sending the annotation
+  // (or adding it to the edit list) folds the deltas into the instruction.
 
   var MANIP_PROPS = {
     'width':            { min: 0, step: 1, unit: 'px' },
@@ -4011,13 +4058,9 @@ export const annotationScript = `
     'background-color': { color: true }
   };
 
-  function notifyManipModeChange(enabled) {
-    window.postMessage({ type: 'claude-design-manip-mode-change', enabled: enabled }, '*');
-  }
-
   function isManipUiTarget(t) {
     if (!t || !t.closest) return false;
-    return !!t.closest('.claude-design-manip-panel, .claude-design-manip-handle, .claude-design-manip-box, .claude-design-manip-sizelabel, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector');
+    return !!t.closest('.claude-design-manip-handle, .claude-design-manip-sizelabel, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector, .claude-design-code-btn');
   }
 
   function manipEnsureRecord(el) {
@@ -4120,12 +4163,12 @@ export const annotationScript = `
     manipSetProp(el, prop, Math.max(0, Math.round(v)) + 'px');
   }
 
-  // ---- Selection overlay (box + resize handles + size label) ----
+  // ---- Selection overlay (resize handles + size label) ----
+  // No box outline here: the claude-design-selected class already outlines
+  // the element in the Edit-mode accent.
 
   function buildManipOverlay() {
     removeManipOverlay();
-    var box = document.createElement('div');
-    box.className = 'claude-design-manip-box';
     var label = document.createElement('div');
     label.className = 'claude-design-manip-sizelabel';
     var handles = {};
@@ -4137,14 +4180,12 @@ export const annotationScript = `
       document.body.appendChild(h);
       handles[dir] = h;
     });
-    document.body.appendChild(box);
     document.body.appendChild(label);
-    manipOverlay = { box: box, label: label, handles: handles };
+    manipOverlay = { label: label, handles: handles };
   }
 
   function removeManipOverlay() {
     if (!manipOverlay) return;
-    manipOverlay.box.remove();
     manipOverlay.label.remove();
     Object.keys(manipOverlay.handles).forEach(function(dir) { manipOverlay.handles[dir].remove(); });
     manipOverlay = null;
@@ -4153,12 +4194,6 @@ export const annotationScript = `
   function positionManipOverlay() {
     if (!manipOverlay || !manipSelected || !manipSelected.isConnected) return;
     var r = manipSelected.getBoundingClientRect();
-    var box = manipOverlay.box;
-    box.style.left = r.left + 'px';
-    box.style.top = r.top + 'px';
-    box.style.width = r.width + 'px';
-    box.style.height = r.height + 'px';
-
     var label = manipOverlay.label;
     label.textContent = Math.round(r.width) + ' \\u00d7 ' + Math.round(r.height);
     var labelTop = r.bottom + 8;
@@ -4188,30 +4223,34 @@ export const annotationScript = `
     requestAnimationFrame(function() {
       manipRepositionQueued = false;
       positionManipOverlay();
-      if (!manipDrag) positionManipPanel();
+      // Resizing moves the element's rect, so keep the popover glued to it
+      if (popoverElement) positionPopover();
+      if (codeButtonElement) positionCodeButton();
     });
   }
 
-  // ---- Property panel ----
+  // ---- Design section embedded in the annotation popover ----
 
   function manipFieldHtml(prop, title) {
     return '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
   }
 
-  function buildManipPanel(el) {
-    removeManipPanel();
-    manipPanel = document.createElement('div');
-    manipPanel.className = 'claude-design-manip-panel';
+  function buildManipEmbed(container, el) {
+    manipPanel = container;
+    container.className = 'claude-design-manip-embed' + (manipEmbedOpen ? ' open' : '');
 
     var computed = window.getComputedStyle(el);
     var display = computed.getPropertyValue('display');
     var showGap = display.indexOf('flex') !== -1 || display.indexOf('grid') !== -1;
 
     var html = '' +
-      '<div class="claude-design-manip-panel-header">' +
-        '<span class="claude-design-manip-panel-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
-        '<button class="claude-design-manip-panel-close" title="Deselect (Esc)">\\u2715</button>' +
+      '<div class="claude-design-manip-embed-header">' +
+        '<span class="claude-design-manip-embed-chevron">\\u25b6</span>' +
+        '<span class="claude-design-manip-embed-title">Design</span>' +
+        '<span class="claude-design-manip-embed-count" style="display:none"></span>' +
+        '<button class="claude-design-manip-embed-reset" style="display:none">Reset</button>' +
       '</div>' +
+      '<div class="claude-design-manip-embed-body">' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Size</div>' +
         '<div class="claude-design-manip-row">' +
@@ -4264,30 +4303,26 @@ export const annotationScript = `
           '<span class="claude-design-manip-color-hex"></span>' +
         '</div>' +
       '</div>' +
-      '<div class="claude-design-manip-footer">' +
-        '<button class="claude-design-manip-reset">Reset</button>' +
-        '<button class="claude-design-manip-apply disabled">Apply</button>' +
       '</div>';
 
-    manipPanel.innerHTML = html;
-    document.body.appendChild(manipPanel);
+    container.innerHTML = html;
 
-    manipPanel.querySelector('.claude-design-manip-panel-close').addEventListener('click', function(e) {
+    container.querySelector('.claude-design-manip-embed-header').addEventListener('click', function(e) {
+      // Reset lives in the header; don't let it toggle the section
+      if (e.target.closest && e.target.closest('.claude-design-manip-embed-reset')) return;
       e.stopPropagation();
-      manipDeselect();
+      manipEmbedOpen = !manipEmbedOpen;
+      container.classList.toggle('open', manipEmbedOpen);
+      if (popoverElement) positionPopover();
     });
-    manipPanel.querySelector('.claude-design-manip-reset').addEventListener('click', function(e) {
+    container.querySelector('.claude-design-manip-embed-reset').addEventListener('click', function(e) {
       e.stopPropagation();
       if (manipSelected) manipResetElement(manipSelected);
     });
-    manipPanel.querySelector('.claude-design-manip-apply').addEventListener('click', function(e) {
-      e.stopPropagation();
-      manipApplyChanges();
-    });
-    manipPanel.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
+    container.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
       fieldEl.addEventListener('mousedown', function(e) { startManipScrub(e, fieldEl); }, true);
     });
-    manipPanel.querySelectorAll('input[type="color"]').forEach(function(input) {
+    container.querySelectorAll('input[type="color"]').forEach(function(input) {
       input.addEventListener('input', function() {
         if (!manipSelected) return;
         manipSetProp(manipSelected, input.getAttribute('data-prop'), input.value);
@@ -4297,30 +4332,7 @@ export const annotationScript = `
       input.addEventListener('click', function(e) { e.stopPropagation(); });
     });
 
-    positionManipPanel();
     refreshManipPanelValues();
-  }
-
-  function removeManipPanel() {
-    if (manipPanel) {
-      manipPanel.remove();
-      manipPanel = null;
-    }
-  }
-
-  function positionManipPanel() {
-    if (!manipPanel || !manipSelected || !manipSelected.isConnected) return;
-    var r = manipSelected.getBoundingClientRect();
-    var w = manipPanel.offsetWidth;
-    var h = manipPanel.offsetHeight;
-    var pad = 12;
-    var left = r.right + pad;
-    if (left + w > window.innerWidth - 8) left = r.left - w - pad;
-    if (left < 8) left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
-    var top = Math.min(Math.max(8, r.top), window.innerHeight - h - 8);
-    if (top < 8) top = 8;
-    manipPanel.style.left = left + 'px';
-    manipPanel.style.top = top + 'px';
   }
 
   function refreshManipPanelValues() {
@@ -4362,36 +4374,41 @@ export const annotationScript = `
       row.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
     });
 
-    var total = manipTotalChanges();
-    var applyBtn = manipPanel.querySelector('.claude-design-manip-apply');
-    applyBtn.textContent = total === 0 ? 'Apply' : 'Apply ' + total + (total === 1 ? ' change' : ' changes');
-    applyBtn.classList.toggle('disabled', total === 0);
+    // Header shows how many tweaks this element carries; Reset appears with them
+    var count = rec ? Object.keys(rec.current).length : 0;
+    var countEl = manipPanel.querySelector('.claude-design-manip-embed-count');
+    var resetBtn = manipPanel.querySelector('.claude-design-manip-embed-reset');
+    if (countEl) {
+      countEl.style.display = count > 0 ? '' : 'none';
+      countEl.textContent = count + (count === 1 ? ' change' : ' changes');
+    }
+    if (resetBtn) resetBtn.style.display = count > 0 ? '' : 'none';
   }
 
-  // ---- Interactions: select, resize, move, scrub, type ----
+  // ---- Interactions: attach, resize, move, scrub, type ----
 
-  function manipSelect(el) {
-    if (!el || el === document.body || el === document.documentElement || isManipUiTarget(el)) return;
-    if (manipSelected === el) return;
-    manipDeselect();
+  // Called when the annotation popover opens on an element: puts resize
+  // handles on it and fills the popover's design section.
+  function manipAttach(el, embedContainer) {
+    manipDetach();
     manipSelected = el;
-    el.classList.add('claude-design-manip-target');
     manipEnsureRecord(el);
     buildManipOverlay();
     positionManipOverlay();
-    buildManipPanel(el);
+    if (embedContainer) buildManipEmbed(embedContainer, el);
   }
 
-  function manipDeselect() {
+  // Called when the popover closes. Untouched records are pruned; real
+  // tweaks stay tracked (and previewed) so reselecting the element resumes.
+  function manipDetach() {
     if (manipSelected) {
-      manipSelected.classList.remove('claude-design-manip-target');
-      // Drop untouched records so the map only tracks real edits
       var rec = manipChanges.get(manipSelected);
       if (rec && Object.keys(rec.current).length === 0) manipChanges.delete(manipSelected);
     }
     manipSelected = null;
+    manipDrag = null;
+    manipPanel = null; // lives inside the popover; removed with it
     removeManipOverlay();
-    removeManipPanel();
   }
 
   function manipResetElement(el) {
@@ -4409,6 +4426,9 @@ export const annotationScript = `
     if (!manipSelected) return;
     e.preventDefault();
     e.stopPropagation();
+    // Let arrow keys nudge the element after a handle grab (the popover
+    // textarea otherwise keeps focus and eats the arrows for its caret)
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     var r = manipSelected.getBoundingClientRect();
     manipDrag = {
       kind: 'resize', dir: dir,
@@ -4466,34 +4486,18 @@ export const annotationScript = `
     input.addEventListener('mousedown', function(ev) { ev.stopPropagation(); });
   }
 
-  function handleManipMouseOver(e) {
-    if (!manipMode || manipDrag) return;
-    var t = e.target;
-    if (isManipUiTarget(t) || t === document.body || t === document.documentElement || t === manipSelected) return;
-    if (manipHoverEl && manipHoverEl !== t) manipHoverEl.classList.remove('claude-design-manip-highlight');
-    t.classList.add('claude-design-manip-highlight');
-    manipHoverEl = t;
-  }
-
-  function handleManipMouseOut(e) {
-    if (!manipMode) return;
-    if (e.target === manipHoverEl) {
-      manipHoverEl.classList.remove('claude-design-manip-highlight');
-      manipHoverEl = null;
-    }
-  }
-
   function handleManipMouseDown(e) {
-    if (!manipMode || e.button !== 0) return;
+    if (!annotateMode || e.button !== 0) return;
     // A fresh press starts a new gesture; a suppress flag from a drag whose
     // click never fired (mousedown/mouseup on different targets) is stale now
     if (!manipDrag) manipSuppressClick = false;
     if (isManipUiTarget(e.target)) return;
     // Dragging anywhere inside the selection nudges it via margins. A press
-    // that never crosses the threshold still selects the child via click.
+    // that never crosses the threshold falls through as a normal click.
     if (manipSelected && (e.target === manipSelected || manipSelected.contains(e.target))) {
       e.preventDefault();
       e.stopPropagation();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       var computed = window.getComputedStyle(manipSelected);
       manipDrag = {
         kind: 'move', started: false,
@@ -4505,7 +4509,7 @@ export const annotationScript = `
   }
 
   function handleManipMouseMove(e) {
-    if (!manipMode || !manipDrag) return;
+    if (!manipDrag) return;
     e.preventDefault();
     e.stopPropagation();
     var el = manipSelected;
@@ -4554,7 +4558,7 @@ export const annotationScript = `
   }
 
   function handleManipMouseUp(e) {
-    if (!manipMode || !manipDrag) return;
+    if (!manipDrag) return;
     var drag = manipDrag;
     manipDrag = null;
     if (drag.kind === 'scrub') {
@@ -4564,8 +4568,8 @@ export const annotationScript = `
         return;
       }
     }
-    // A completed drag must not fall through as a click (it would re-select
-    // whatever element ended up under the cursor)
+    // A completed drag must not fall through as a click (Edit mode's click
+    // handler would treat it as click-outside and cancel the popover)
     if (drag.kind === 'resize' || drag.kind === 'scrub' || (drag.kind === 'move' && drag.started)) {
       manipSuppressClick = true;
     }
@@ -4573,45 +4577,14 @@ export const annotationScript = `
     refreshManipPanelValues();
   }
 
-  function handleManipClick(e) {
-    if (!manipMode) return;
-    // Consume the suppress flag on ANY click, even ones we ignore (e.g. on the
-    // panel) — a drag ending over the panel must not leave a stale flag that
-    // would swallow the user's next element selection.
-    var suppress = manipSuppressClick;
-    manipSuppressClick = false;
-    if (isManipUiTarget(e.target)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (suppress) return;
-    var t = e.target;
-    if (t === document.body || t === document.documentElement) {
-      manipDeselect();
-      return;
-    }
-    if (t !== manipSelected) manipSelect(t);
-  }
-
   function handleManipKeyDown(e) {
-    if (!manipMode) return;
-    var t = e.target;
-    if (t && t.closest && t.closest('.claude-design-manip-panel')) return; // typing in the panel
+    if (!annotateMode || !manipSelected) return;
+    // Typing anywhere (popover textarea, panel inputs) keeps normal key
+    // behavior; nudging only takes the arrows when nothing has focus.
+    var a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
 
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (manipDrag) {
-        manipDrag = null;
-      } else if (manipSelected) {
-        manipDeselect();
-      } else {
-        disableManipMode();
-        notifyManipModeChange(false);
-      }
-      return;
-    }
-
-    if (manipSelected && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
       var amt = e.shiftKey ? 8 : 1;
@@ -4665,102 +4638,30 @@ export const annotationScript = `
       '. Implement them in the source using the project\\u2019s existing styling approach (classes, Tailwind utilities, CSS variables, rem, etc. \\u2014 convert px where that matches the codebase) and change nothing else about the element.';
   }
 
-  function manipApplyChanges() {
-    var entries = [];
-    manipChanges.forEach(function(rec, el) {
-      if (Object.keys(rec.current).length === 0 || !el.isConnected) return;
-      entries.push({ el: el, rec: rec });
-    });
-    if (entries.length === 0) return;
-    if (!window.__claudeDesignSendAnnotation) {
-      console.warn('[ClaudeDesign] Send callback not ready, keeping design changes');
-      return;
-    }
-
-    var data;
-    if (entries.length === 1) {
-      var info = manipElementInfo(entries[0].el);
-      data = {
-        url: window.location.href,
-        element: { tagName: info.tagName, text: info.text, attributes: info.attributes, selector: info.selector },
-        bounds: info.bounds,
-        referenceImages: [],
-        request: manipNoteFor(entries[0].rec)
-      };
-    } else {
-      data = {
-        type: 'multi-edit',
-        url: window.location.href,
-        annotations: entries.map(function(entry) {
-          var info = manipElementInfo(entry.el);
-          return {
-            selector: info.selector,
-            tagName: info.tagName,
-            text: info.text,
-            attributes: info.attributes,
-            bounds: info.bounds,
-            note: manipNoteFor(entry.rec)
-          };
-        })
-      };
-    }
-
-    try {
-      window.__claudeDesignSendAnnotation(data);
-    } catch (err) {
-      console.error('[ClaudeDesign] Failed to send design changes:', err);
-      return;
-    }
-
-    // The preview stays applied; re-baseline so further tweaks diff from here
-    entries.forEach(function(entry) { manipChanges.delete(entry.el); });
-    if (manipSelected) manipEnsureRecord(manipSelected);
-    refreshManipPanelValues();
-    showGridToast('Sent to CLI', entries.length === 1 ? '1 element' : entries.length + ' elements');
+  // The delta instruction for one element, or '' if it has no tweaks
+  function manipDeltaFor(el) {
+    if (!el) return '';
+    var rec = manipChanges.get(el);
+    if (!rec || Object.keys(rec.current).length === 0) return '';
+    return manipNoteFor(rec);
   }
 
-  // ---- Mode lifecycle ----
-
-  function enableManipMode() {
-    if (manipMode) return;
-    if (annotateMode) {
-      disableAnnotateMode();
-      if (window.__claudeDesignNotifyModeChange) window.__claudeDesignNotifyModeChange(false);
-    }
-    manipMode = true;
-    document.addEventListener('mouseover', handleManipMouseOver, true);
-    document.addEventListener('mouseout', handleManipMouseOut, true);
-    document.addEventListener('click', handleManipClick, true);
-    document.addEventListener('mousedown', handleManipMouseDown, true);
-    document.addEventListener('mousemove', handleManipMouseMove, true);
-    document.addEventListener('mouseup', handleManipMouseUp, true);
-    document.addEventListener('keydown', handleManipKeyDown, true);
-    window.addEventListener('scroll', queueManipReposition, true);
-    window.addEventListener('resize', queueManipReposition);
-    showGridToast('Design Mode', 'Click an element \\u00b7 drag handles to resize \\u00b7 drag values to scrub \\u00b7 arrows to nudge');
+  // Merge a typed note with the element's tracked deltas into one instruction
+  function composeNoteWithDeltas(el, typed) {
+    var delta = manipDeltaFor(el);
+    if (typed && delta) return typed + ' \\u2014 additionally, ' + delta.charAt(0).toLowerCase() + delta.slice(1);
+    return typed || delta;
   }
 
-  function disableManipMode() {
-    if (!manipMode) return;
-    manipMode = false;
-    document.removeEventListener('mouseover', handleManipMouseOver, true);
-    document.removeEventListener('mouseout', handleManipMouseOut, true);
-    document.removeEventListener('click', handleManipClick, true);
-    document.removeEventListener('mousedown', handleManipMouseDown, true);
-    document.removeEventListener('mousemove', handleManipMouseMove, true);
-    document.removeEventListener('mouseup', handleManipMouseUp, true);
-    document.removeEventListener('keydown', handleManipKeyDown, true);
-    window.removeEventListener('scroll', queueManipReposition, true);
-    window.removeEventListener('resize', queueManipReposition);
-    manipDrag = null;
-    manipSuppressClick = false;
-    manipDeselect();
-    if (manipHoverEl) {
-      manipHoverEl.classList.remove('claude-design-manip-highlight');
-      manipHoverEl = null;
+  // After a note (with deltas folded in) is sent or queued: the preview stays
+  // applied, but the deltas are consumed so they aren't sent twice.
+  function manipConsumeDeltas(el) {
+    if (!el) return;
+    manipChanges.delete(el);
+    if (el === manipSelected) {
+      manipEnsureRecord(el); // fresh baseline: further tweaks diff from here
+      refreshManipPanelValues();
     }
-    // Un-applied tweaks stay tracked (and visible) so toggling the mode
-    // doesn't silently destroy work; Reset or a reload clears them.
   }
 
   // Set ALT key state from parent window (for when webview doesn't have focus)
@@ -4789,17 +4690,6 @@ export const annotationScript = `
         window.__claudeDesignNotifyModeChange(true);
       }
     }
-    // Cmd+D / Ctrl+D: toggle design (direct manipulation) mode
-    if ((e.key === 'd' || e.key === 'D') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
-      e.preventDefault();
-      if (manipMode) {
-        disableManipMode();
-        notifyManipModeChange(false);
-      } else {
-        enableManipMode();
-        notifyManipModeChange(true);
-      }
-    }
     // Cmd+L / Ctrl+L: toggle terminal
     if ((e.key === 'l' || e.key === 'L') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
@@ -4813,7 +4703,6 @@ export const annotationScript = `
     pendingAnnotations = [];
     manipChanges = new Map();
     manipSelected = null;
-    manipHoverEl = null;
   });
 
   // Expose functions for external control
@@ -4829,8 +4718,5 @@ export const annotationScript = `
   window.__claudeDesignSetAltKey = setAltKeyState;
   window.__claudeDesignToggleFreeze = toggleAnimationFreeze;
   window.__claudeDesignSetGridSizes = setGridSizes;
-  window.__claudeDesignManipEnable = enableManipMode;
-  window.__claudeDesignManipDisable = disableManipMode;
-  window.__claudeDesignManipIsEnabled = function() { return manipMode; };
 })();
 `;
