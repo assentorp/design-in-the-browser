@@ -64,6 +64,10 @@ export const annotationScript = `
   let manipChanges = new Map();      // element -> {baseline: {}, inline: {}, current: {}}
   let manipRepositionQueued = false;
   let manipFlyoutOpen = false;       // design flyout open state, remembered across popovers
+  let manipHoverField = null;        // field under the cursor: arrow keys nudge it
+  let manipPresetsMenu = null;       // open "project scale" dropdown
+  let manipPresetsAnchor = null;     // caret button the dropdown hangs off
+  let manipPagePresetCache = {};     // prop -> values sampled from the page (per flyout)
 
   // Area selection state (click-and-drag)
   let areaSelecting = false;
@@ -1310,6 +1314,97 @@ export const annotationScript = `
         font-size: 11px !important;
         text-align: center !important;
         cursor: text !important;
+      }
+      /* Field + its "project scale" caret */
+      .claude-design-manip-fieldwrap {
+        display: flex !important;
+        align-items: center !important;
+        gap: 2px !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+      }
+      .claude-design-manip-preset-btn {
+        all: unset !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+        width: 16px !important;
+        height: 22px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 4px !important;
+        color: #777 !important;
+      }
+      .claude-design-manip-preset-btn:hover { background: rgba(255,255,255,0.1) !important; color: #fff !important; }
+      .claude-design-manip-preset-btn.open { background: rgba(198, 97, 63, 0.2) !important; color: #eb9b78 !important; }
+      .claude-design-manip-preset-btn svg { width: 9px !important; height: 9px !important; display: block !important; }
+      /* Scale menu — lives on <body> (the flyout clips its own overflow) */
+      .claude-design-manip-presets {
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        min-width: 152px !important;
+        max-height: 250px !important;
+        overflow-y: auto !important;
+        background: #262626 !important;
+        border: 1px solid #4a4a4a !important;
+        border-radius: 10px !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+        padding: 4px !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+      }
+      .claude-design-manip-presets *, .claude-design-manip-presets *::before, .claude-design-manip-presets *::after {
+        box-sizing: border-box !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        line-height: normal !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+      }
+      .claude-design-manip-presets::-webkit-scrollbar { width: 8px !important; }
+      .claude-design-manip-presets::-webkit-scrollbar-track { background: transparent !important; }
+      .claude-design-manip-presets::-webkit-scrollbar-thumb { background: #444 !important; border-radius: 4px !important; }
+      .claude-design-manip-presets-head {
+        padding: 4px 8px 6px !important;
+        color: #777 !important;
+        font-size: 10px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        white-space: nowrap !important;
+      }
+      .claude-design-manip-preset-item {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: 5px 8px !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        color: #ddd !important;
+        font-size: 11px !important;
+        white-space: nowrap !important;
+      }
+      .claude-design-manip-preset-item:hover { background: rgba(255, 255, 255, 0.08) !important; }
+      .claude-design-manip-preset-item.current {
+        color: #eb9b78 !important;
+        background: rgba(198, 97, 63, 0.14) !important;
+      }
+      .claude-design-manip-preset-name {
+        flex: 1 !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      .claude-design-manip-preset-value {
+        color: #888 !important;
+        font-variant-numeric: tabular-nums !important;
+      }
+      .claude-design-manip-preset-item.current .claude-design-manip-preset-value { color: #c08b73 !important; }
+      .claude-design-manip-presets-empty {
+        padding: 8px !important;
+        color: #888 !important;
+        font-size: 11px !important;
+        white-space: nowrap !important;
       }
       .claude-design-manip-color-row input[type="color"] {
         -webkit-appearance: none !important;
@@ -3565,6 +3660,14 @@ export const annotationScript = `
     // swallow the user's next real click.
     var suppressManip = manipSuppressClick;
     manipSuppressClick = false;
+    // Any click outside the scale dropdown dismisses it (clicks on its own
+    // caret fall through to the button's toggle)
+    if (manipPresetsMenu && e.target.closest &&
+        !e.target.closest('.claude-design-manip-presets') &&
+        !(manipPresetsAnchor && manipPresetsAnchor.contains(e.target))) {
+      closeManipPresets();
+    }
+    if (e.target.closest && e.target.closest('.claude-design-manip-presets')) return;
     if (e.target.closest && e.target.closest('.claude-design-popover')) return;
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
     if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
@@ -3605,6 +3708,13 @@ export const annotationScript = `
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') {
+      // The scale dropdown swallows the first Escape so it can't take the
+      // whole annotation down with it
+      if (manipPresetsMenu) {
+        e.stopPropagation();
+        closeManipPresets();
+        return;
+      }
       if (selectedElement) {
         cancelAnnotation();
       }
@@ -3830,7 +3940,8 @@ export const annotationScript = `
       e.target.closest('.claude-design-class-inspector') ||
       e.target.closest('.claude-design-shortcut-hints') ||
       e.target.closest('.claude-design-manip-handle') ||
-      e.target.closest('.claude-design-manip-flyout')
+      e.target.closest('.claude-design-manip-flyout') ||
+      e.target.closest('.claude-design-manip-presets')
     )) return;
 
     mouseDownTarget = e.target;
@@ -4129,9 +4240,128 @@ export const annotationScript = `
     'background-color': { color: true }
   };
 
+  // Tailwind utility prefix that owns each property's scale, used to pull the
+  // project's own values out of window.__claudeDesignTokens
+  var MANIP_TOKEN_PREFIX = {
+    'width': 'w', 'height': 'h',
+    'margin-top': 'mt', 'margin-right': 'mr', 'margin-bottom': 'mb', 'margin-left': 'ml',
+    'padding-top': 'pt', 'padding-right': 'pr', 'padding-bottom': 'pb', 'padding-left': 'pl',
+    'gap': 'gap', 'font-size': 'text', 'font-weight': 'font',
+    'line-height': 'leading', 'letter-spacing': 'tracking', 'border-radius': 'rounded'
+  };
+
+  // CSS custom properties that belong to each property's scale (projects
+  // without Tailwind — plain :root variables, shadcn-style themes, etc.)
+  var MANIP_VAR_HINT = {
+    'font-size': /^--(font-size|fontsize|text|type|fs)[-_]/i,
+    'font-weight': /^--(font-weight|fontweight|weight|fw)[-_]/i,
+    'line-height': /^--(line-height|lineheight|leading|lh)[-_]/i,
+    'letter-spacing': /^--(letter-spacing|letterspacing|tracking|ls)[-_]/i,
+    'border-radius': /^--(radius|border-radius|rounded|corner)/i,
+    'spacing': /^--(spacing|space|size|sizes|gap|sp)[-_]/i
+  };
+
+  function manipVarHintFor(prop) {
+    return MANIP_VAR_HINT[prop] || MANIP_VAR_HINT.spacing;
+  }
+
+  function manipRootFontSize() {
+    return parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('font-size')) || 16;
+  }
+
+  // Resolve a token value ('1.5rem', '14px', '0.025em', '600') to px for the
+  // given property/element. Returns null for anything not a plain length.
+  function manipTokenToPx(raw, prop, el) {
+    var s = String(raw == null ? '' : raw).trim();
+    // tailwind fontSize entries can be tuples: ['1rem', { lineHeight: ... }]
+    s = s.replace(/^\\[\\s*/, '').replace(/^['"\`]/, '').replace(/['"\`].*$/, '').trim();
+    var m = s.match(/^(-?[0-9]*\\.?[0-9]+)(px|rem|em|)$/);
+    if (!m) return null;
+    var n = parseFloat(m[1]);
+    var unit = m[2];
+    if (!isFinite(n)) return null;
+    var fontSize = el ? (parseFloat(window.getComputedStyle(el).getPropertyValue('font-size')) || 16) : 16;
+    if (unit === 'px') return n;
+    if (unit === 'rem') return n * manipRootFontSize();
+    if (unit === 'em') return n * fontSize;
+    // Unitless: only meaningful for weights, line-height multipliers and zero
+    if (prop === 'font-weight') return n;
+    if (prop === 'line-height') return n * fontSize;
+    return n === 0 ? 0 : null;
+  }
+
+  // The project's scale for a property: Tailwind utilities first, then CSS
+  // custom properties, deduped by resolved value and sorted small to large.
+  function manipTokenPresets(prop, prefix) {
+    var el = manipSelected;
+    var tokens = window.__claudeDesignTokens || [];
+    var out = [];
+    var seen = {};
+    function add(name, raw) {
+      var px = manipTokenToPx(raw, prop, el);
+      if (px === null) return;
+      var key = String(Math.round(px * 100) / 100);
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push({ name: name, px: px, token: name });
+    }
+    if (prefix) {
+      tokens.forEach(function(t) {
+        if (t.source !== 'tailwind') return;
+        if (t.name !== prefix && t.name.indexOf(prefix + '-') !== 0) return;
+        add(t.name, t.value);
+      });
+    }
+    var hint = manipVarHintFor(prop);
+    tokens.forEach(function(t) {
+      if (t.source !== 'css-var' || t.name.charAt(0) !== '-') return;
+      if (!hint.test(t.name)) return;
+      add(t.name, t.value);
+    });
+    out.sort(function(a, b) { return a.px - b.px; });
+    return out;
+  }
+
+  // Fallback for projects with no token source: the values the page itself
+  // actually uses, most common first (then sorted by size).
+  function manipPagePresets(prop) {
+    if (manipPagePresetCache[prop]) return manipPagePresetCache[prop];
+    var counts = {};
+    var els = document.body ? document.body.querySelectorAll('*') : [];
+    var limit = Math.min(els.length, 2500);
+    for (var i = 0; i < limit; i++) {
+      var e = els[i];
+      // The annotation UI is part of the DOM too — its own type scale is not
+      // the page's (and its inner nodes are often class-less)
+      if (e.closest && e.closest('.claude-design-popover, .claude-design-toolbar, .claude-design-manip-flyout, .claude-design-manip-presets, .claude-design-class-inspector, .claude-design-code-btn, .claude-design-shortcut-hints, .claude-design-grid-toast')) continue;
+      var v = parseFloat(window.getComputedStyle(e).getPropertyValue(prop));
+      if (!isFinite(v) || v < 0) continue;
+      if (prop === 'font-size' && (v < 6 || v > 200)) continue;
+      var key = String(Math.round(v * 10) / 10);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    var entries = Object.keys(counts).map(function(k) {
+      return { px: parseFloat(k), count: counts[k] };
+    }).filter(function(entry) { return entry.count > 1; });
+    entries.sort(function(a, b) { return b.count - a.count; });
+    entries = entries.slice(0, 10);
+    entries.sort(function(a, b) { return a.px - b.px; });
+    var result = entries.map(function(entry) {
+      return { name: (Math.round(entry.px * 10) / 10) + 'px', px: entry.px, token: null, hint: entry.count + '\\u00d7' };
+    });
+    manipPagePresetCache[prop] = result;
+    return result;
+  }
+
+  function manipPresetsFor(prop, prefix) {
+    var tokenPresets = manipTokenPresets(prop, prefix);
+    if (tokenPresets.length) return { source: 'project', items: tokenPresets };
+    return { source: 'page', items: manipPagePresets(prop) };
+  }
+
   function isManipUiTarget(t) {
     if (!t || !t.closest) return false;
-    return !!t.closest('.claude-design-manip-handle, .claude-design-manip-sizelabel, .claude-design-manip-flyout, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector, .claude-design-code-btn');
+    return !!t.closest('.claude-design-manip-handle, .claude-design-manip-sizelabel, .claude-design-manip-flyout, .claude-design-manip-presets, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector, .claude-design-code-btn');
   }
 
   function manipEnsureRecord(el) {
@@ -4144,7 +4374,7 @@ export const annotationScript = `
         baseline[p] = computed.getPropertyValue(p);
         inline[p] = { value: el.style.getPropertyValue(p), priority: el.style.getPropertyPriority(p) };
       });
-      rec = { baseline: baseline, inline: inline, current: {} };
+      rec = { baseline: baseline, inline: inline, current: {}, tokens: {} };
       manipChanges.set(el, rec);
     }
     return rec;
@@ -4169,8 +4399,14 @@ export const annotationScript = `
     }
   }
 
-  function manipSetProp(el, prop, cssValue) {
+  // tokenName: the project token the value came from (e.g. "text-2xl"), so the
+  // instruction can name it instead of only the resolved px. Any other way of
+  // setting the prop passes nothing, which clears a previously picked token.
+  function manipSetProp(el, prop, cssValue, tokenName) {
     var rec = manipEnsureRecord(el);
+    if (!rec.tokens) rec.tokens = {};
+    if (tokenName) rec.tokens[prop] = tokenName;
+    else delete rec.tokens[prop];
     var meta = MANIP_PROPS[prop] || {};
     var baseVal = rec.baseline[prop];
     var same;
@@ -4184,6 +4420,7 @@ export const annotationScript = `
     if (same) {
       manipRestoreInline(el, rec, prop);
       delete rec.current[prop];
+      delete rec.tokens[prop];
     } else {
       el.style.setProperty(prop, cssValue, 'important');
       rec.current[prop] = cssValue;
@@ -4298,19 +4535,36 @@ export const annotationScript = `
       if (popoverElement) positionPopover();
       if (codeButtonElement) positionCodeButton();
       positionManipFlyout();
+      positionManipPresets();
     });
   }
 
   // ---- Design flyout: opened from the sliders button in the prompt box ----
 
-  function manipFieldHtml(prop, title) {
-    return '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
+  var MANIP_CARET_SVG = '<svg viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.5L5 4.5L9 1.5"/></svg>';
+
+  // A caret that opens the project scale for one or more props. The prefix
+  // overrides the Tailwind prefix the scale is read from (a padding row applies
+  // to all four sides, so it lists p-* rather than pt-*).
+  function manipPresetBtnHtml(props, prefix, label) {
+    return '<button class="claude-design-manip-preset-btn" data-props="' + props.join(',') + '"' +
+      (prefix ? ' data-prefix="' + prefix + '"' : '') +
+      ' title="' + (label || 'Project scale') + '" tabindex="-1">' + MANIP_CARET_SVG + '</button>';
+  }
+
+  // withPresets: wrap the field so a caret sits next to it. The field element
+  // itself stays a bare box — scrub/type editing rewrite its contents.
+  function manipFieldHtml(prop, title, withPresets) {
+    var field = '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
+    if (!withPresets || !MANIP_TOKEN_PREFIX[prop]) return field;
+    return '<span class="claude-design-manip-fieldwrap">' + field + manipPresetBtnHtml([prop]) + '</span>';
   }
 
   function openManipFlyout() {
     var el = manipSelected;
     if (!el || !popoverElement) return;
     if (manipPanel) manipPanel.remove();
+    manipPagePresetCache = {};
 
     var flyout = document.createElement('div');
     flyout.className = 'claude-design-manip-flyout';
@@ -4329,8 +4583,8 @@ export const annotationScript = `
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Size</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">W</span>' + manipFieldHtml('width') +
-          '<span class="claude-design-manip-row-label" style="width:20px !important; text-align:right !important;">H</span>' + manipFieldHtml('height') +
+          '<span class="claude-design-manip-row-label">W</span>' + manipFieldHtml('width', '', true) +
+          '<span class="claude-design-manip-row-label" style="width:20px !important; text-align:right !important;">H</span>' + manipFieldHtml('height', '', true) +
         '</div>' +
       '</div>' +
       '<div class="claude-design-manip-section">' +
@@ -4341,6 +4595,7 @@ export const annotationScript = `
             manipFieldHtml('margin-top', 'margin-top') + manipFieldHtml('margin-right', 'margin-right') +
             manipFieldHtml('margin-bottom', 'margin-bottom') + manipFieldHtml('margin-left', 'margin-left') +
           '</span>' +
+          manipPresetBtnHtml(['margin-top', 'margin-right', 'margin-bottom', 'margin-left'], 'm', 'Project spacing scale (all sides)') +
         '</div>' +
         '<div class="claude-design-manip-row">' +
           '<span class="claude-design-manip-row-label">Padding</span>' +
@@ -4348,24 +4603,25 @@ export const annotationScript = `
             manipFieldHtml('padding-top', 'padding-top') + manipFieldHtml('padding-right', 'padding-right') +
             manipFieldHtml('padding-bottom', 'padding-bottom') + manipFieldHtml('padding-left', 'padding-left') +
           '</span>' +
+          manipPresetBtnHtml(['padding-top', 'padding-right', 'padding-bottom', 'padding-left'], 'p', 'Project spacing scale (all sides)') +
         '</div>' +
       '</div>' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Text</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Size</span>' + manipFieldHtml('font-size') +
-          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Wt</span>' + manipFieldHtml('font-weight') +
+          '<span class="claude-design-manip-row-label">Size</span>' + manipFieldHtml('font-size', '', true) +
+          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Wt</span>' + manipFieldHtml('font-weight', '', true) +
         '</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label" title="line-height">Line</span>' + manipFieldHtml('line-height', 'line-height') +
-          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;" title="letter-spacing">Trk</span>' + manipFieldHtml('letter-spacing', 'letter-spacing') +
+          '<span class="claude-design-manip-row-label" title="line-height">Line</span>' + manipFieldHtml('line-height', 'line-height', true) +
+          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;" title="letter-spacing">Trk</span>' + manipFieldHtml('letter-spacing', 'letter-spacing', true) +
         '</div>' +
       '</div>' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Style</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Radius</span>' + manipFieldHtml('border-radius', 'border-radius') +
-          (showGap ? '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Gap</span>' + manipFieldHtml('gap') : '') +
+          '<span class="claude-design-manip-row-label">Radius</span>' + manipFieldHtml('border-radius', 'border-radius', true) +
+          (showGap ? '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Gap</span>' + manipFieldHtml('gap', '', true) : '') +
         '</div>' +
         '<div class="claude-design-manip-row claude-design-manip-color-row" data-prop="color">' +
           '<span class="claude-design-manip-row-label">Text</span>' +
@@ -4388,6 +4644,18 @@ export const annotationScript = `
     });
     flyout.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
       fieldEl.addEventListener('mousedown', function(e) { startManipScrub(e, fieldEl); }, true);
+      // Arrow keys nudge whichever field the cursor is over
+      fieldEl.addEventListener('mouseenter', function() { manipHoverField = fieldEl; });
+      fieldEl.addEventListener('mouseleave', function() { if (manipHoverField === fieldEl) manipHoverField = null; });
+    });
+    flyout.querySelectorAll('.claude-design-manip-preset-btn').forEach(function(btn) {
+      btn.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (manipPresetsAnchor === btn) closeManipPresets();
+        else openManipPresets(btn);
+      });
     });
     flyout.querySelectorAll('input[type="color"]').forEach(function(input) {
       input.addEventListener('input', function() {
@@ -4413,6 +4681,8 @@ export const annotationScript = `
   function closeManipFlyout(immediate) {
     var panel = manipPanel;
     if (!panel) return;
+    closeManipPresets();
+    manipHoverField = null;
     manipPanel = null;
     if (immediate) {
       panel.remove();
@@ -4431,6 +4701,94 @@ export const annotationScript = `
       manipFlyoutOpen = true;
       openManipFlyout();
     }
+  }
+
+  // ---- Project scale dropdown ----
+
+  function closeManipPresets() {
+    if (manipPresetsAnchor) manipPresetsAnchor.classList.remove('open');
+    if (manipPresetsMenu) manipPresetsMenu.remove();
+    manipPresetsMenu = null;
+    manipPresetsAnchor = null;
+  }
+
+  function openManipPresets(btn) {
+    closeManipPresets();
+    if (!manipSelected) return;
+    var props = (btn.getAttribute('data-props') || '').split(',').filter(Boolean);
+    if (!props.length) return;
+    var prop = props[0];
+    var prefix = btn.getAttribute('data-prefix') || MANIP_TOKEN_PREFIX[prop];
+    var res = manipPresetsFor(prop, prefix);
+    var meta = MANIP_PROPS[prop] || {};
+    var current = manipCurrentNumeric(manipSelected, prop);
+
+    var menu = document.createElement('div');
+    menu.className = 'claude-design-manip-presets';
+    var head = res.source === 'project' ? 'Project scale' : 'Used on this page';
+    var html = '<div class="claude-design-manip-presets-head">' + head + '</div>';
+    if (!res.items.length) {
+      html += '<div class="claude-design-manip-presets-empty">No scale found</div>';
+    } else {
+      res.items.forEach(function(item, i) {
+        var px = meta.decimals ? Math.round(item.px * 10) / 10 : Math.round(item.px);
+        var isCurrent = Math.abs(item.px - current) < 0.5;
+        html += '<div class="claude-design-manip-preset-item' + (isCurrent ? ' current' : '') + '" data-i="' + i + '">' +
+          '<span class="claude-design-manip-preset-name">' + escapeHtml(item.name) + '</span>' +
+          '<span class="claude-design-manip-preset-value">' + (item.hint ? escapeHtml(item.hint) : px + (meta.unit || '')) + '</span>' +
+        '</div>';
+      });
+    }
+    menu.innerHTML = html;
+    document.body.appendChild(menu);
+
+    menu.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+    menu.querySelectorAll('.claude-design-manip-preset-item').forEach(function(itemEl) {
+      itemEl.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        applyManipPreset(props, res.items[parseInt(itemEl.getAttribute('data-i'), 10)]);
+        closeManipPresets();
+      });
+    });
+
+    manipPresetsMenu = menu;
+    manipPresetsAnchor = btn;
+    btn.classList.add('open');
+    positionManipPresets();
+
+    // Keep the picked value in view in a long scale
+    var currentEl = menu.querySelector('.claude-design-manip-preset-item.current');
+    if (currentEl) menu.scrollTop = Math.max(0, currentEl.offsetTop - menu.clientHeight / 2);
+  }
+
+  function positionManipPresets() {
+    if (!manipPresetsMenu || !manipPresetsAnchor || !manipPresetsAnchor.isConnected) return;
+    var br = manipPresetsAnchor.getBoundingClientRect();
+    var w = manipPresetsMenu.offsetWidth || 152;
+    var h = manipPresetsMenu.offsetHeight || 200;
+    // Hangs down-right from the caret like a select; flips to right-aligned
+    // (and/or upward) only when it would leave the viewport
+    var left = br.left;
+    if (left + w > window.innerWidth - 8) left = br.right - w;
+    left = Math.min(Math.max(8, left), Math.max(8, window.innerWidth - w - 8));
+    var top = br.bottom + 4;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, br.top - h - 4);
+    manipPresetsMenu.style.left = left + 'px';
+    manipPresetsMenu.style.top = top + 'px';
+  }
+
+  function applyManipPreset(props, item) {
+    if (!item || !manipSelected) return;
+    props.forEach(function(prop) {
+      var meta = MANIP_PROPS[prop] || {};
+      var v = item.px;
+      if (meta.min !== undefined) v = Math.max(meta.min, v);
+      if (meta.max !== undefined) v = Math.min(meta.max, v);
+      v = meta.decimals ? Math.round(v * 10) / 10 : Math.round(v);
+      manipSetProp(manipSelected, prop, v + (meta.unit || ''), item.token);
+    });
+    refreshManipPanelValues();
   }
 
   // Place the flyout above the prompt box or beside it, wherever there is
@@ -4587,6 +4945,7 @@ export const annotationScript = `
       manipRestoreInline(el, rec, p);
     });
     rec.current = {};
+    rec.tokens = {};
     queueManipReposition();
     refreshManipPanelValues();
   }
@@ -4621,6 +4980,32 @@ export const annotationScript = `
     fieldEl.classList.add('scrubbing');
   }
 
+  // One arrow-key step for a property: Shift = 10x, Alt = fine (0.1x),
+  // clamped and rounded the same way scrubbing is.
+  function manipStepValue(prop, from, dir, ev) {
+    var meta = MANIP_PROPS[prop] || {};
+    var mult = ev && ev.shiftKey ? 10 : (ev && ev.altKey ? 0.1 : 1);
+    var v = from + dir * (meta.step || 1) * mult;
+    if (meta.min !== undefined) v = Math.max(meta.min, v);
+    if (meta.max !== undefined) v = Math.min(meta.max, v);
+    if (meta.step === 100) v = Math.round(v / 100) * 100;
+    else if (meta.decimals) v = Math.round(v * 10) / 10;
+    else v = Math.round(v);
+    return v;
+  }
+
+  // Nudge the field the cursor is over (no typing needed)
+  function nudgeManipField(fieldEl, dir, ev) {
+    var el = manipSelected;
+    if (!el || !fieldEl) return;
+    var prop = fieldEl.getAttribute('data-prop');
+    var meta = MANIP_PROPS[prop] || {};
+    if (meta.color) return;
+    var v = manipStepValue(prop, manipCurrentNumeric(el, prop), dir, ev);
+    manipSetProp(el, prop, v + (meta.unit || ''));
+    refreshManipPanelValues();
+  }
+
   function beginManipFieldEdit(fieldEl, prop) {
     var el = manipSelected;
     if (!el) return;
@@ -4650,6 +5035,17 @@ export const annotationScript = `
       ev.stopPropagation();
       if (ev.key === 'Enter') commit();
       if (ev.key === 'Escape') { done = true; refreshManipPanelValues(); }
+      // Up/down nudge the value and preview it live, leaving the field open
+      if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        var from = parseFloat(input.value);
+        if (!isFinite(from)) from = manipCurrentNumeric(el, prop);
+        var next = manipStepValue(prop, from, ev.key === 'ArrowUp' ? 1 : -1, ev);
+        input.value = String(next);
+        input.select();
+        manipSetProp(el, prop, next + (meta.unit || ''));
+        refreshManipPanelValues();
+      }
     });
     input.addEventListener('blur', commit);
     input.addEventListener('mousedown', function(ev) { ev.stopPropagation(); });
@@ -4748,9 +5144,22 @@ export const annotationScript = `
 
   function handleManipKeyDown(e) {
     if (!annotateMode || !manipSelected) return;
+    var a = document.activeElement;
+    // Up/down over a design field nudge that value instead of moving the
+    // element — the cursor says which control the arrows belong to, so this
+    // wins even while the prompt box has focus. A field being typed in is
+    // handled by its own input, so leave that one alone.
+    var editingInPanel = a && manipPanel && manipPanel.contains(a);
+    if (!editingInPanel && manipHoverField && manipHoverField.isConnected &&
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      e.stopPropagation();
+      nudgeManipField(manipHoverField, e.key === 'ArrowUp' ? 1 : -1, e);
+      return;
+    }
+
     // Typing anywhere (popover textarea, panel inputs) keeps normal key
     // behavior; nudging only takes the arrows when nothing has focus.
-    var a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
 
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -4799,12 +5208,16 @@ export const annotationScript = `
   }
 
   function manipNoteFor(rec) {
+    var named = false;
     var parts = Object.keys(rec.current).map(function(p) {
-      return p + ': ' + rec.baseline[p] + ' \\u2192 ' + rec.current[p];
+      var token = rec.tokens && rec.tokens[p];
+      if (token) named = true;
+      return p + ': ' + rec.baseline[p] + ' \\u2192 ' + rec.current[p] + (token ? ' (' + token + ')' : '');
     });
     return 'Apply these exact CSS changes (they are live-previewed on the element as inline styles, so the screenshot shows the intended result): ' +
       parts.join('; ') +
-      '. Implement them in the source using the project\\u2019s existing styling approach (classes, Tailwind utilities, CSS variables, rem, etc. \\u2014 convert px where that matches the codebase) and change nothing else about the element.';
+      '. Implement them in the source using the project\\u2019s existing styling approach (classes, Tailwind utilities, CSS variables, rem, etc. \\u2014 convert px where that matches the codebase) and change nothing else about the element.' +
+      (named ? ' Values shown with a project token in parentheses were picked from the project\\u2019s own scale \\u2014 use that exact token/utility rather than a raw px value.' : '');
   }
 
   // The delta instruction for one element, or '' if it has no tweaks
