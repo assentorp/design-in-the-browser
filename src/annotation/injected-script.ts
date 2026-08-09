@@ -1167,7 +1167,7 @@ export const annotationScript = `
         color: #e5e5e5 !important;
         font-size: 12px !important;
         box-sizing: border-box !important;
-        max-height: 44vh !important;
+        max-height: calc(100vh - 190px) !important;
         overflow-x: hidden !important;
         overflow-y: auto !important;
         opacity: 0 !important;
@@ -1265,12 +1265,12 @@ export const annotationScript = `
         display: flex !important;
         align-items: center !important;
         gap: 8px !important;
-        padding: 14px 16px 12px !important;
+        padding: 11px 16px 9px !important;
       }
       .claude-design-manip-flyout-title {
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        color: #fff !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        color: #8f8f8f !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
@@ -1295,37 +1295,40 @@ export const annotationScript = `
         border-radius: 6px !important;
       }
       .claude-design-manip-flyout .claude-design-manip-flyout-reset:hover { color: #fff !important; background: rgba(255, 255, 255, 0.08) !important; }
+      /* The rule above resets every property, which would beat an inline display:none */
+      .claude-design-manip-flyout .claude-design-manip-flyout-reset.hidden,
+      .claude-design-manip-flyout .claude-design-manip-flyout-count.hidden { display: none !important; }
       .claude-design-manip-section {
-        padding: 14px 16px !important;
+        padding: 12px 16px !important;
         border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
       }
       .claude-design-manip-section-label {
         font-size: 13px !important;
         font-weight: 600 !important;
         color: #fff !important;
-        margin: 0 0 12px 0 !important;
+        margin: 0 0 9px 0 !important;
       }
       .claude-design-manip-sublabel {
         font-size: 11px !important;
         font-weight: 400 !important;
         color: #8f8f8f !important;
-        margin: 0 0 6px 0 !important;
+        margin: 0 0 5px 0 !important;
       }
-      .claude-design-manip-sublabel.spaced { margin-top: 12px !important; }
+      .claude-design-manip-sublabel.spaced { margin-top: 10px !important; }
       /* Two even columns, the rhythm the whole panel is built on */
       .claude-design-manip-grid {
         display: grid !important;
         grid-template-columns: 1fr 1fr !important;
         gap: 8px !important;
       }
-      .claude-design-manip-grid + .claude-design-manip-grid { margin-top: 12px !important; }
+      .claude-design-manip-grid + .claude-design-manip-grid { margin-top: 10px !important; }
       .claude-design-manip-cell { min-width: 0 !important; }
       /* The wrapper is the field the user sees; the scrub target sits inside it */
       .claude-design-manip-fieldwrap {
         display: flex !important;
         align-items: center !important;
         gap: 7px !important;
-        height: 34px !important;
+        height: 32px !important;
         padding: 0 6px 0 10px !important;
         background: #333 !important;
         border: 1px solid transparent !important;
@@ -1375,15 +1378,15 @@ export const annotationScript = `
       .claude-design-manip-cross {
         display: grid !important;
         grid-template-columns: 1fr 1fr 1fr !important;
-        gap: 6px !important;
+        gap: 5px !important;
         align-items: center !important;
         /* A faint well groups the four sides into one box-model diagram */
         background: rgba(255, 255, 255, 0.03) !important;
         border-radius: 10px !important;
-        padding: 8px !important;
+        padding: 6px !important;
       }
       .claude-design-manip-cross .claude-design-manip-fieldwrap {
-        height: 30px !important;
+        height: 28px !important;
         padding: 0 4px 0 8px !important;
         gap: 2px !important;
       }
@@ -1418,7 +1421,7 @@ export const annotationScript = `
       .claude-design-manip-preset-btn.claude-design-manip-cross-all {
         width: auto !important;
         max-width: 100% !important;
-        height: 30px !important;
+        height: 28px !important;
         padding: 0 6px !important;
         gap: 3px !important;
         font-size: 9px !important;
@@ -1435,7 +1438,7 @@ export const annotationScript = `
       /* Component size/variant picker: a field-shaped button */
       .claude-design-manip-preset-btn.claude-design-manip-classbtn {
         width: 100% !important;
-        height: 34px !important;
+        height: 32px !important;
         justify-content: space-between !important;
         gap: 6px !important;
         background: #333 !important;
@@ -1463,7 +1466,7 @@ export const annotationScript = `
         display: flex !important;
         align-items: center !important;
         gap: 9px !important;
-        height: 34px !important;
+        height: 32px !important;
         padding: 0 6px 0 8px !important;
         background: #333 !important;
         border: 1px solid transparent !important;
@@ -5450,8 +5453,8 @@ export const annotationScript = `
     var html = '' +
       '<div class="claude-design-manip-flyout-header">' +
         '<span class="claude-design-manip-flyout-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
-        '<span class="claude-design-manip-flyout-count" style="display:none"></span>' +
-        '<button class="claude-design-manip-flyout-reset" style="display:none">Reset</button>' +
+        '<span class="claude-design-manip-flyout-count hidden"></span>' +
+        '<button class="claude-design-manip-flyout-reset hidden">Reset</button>' +
       '</div>' +
       manipComponentSectionHtml(manipPanelFamilies) +
       '<div class="claude-design-manip-section">' +
@@ -5460,6 +5463,10 @@ export const annotationScript = `
         '<div class="claude-design-manip-grid">' +
           manipFieldHtml('width', 'W') +
           manipFieldHtml('height', 'H') +
+        '</div>' +
+        '<div class="claude-design-manip-grid">' +
+          manipCellHtml('Corner radius', manipFieldHtml('border-radius')) +
+          (showGap ? manipCellHtml('Gap', manipFieldHtml('gap')) : '<div class="claude-design-manip-cell"></div>') +
         '</div>' +
       '</div>' +
       '<div class="claude-design-manip-section">' +
@@ -5472,24 +5479,20 @@ export const annotationScript = `
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Typography</div>' +
         '<div class="claude-design-manip-grid">' +
-          manipCellHtml('Size', manipFieldHtml('font-size', 'A')) +
+          manipCellHtml('Size', manipFieldHtml('font-size')) +
           manipCellHtml('Weight', manipFieldHtml('font-weight')) +
         '</div>' +
         '<div class="claude-design-manip-grid">' +
           manipCellHtml('Line height', manipFieldHtml('line-height')) +
           manipCellHtml('Letter spacing', manipFieldHtml('letter-spacing')) +
         '</div>' +
-        manipLabelHtml('Color', true) +
-        manipColorRowHtml('color') +
       '</div>' +
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Appearance</div>' +
+        '<div class="claude-design-manip-section-label">Color</div>' +
         '<div class="claude-design-manip-grid">' +
-          manipCellHtml('Corner radius', manipFieldHtml('border-radius')) +
-          (showGap ? manipCellHtml('Gap', manipFieldHtml('gap')) : '<div class="claude-design-manip-cell"></div>') +
+          manipCellHtml('Text', manipColorRowHtml('color')) +
+          manipCellHtml('Fill', manipColorRowHtml('background-color')) +
         '</div>' +
-        manipLabelHtml('Fill', true) +
-        manipColorRowHtml('background-color') +
       '</div>';
 
     flyout.innerHTML = '<div class="claude-design-manip-clip"><div class="claude-design-manip-scroll">' + html + '</div></div>';
@@ -5913,10 +5916,10 @@ export const annotationScript = `
     var countEl = manipPanel.querySelector('.claude-design-manip-flyout-count');
     var resetBtn = manipPanel.querySelector('.claude-design-manip-flyout-reset');
     if (countEl) {
-      countEl.style.display = count > 0 ? '' : 'none';
+      countEl.classList.toggle('hidden', count === 0);
       countEl.textContent = count + (count === 1 ? ' change' : ' changes');
     }
-    if (resetBtn) resetBtn.style.display = count > 0 ? '' : 'none';
+    if (resetBtn) resetBtn.classList.toggle('hidden', count === 0);
   }
 
   // ---- Interactions: attach, resize, move, scrub, type ----
