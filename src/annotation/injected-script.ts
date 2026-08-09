@@ -56,17 +56,25 @@ export const annotationScript = `
   let selectedTextRange = null;
 
   // Direct manipulation state (attached to the Edit-mode element selection)
-  let manipSelected = null;          // element the popover + handles are attached to
-  let manipOverlay = null;           // {label, handles: {dir: el}}
+  let manipSelected = null;          // element the popover + size readout follow
+  let manipOverlay = null;           // {label} — the size readout under the element
   let manipPanel = null;             // design section embedded in the popover
-  let manipDrag = null;              // active drag: {kind: 'resize'|'move'|'scrub', ...}
+  let manipDrag = null;              // active drag: {kind: 'move'|'scrub', ...}
   let manipSuppressClick = false;    // swallow the click that ends a drag
   let manipChanges = new Map();      // element -> {baseline: {}, inline: {}, current: {}}
   let manipRepositionQueued = false;
-  let manipFlyoutOpen = false;       // design flyout open state, remembered across popovers
+  let manipFlyoutOpen = false;       // design flyout open state within one selection
+  let manipPanelPersistent = false;  // Settings: keep the panel open across selections
   let manipHoverField = null;        // field under the cursor: arrow keys nudge it
+  let manipUndoStack = [];           // each entry is a batch: [{el, prop, value, token}]
+  let manipRedoStack = [];
+  let manipUndoBatch = null;         // open batch, so one gesture undoes as one step
+  let manipUndoLastEl = null;        // coalescing state for single changes
+  let manipUndoLastKey = null;
+  let manipUndoLastTime = 0;
   let manipPresetsMenu = null;       // open "project scale" dropdown
   let manipPresetsAnchor = null;     // caret button the dropdown hangs off
+  let manipPreview = null;           // restores the element after a hover preview
   let manipPagePresetCache = {};     // prop -> values sampled from the page (per flyout)
 
   // Area selection state (click-and-drag)
@@ -273,7 +281,7 @@ export const annotationScript = `
       .claude-design-popover .claude-design-popover-add-another svg {
         flex-shrink: 0 !important;
       }
-      .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *):not(.claude-design-class-inspector):not(.claude-design-class-inspector *):not(.claude-design-manip-handle):not(.claude-design-selected):not(.claude-design-selected *) {
+      .claude-design-crosshair *:not(.claude-design-popover):not(.claude-design-popover *):not(.claude-design-code-btn):not(.claude-design-code-btn *):not(.claude-design-class-inspector):not(.claude-design-class-inspector *):not(.claude-design-selected):not(.claude-design-selected *) {
         cursor: crosshair !important;
       }
       /* The selected element can be dragged to nudge it via margins */
@@ -1097,21 +1105,6 @@ export const annotationScript = `
       }
 
       /* ---- Direct manipulation (part of Edit mode) ---- */
-      .claude-design-manip-handle {
-        position: fixed !important;
-        width: 9px !important;
-        height: 9px !important;
-        background: #fff !important;
-        border: 1.5px solid #c6613f !important;
-        border-radius: 2px !important;
-        box-sizing: border-box !important;
-        pointer-events: auto !important;
-        z-index: 2147483646 !important;
-      }
-      .claude-design-manip-handle[data-dir="n"], .claude-design-manip-handle[data-dir="s"] { cursor: ns-resize !important; }
-      .claude-design-manip-handle[data-dir="e"], .claude-design-manip-handle[data-dir="w"] { cursor: ew-resize !important; }
-      .claude-design-manip-handle[data-dir="ne"], .claude-design-manip-handle[data-dir="sw"] { cursor: nesw-resize !important; }
-      .claude-design-manip-handle[data-dir="nw"], .claude-design-manip-handle[data-dir="se"] { cursor: nwse-resize !important; }
       .claude-design-manip-sizelabel {
         position: fixed !important;
         pointer-events: none !important;
@@ -1144,7 +1137,9 @@ export const annotationScript = `
         margin: 0 !important;
         user-select: none !important;
         -webkit-user-select: none !important;
-        overflow: hidden !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        max-height: calc(100vh - 16px) !important;
         opacity: 0 !important;
         transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1) !important;
         will-change: transform, opacity !important;
@@ -1277,11 +1272,80 @@ export const annotationScript = `
         width: 44px !important;
         flex-shrink: 0 !important;
       }
-      .claude-design-manip-quad {
+      /* Margin/padding box: each side sits where it lives on the element, and
+         the centre label opens the scale for all four at once */
+      .claude-design-manip-cross {
         display: grid !important;
-        grid-template-columns: 1fr 1fr 1fr 1fr !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
         gap: 4px !important;
+        align-items: center !important;
+        border: 1px dashed #3a3a3a !important;
+        border-radius: 8px !important;
+        padding: 6px !important;
+        margin-bottom: 6px !important;
+      }
+      .claude-design-manip-cross:last-child { margin-bottom: 0 !important; }
+      .claude-design-manip-cross-t { grid-column: 2 !important; grid-row: 1 !important; }
+      .claude-design-manip-cross-l { grid-column: 1 !important; grid-row: 2 !important; }
+      .claude-design-manip-cross-c {
+        grid-column: 2 !important;
+        grid-row: 2 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 0 !important;
+      }
+      .claude-design-manip-cross-r { grid-column: 3 !important; grid-row: 2 !important; }
+      .claude-design-manip-cross-b { grid-column: 2 !important; grid-row: 3 !important; }
+      .claude-design-manip-preset-btn.claude-design-manip-cross-all {
+        width: auto !important;
+        max-width: 100% !important;
+        height: 20px !important;
+        padding: 0 4px !important;
+        gap: 3px !important;
+        font-size: 9px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.4px !important;
+        overflow: hidden !important;
+      }
+      /* Component size/variant picker: a field-shaped button */
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn {
+        width: auto !important;
+        height: auto !important;
         flex: 1 !important;
+        min-width: 0 !important;
+        justify-content: space-between !important;
+        gap: 6px !important;
+        background: #303030 !important;
+        border: 1px solid transparent !important;
+        border-radius: 6px !important;
+        padding: 4px 6px !important;
+        color: #ccc !important;
+        font-size: 11px !important;
+      }
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn:hover {
+        background: #383838 !important;
+        border-color: #4a4a4a !important;
+        color: #fff !important;
+      }
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn.changed {
+        color: #eb9b78 !important;
+        border-color: rgba(198, 97, 63, 0.55) !important;
+        background: rgba(198, 97, 63, 0.12) !important;
+      }
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn.unset { color: #777 !important; }
+      .claude-design-manip-classbtn-value {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+      }
+      /* The flyout normalises text-transform on every descendant, so the label
+         span needs the uppercase itself rather than inheriting it */
+      .claude-design-manip-preset-btn.claude-design-manip-cross-all span {
+        text-transform: uppercase !important;
+        letter-spacing: 0.4px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
       }
       .claude-design-manip-field {
         display: inline-flex !important;
@@ -1406,6 +1470,27 @@ export const annotationScript = `
         font-size: 11px !important;
         white-space: nowrap !important;
       }
+      /* Color variant: swatch grid rather than a list of values */
+      .claude-design-manip-presets.colors { width: 200px !important; min-width: 200px !important; }
+      .claude-design-manip-preset-grid {
+        display: grid !important;
+        grid-template-columns: repeat(8, 1fr) !important;
+        gap: 4px !important;
+        padding: 0 4px 6px !important;
+      }
+      .claude-design-manip-preset-swatch {
+        width: 100% !important;
+        aspect-ratio: 1 / 1 !important;
+        border-radius: 5px !important;
+        border: 1px solid rgba(255, 255, 255, 0.14) !important;
+        cursor: pointer !important;
+        box-sizing: border-box !important;
+      }
+      .claude-design-manip-preset-swatch:hover { border-color: #fff !important; }
+      .claude-design-manip-preset-swatch.current {
+        border-color: #eb9b78 !important;
+        box-shadow: 0 0 0 2px rgba(198, 97, 63, 0.5) !important;
+      }
       .claude-design-manip-color-row input[type="color"] {
         -webkit-appearance: none !important;
         appearance: none !important;
@@ -1426,6 +1511,7 @@ export const annotationScript = `
         color: #999 !important;
         font-size: 11px !important;
         font-variant-numeric: tabular-nums !important;
+        flex: 1 !important;
       }
     \`;
     document.head.appendChild(style);
@@ -2893,7 +2979,7 @@ export const annotationScript = `
     }
     if (top < 10) {
       // No room above or below — try beside the element (right, then left)
-      // so it and its resize handles stay visible under the taller popover
+      // so it stays visible under the taller popover
       var sideTop = Math.max(10, Math.min(rect.top, window.innerHeight - popHeight - 10));
       if (rect.right + 330 <= window.innerWidth) {
         popoverElement.style.top = sideTop + 'px';
@@ -2977,7 +3063,7 @@ export const annotationScript = `
     popoverElement.style.top = (rect.bottom + 10) + 'px';
     popoverElement.style.left = left + 'px';
 
-    // Add scroll listener to reposition popover, code button, and handles
+    // Add scroll listener to reposition popover, code button, and readout
     popoverScrollHandler = function() {
       positionPopover();
       positionCodeButton();
@@ -3085,7 +3171,7 @@ export const annotationScript = `
     // Reposition now that we know the actual height
     positionPopover();
 
-    // Attach direct manipulation: handles on the element, and the design
+    // Attach direct manipulation: the size readout, and the design
     // flyout if it was left open. Runs after positionPopover so the flyout
     // anchors to the popover's final position. Text/area selections skip it.
     if (el && !textSelection) {
@@ -3672,7 +3758,6 @@ export const annotationScript = `
     if (e.target.closest && e.target.closest('.claude-design-toolbar')) return;
     if (e.target.closest && e.target.closest('.claude-design-code-btn')) return;
     if (e.target.closest && e.target.closest('.claude-design-class-inspector')) return;
-    if (e.target.closest && e.target.closest('.claude-design-manip-handle')) return;
     if (e.target.closest && e.target.closest('.claude-design-manip-flyout')) return;
 
     e.preventDefault();
@@ -3901,7 +3986,7 @@ export const annotationScript = `
     removeShortcutHints();
     shortcutHintsElement = document.createElement('div');
     shortcutHintsElement.className = 'claude-design-shortcut-hints';
-    shortcutHintsElement.innerHTML = '<span><kbd>Click</kbd> Select \\u00b7 then drag handles, scrub values, arrow-nudge</span><span><kbd>Drag</kbd> Select area</span><span><kbd>Alt</kbd> Inspect element</span><span><kbd>Shift+G</kbd> Grid</span><span><kbd>F</kbd> Freeze animations</span>';
+    shortcutHintsElement.innerHTML = '<span><kbd>Drag</kbd> Select area</span><span><kbd>Alt</kbd> Inspect element</span><span><kbd>Shift+G</kbd> Grid</span><span><kbd>F</kbd> Freeze animations</span>';
     document.body.appendChild(shortcutHintsElement);
     // Trigger fade-in on next frame
     requestAnimationFrame(function() {
@@ -3929,8 +4014,8 @@ export const annotationScript = `
   function handleAreaMouseDown(e) {
     if (!annotateMode || altKeyDown || gKeyDown) return;
     if (e.button !== 0) return;
-    // A drag starting on the selected element (or its handles) is a
-    // nudge/resize gesture, not an area-select marquee
+    // A drag starting on the selected element is a nudge gesture, not an
+    // area-select marquee
     if (manipDrag) return;
     if (manipSelected && (e.target === manipSelected || manipSelected.contains(e.target))) return;
     if (e.target.closest && (
@@ -3939,7 +4024,6 @@ export const annotationScript = `
       e.target.closest('.claude-design-code-btn') ||
       e.target.closest('.claude-design-class-inspector') ||
       e.target.closest('.claude-design-shortcut-hints') ||
-      e.target.closest('.claude-design-manip-handle') ||
       e.target.closest('.claude-design-manip-flyout') ||
       e.target.closest('.claude-design-manip-presets')
     )) return;
@@ -4131,6 +4215,10 @@ export const annotationScript = `
     removeRulerGuides();
     removeGridOverlay();
     removeShortcutHints();
+    // Design panel chrome lives on <body>, so leaving the mode must take it all
+    closeManipPresets();
+    closeManipFlyout(true);
+    manipHoverField = null;
     // Unfreeze animations when leaving annotate mode
     if (animationsPaused) {
       toggleAnimationFreeze(true);
@@ -4214,7 +4302,7 @@ export const annotationScript = `
   // ============================================================
   // Direct manipulation: drag-resize, nudge, scrub (part of Edit mode)
   // ============================================================
-  // Selecting an element attaches resize handles and embeds a design section
+  // Selecting an element attaches the size readout and embeds a design section
   // in the annotation popover. Tweaks preview live as inline styles and are
   // tracked per element as baseline -> current deltas; sending the annotation
   // (or adding it to the edit list) folds the deltas into the instruction.
@@ -4242,6 +4330,10 @@ export const annotationScript = `
 
   // Tailwind utility prefix that owns each property's scale, used to pull the
   // project's own values out of window.__claudeDesignTokens
+  // Every piece of UI this script puts on the page. One list: it decides both
+  // what a pointer/keyboard event should ignore and what page sampling skips.
+  var MANIP_CHROME = '.claude-design-popover, .claude-design-toolbar, .claude-design-manip-flyout, .claude-design-manip-presets, .claude-design-manip-sizelabel, .claude-design-class-inspector, .claude-design-code-btn, .claude-design-shortcut-hints, .claude-design-grid-toast';
+
   var MANIP_TOKEN_PREFIX = {
     'width': 'w', 'height': 'h',
     'margin-top': 'mt', 'margin-right': 'mr', 'margin-bottom': 'mb', 'margin-left': 'ml',
@@ -4272,7 +4364,7 @@ export const annotationScript = `
   // Resolve a token value ('1.5rem', '14px', '0.025em', '600') to px for the
   // given property/element. Returns null for anything not a plain length.
   function manipTokenToPx(raw, prop, el) {
-    var s = String(raw == null ? '' : raw).trim();
+    var s = manipResolveVar(raw);
     // tailwind fontSize entries can be tuples: ['1rem', { lineHeight: ... }]
     s = s.replace(/^\\[\\s*/, '').replace(/^['"\`]/, '').replace(/['"\`].*$/, '').trim();
     var m = s.match(/^(-?[0-9]*\\.?[0-9]+)(px|rem|em|)$/);
@@ -4322,24 +4414,31 @@ export const annotationScript = `
     return out;
   }
 
+  // Walk the page's own elements, skipping this script's UI, and hand each
+  // computed value of that property to the collector. Callers cache the
+  // result: the sweep reads computed styles and is too costly to repeat.
+  function manipSamplePage(prop, collect) {
+    var els = document.body ? document.body.querySelectorAll('*') : [];
+    var limit = Math.min(els.length, 2500);
+    for (var i = 0; i < limit; i++) {
+      var el = els[i];
+      if (el.closest && el.closest(MANIP_CHROME)) continue;
+      collect(window.getComputedStyle(el).getPropertyValue(prop));
+    }
+  }
+
   // Fallback for projects with no token source: the values the page itself
   // actually uses, most common first (then sorted by size).
   function manipPagePresets(prop) {
     if (manipPagePresetCache[prop]) return manipPagePresetCache[prop];
     var counts = {};
-    var els = document.body ? document.body.querySelectorAll('*') : [];
-    var limit = Math.min(els.length, 2500);
-    for (var i = 0; i < limit; i++) {
-      var e = els[i];
-      // The annotation UI is part of the DOM too — its own type scale is not
-      // the page's (and its inner nodes are often class-less)
-      if (e.closest && e.closest('.claude-design-popover, .claude-design-toolbar, .claude-design-manip-flyout, .claude-design-manip-presets, .claude-design-class-inspector, .claude-design-code-btn, .claude-design-shortcut-hints, .claude-design-grid-toast')) continue;
-      var v = parseFloat(window.getComputedStyle(e).getPropertyValue(prop));
-      if (!isFinite(v) || v < 0) continue;
-      if (prop === 'font-size' && (v < 6 || v > 200)) continue;
+    manipSamplePage(prop, function(raw) {
+      var v = parseFloat(raw);
+      if (!isFinite(v) || v < 0) return;
+      if (prop === 'font-size' && (v < 6 || v > 200)) return;
       var key = String(Math.round(v * 10) / 10);
       counts[key] = (counts[key] || 0) + 1;
-    }
+    });
     var entries = Object.keys(counts).map(function(k) {
       return { px: parseFloat(k), count: counts[k] };
     }).filter(function(entry) { return entry.count > 1; });
@@ -4353,15 +4452,477 @@ export const annotationScript = `
     return result;
   }
 
+  // Color families Tailwind ships with — used only to sort the project's own
+  // colors above the stock palette in the swatch grid
+  var TAILWIND_DEFAULT_FAMILIES = ('slate gray zinc neutral stone red orange amber yellow lime green ' +
+    'emerald teal cyan sky blue indigo violet purple fuchsia pink rose black white transparent current inherit').split(' ');
+
+  // Theme tokens often point at another variable (--color-accent: var(--accent)).
+  // The page is live, so resolve the chain against the document root.
+  function manipResolveVar(value) {
+    var out = String(value == null ? '' : value).trim();
+    for (var hop = 0; hop < 4 && out.indexOf('var(') === 0; hop++) {
+      var match = out.match(/^var\\(\\s*(--[\\w-]+)\\s*(?:,([\\s\\S]*))?\\)$/);
+      if (!match) break;
+      var resolved = window.getComputedStyle(document.documentElement).getPropertyValue(match[1]).trim();
+      if (!resolved && match[2]) resolved = match[2].trim(); // declared fallback
+      if (!resolved || resolved === out) break;
+      out = resolved;
+    }
+    return out;
+  }
+
+  var manipColorCtxCache = null;
+  function manipColorCtx() {
+    if (!manipColorCtxCache) {
+      var canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      manipColorCtxCache = canvas.getContext('2d');
+    }
+    return manipColorCtxCache;
+  }
+
+  // Normalise any CSS colour to a hex string, or null when it isn't a usable
+  // opaque-ish colour (invalid, transparent, var() reference, keyword)
+  function manipNormalizeColor(raw) {
+    var s = manipResolveVar(raw);
+    if (!s || s.indexOf('var(') !== -1) return null;
+    var low = s.toLowerCase();
+    if (low === 'transparent' || low === 'none' || low === 'inherit' || low === 'currentcolor' ||
+        low === 'unset' || low === 'initial' || low === 'auto') return null;
+    var ctx = manipColorCtx();
+    // An invalid value leaves fillStyle untouched, so it reads back as whatever
+    // was there before — seed two different values to tell those apart
+    ctx.fillStyle = '#000000';
+    ctx.fillStyle = s;
+    var first = ctx.fillStyle;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = s;
+    if (first !== ctx.fillStyle) return null;
+    if (first.charAt(0) === '#') return first;
+    var m = first.match(/^rgba?\\(\\s*([0-9.]+)[,\\s]+([0-9.]+)[,\\s]+([0-9.]+)(?:[,\\s/]+([0-9.]+))?\\s*\\)$/);
+    if (!m) return null;
+    var alpha = m[4] === undefined ? 1 : parseFloat(m[4]);
+    if (!(alpha > 0.02)) return null;
+    return rgbToHex(parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), alpha);
+  }
+
+  // The project's colors for a property: text-* for color, bg-* for fill,
+  // plus every CSS colour variable. Project-specific entries come first.
+  function manipColorPresets(prop) {
+    var tokens = window.__claudeDesignTokens || [];
+    var prefix = prop === 'color' ? 'text-' : 'bg-';
+    var own = [];
+    var stock = [];
+    var seen = {};
+    function add(name, raw, isStock) {
+      var hex = manipNormalizeColor(raw);
+      if (!hex) return;
+      if (seen[hex]) return;
+      seen[hex] = true;
+      (isStock ? stock : own).push({ name: name, color: hex, token: name });
+    }
+    tokens.forEach(function(t) {
+      if (t.category !== 'color' || t.source !== 'tailwind') return;
+      if (t.name.indexOf(prefix) !== 0) return;
+      var family = t.name.slice(prefix.length).split('-')[0];
+      add(t.name, t.value, TAILWIND_DEFAULT_FAMILIES.indexOf(family) !== -1);
+    });
+    tokens.forEach(function(t) {
+      if (t.category !== 'color' || t.source !== 'css-var') return;
+      add(t.name, t.value, false);
+    });
+    return { own: own, stock: stock };
+  }
+
+  // Colors the page itself paints, most used first — the fallback for
+  // projects with no token source
+  function manipPageColorPresets(prop) {
+    var cacheKey = 'color:' + prop;
+    if (manipPagePresetCache[cacheKey]) return manipPagePresetCache[cacheKey];
+    var counts = {};
+    manipSamplePage(prop, function(raw) {
+      var hex = manipNormalizeColor(raw);
+      if (hex) counts[hex] = (counts[hex] || 0) + 1;
+    });
+    var entries = Object.keys(counts).map(function(hex) {
+      return { color: hex, count: counts[hex], name: hex, token: null };
+    });
+    entries.sort(function(a, b) { return b.count - a.count; });
+    entries = entries.slice(0, 24);
+    manipPagePresetCache[cacheKey] = entries;
+    return entries;
+  }
+
+  // Always {kind, groups:[{head, items}]} so the menu renders with one loop
+  // ---- Component variants (btn-sm \\u2192 btn-lg, btn-primary \\u2192 btn-secondary) ----
+  // Detected from the page's own stylesheets, so it works for DaisyUI,
+  // Bootstrap, BEM modifiers or any hand-rolled component CSS. Utility-only
+  // markup (plain Tailwind, shadcn/cva) has no such classes and gets no section.
+
+  // Bare Tailwind utilities that also head a family of "modifiers" — never a
+  // component variant, so they must not spawn a picker
+  var MANIP_UTILITY_BASES = {};
+  ('flex grid border rounded shadow ring outline transition transform filter backdrop container block inline table hidden ' +
+   'static fixed absolute relative sticky visible invisible italic underline overline truncate uppercase lowercase capitalize ' +
+   'antialiased isolate group peer snap blur grayscale invert sepia appearance resize columns aspect object overflow order ' +
+   'float clear list decoration cursor select align whitespace break content animate delay duration ease origin scale rotate ' +
+   'translate skew opacity bg text font leading tracking gap space divide place items justify self col row').split(' ')
+    .forEach(function(name) { MANIP_UTILITY_BASES[name] = true; });
+
+  // Modifiers that read as a size; everything else is treated as a variant
+  var MANIP_SIZE_MODS = {
+    'tiny': -2, 'mini': -2, 'xxs': -1, '2xs': -1, 'xs': 0, 'sm': 1, 'small': 1, 'md': 2, 'base': 2,
+    'default': 2, 'normal': 2, 'medium': 2, 'lg': 3, 'large': 3, 'xl': 4, 'huge': 4,
+    '2xl': 5, 'xxl': 5, '3xl': 6, '4xl': 7, '5xl': 8
+  };
+
+  var manipClassIndex = null;      // {set, keys, sheets} of every class the page's CSS defines
+  var manipSiblingCache = {};      // "base|sep" -> modifiers found for it
+  var manipPanelFamilies = [];     // families rendered in the open flyout
+
+  function manipEnsureClassIndex() {
+    // Dev servers inject stylesheets as you edit, so rebuild when the sheet
+    // count changes rather than trusting a one-time scan
+    if (manipClassIndex && manipClassIndex.sheets === document.styleSheets.length) return manipClassIndex;
+    manipSiblingCache = {};
+    var set = {};
+    var budget = 60000; // guard against enormous dev-mode stylesheets
+    function walk(rules) {
+      for (var i = 0; i < rules.length && budget > 0; i++) {
+        var rule = rules[i];
+        budget--;
+        if (rule.selectorText) {
+          var found = rule.selectorText.match(/\\.-?[_a-zA-Z][\\w-]*/g);
+          if (found) {
+            for (var j = 0; j < found.length; j++) set[found[j].slice(1)] = true;
+          }
+        } else if (rule.cssRules) {
+          walk(rule.cssRules);
+        }
+      }
+    }
+    var sheets = document.styleSheets;
+    for (var s = 0; s < sheets.length; s++) {
+      // Cross-origin sheets throw on access; skip them
+      try {
+        if (sheets[s].cssRules) walk(sheets[s].cssRules);
+      } catch (err) { /* ignore */ }
+    }
+    manipClassIndex = { set: set, keys: Object.keys(set), sheets: document.styleSheets.length };
+    return manipClassIndex;
+  }
+
+  function manipSiblingMods(base, sep) {
+    var key = base + '|' + sep;
+    if (manipSiblingCache[key]) return manipSiblingCache[key];
+    var idx = manipEnsureClassIndex();
+    var prefix = base + sep;
+    var mods = [];
+    for (var i = 0; i < idx.keys.length; i++) {
+      var name = idx.keys[i];
+      if (name.length <= prefix.length || name.indexOf(prefix) !== 0) continue;
+      var mod = name.slice(prefix.length);
+      if (!mod || mod.charAt(0) === '-') continue;
+      mods.push(mod);
+    }
+    manipSiblingCache[key] = mods;
+    return mods;
+  }
+
+  function manipModGroup(mod) {
+    return MANIP_SIZE_MODS[mod] !== undefined ? 'size' : 'variant';
+  }
+
+  // The class of this family currently on the element, for one group
+  function manipCurrentClassFor(el, fam, groupKey) {
+    for (var i = 0; i < el.classList.length; i++) {
+      var c = el.classList[i];
+      if (c.length <= fam.base.length + fam.sep.length) continue;
+      if (c.indexOf(fam.base + fam.sep) !== 0) continue;
+      var mod = c.slice(fam.base.length + fam.sep.length);
+      if (fam.mods.indexOf(mod) !== -1 && manipModGroup(mod) === groupKey) return c;
+    }
+    return null;
+  }
+
+  // Component families on this element: a base class the CSS defines, with at
+  // least two modifiers to choose between
+  function manipClassFamilies(el) {
+    if (!el || !el.classList || !el.classList.length) return [];
+    var idx = manipEnsureClassIndex();
+    if (!idx.keys.length) return [];
+    var seen = {};
+    var families = [];
+
+    function consider(base, sep) {
+      if (!base || base.length < 2 || MANIP_UTILITY_BASES[base]) return;
+      if (seen[base + '|' + sep]) return;
+      // The base has to be a real class, not just a shared prefix
+      if (!idx.set[base] && !el.classList.contains(base)) return;
+      var mods = manipSiblingMods(base, sep);
+      if (mods.length < 2) return;
+      seen[base + '|' + sep] = true;
+      families.push({ base: base, sep: sep, mods: mods });
+    }
+
+    for (var i = 0; i < el.classList.length; i++) {
+      var c = el.classList[i];
+      if (c.indexOf('claude-design-') === 0) continue;
+      consider(c, '-');            // bare base, e.g. class="btn"
+      var dd = c.indexOf('--');    // BEM modifier, e.g. card__title--large
+      if (dd > 0) consider(c.slice(0, dd), '--');
+      // Left-most split keeps every modifier under one base (btn-outline-primary)
+      var pos = c.indexOf('-');
+      while (pos > 0) {
+        consider(c.slice(0, pos), '-');
+        pos = c.indexOf('-', pos + 1);
+      }
+    }
+
+    // Keep only families that offer a real choice in a group
+    var out = [];
+    families.forEach(function(fam) {
+      var groups = [];
+      ['size', 'variant'].forEach(function(key) {
+        var mods = fam.mods.filter(function(mod) { return manipModGroup(mod) === key; });
+        if (key === 'size') {
+          mods.sort(function(a, b) { return MANIP_SIZE_MODS[a] - MANIP_SIZE_MODS[b]; });
+        } else {
+          mods.sort();
+        }
+        var current = manipCurrentClassFor(el, fam, key);
+        if (mods.length < 2 && !current) return;
+        groups.push({ key: key, label: key === 'size' ? 'Size' : 'Variant', mods: mods });
+      });
+      if (groups.length) out.push({ kind: 'class', base: fam.base, sep: fam.sep, mods: fam.mods, groups: groups });
+    });
+    // Utility-class components (cva/tailwind-variants) have no marker class of
+    // their own, so they are matched from the parsed declarations instead
+    return out.concat(manipVariantFamilies(el));
+  }
+
+  // ---- Tailwind components (cva / tailwind-variants) ----
+  // Utility markup carries no variant class, so the options come from the
+  // declarations parsed out of the project source. An element is matched by its
+  // data-slot, or by how much of the declaration's base class list it carries.
+
+  function manipElementClassSet(el) {
+    var set = {};
+    for (var i = 0; i < el.classList.length; i++) {
+      var c = el.classList[i];
+      if (c.indexOf('claude-design-') !== 0) set[c] = true;
+    }
+    return set;
+  }
+
+  function manipCoverage(classes, present) {
+    if (!classes || !classes.length) return 0;
+    var hit = 0;
+    for (var i = 0; i < classes.length; i++) {
+      if (present[classes[i]]) hit++;
+    }
+    return hit / classes.length;
+  }
+
+  // The declaration this element is an instance of, or null
+  function manipMatchVariantSet(el) {
+    var sets = window.__claudeDesignComponentVariants || [];
+    if (!sets.length) return null;
+    var present = manipElementClassSet(el);
+    var slot = el.getAttribute ? el.getAttribute('data-slot') : null;
+    var best = null;
+    var bestScore = 0;
+    sets.forEach(function(set) {
+      var score;
+      if (slot && set.slot && set.slot === slot) {
+        score = 2; // an explicit data-slot beats any class overlap
+      } else {
+        // Needs a distinctive base, most of which the element still carries
+        if (!set.base || set.base.length < 3) return;
+        var coverage = manipCoverage(set.base, present);
+        if (coverage < 0.6) return;
+        score = coverage;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = set;
+      }
+    });
+    return best;
+  }
+
+  // Which option of a group the element currently shows
+  function manipCurrentVariantOption(el, set, group) {
+    var present = manipElementClassSet(el);
+    var best = null;
+    var bestScore = 0;
+    group.options.forEach(function(option) {
+      if (!option.classes || !option.classes.length) return;
+      var coverage = manipCoverage(option.classes, present);
+      // Prefer the most specific match when two options overlap
+      if (coverage >= 0.5 && (coverage > bestScore || (coverage === bestScore && best && option.classes.length > best.classes.length))) {
+        bestScore = coverage;
+        best = option;
+      }
+    });
+    if (best) return best.name;
+    return group.defaultOption || null;
+  }
+
+  function manipVariantFamilies(el) {
+    var set = manipMatchVariantSet(el);
+    if (!set) return [];
+    var groups = set.groups.filter(function(group) { return group.options && group.options.length > 1; });
+    if (!groups.length) return [];
+    return [{ kind: 'variant', set: set, base: set.name, groups: groups.map(function(group) {
+      return { key: group.name, label: group.name.charAt(0).toUpperCase() + group.name.slice(1), group: group };
+    }) }];
+  }
+
+  // Swapping keeps the base and the other groups' classes intact — only the
+  // classes unique to the outgoing option are removed
+  // Variant families carry {key, label, group}; callers want one or the other
+  function manipFindGroup(fam, groupKey) {
+    for (var i = 0; i < fam.groups.length; i++) {
+      if (fam.groups[i].key === groupKey) return fam.groups[i];
+    }
+    return null;
+  }
+
+  // The DOM half of a variant swap: keep the base and the other groups' classes,
+  // drop only what is unique to the outgoing option. Shared with hover preview.
+  function manipApplyVariantClasses(el, fam, groupKey, optionName) {
+    var entry = manipFindGroup(fam, groupKey);
+    if (!entry) return;
+    var group = entry.group;
+    var byName = {};
+    group.options.forEach(function(option) { byName[option.name] = option; });
+
+    var keep = {};
+    (fam.set.base || []).forEach(function(c) { keep[c] = true; });
+    fam.groups.forEach(function(other) {
+      if (other.key === groupKey) return;
+      var otherName = manipCurrentVariantOption(el, fam.set, other.group);
+      other.group.options.forEach(function(option) {
+        if (option.name === otherName) option.classes.forEach(function(c) { keep[c] = true; });
+      });
+    });
+    var next = byName[optionName];
+    if (next) next.classes.forEach(function(c) { keep[c] = true; });
+
+    var current = byName[manipCurrentVariantOption(el, fam.set, group)];
+    if (current) {
+      current.classes.forEach(function(c) {
+        if (!keep[c]) el.classList.remove(c);
+      });
+    }
+    if (next) next.classes.forEach(function(c) { el.classList.add(c); });
+  }
+
+  function manipSetVariantOption(el, fam, groupKey, optionName) {
+    var entry = manipFindGroup(fam, groupKey);
+    if (!entry) return;
+    var currentName = manipCurrentVariantOption(el, fam.set, entry.group);
+    if (currentName === optionName) return;
+
+    manipUndoPush(manipVariantSnapshotRaw(el, fam.set.name + '|' + groupKey), false);
+    manipApplyVariantClasses(el, fam, groupKey, optionName);
+
+    var rec = manipEnsureRecord(el);
+    if (!rec.classSwaps) rec.classSwaps = {};
+    var key = fam.set.name + '|' + groupKey;
+    var swap = rec.classSwaps[key];
+    var origin = swap ? swap.from : currentName;
+    if (origin === optionName) delete rec.classSwaps[key];
+    else rec.classSwaps[key] = {
+      from: origin, to: optionName, component: fam.set.name,
+      group: groupKey, file: fam.set.file, isVariant: true
+    };
+    queueManipReposition();
+  }
+
+  // Class edits are restored wholesale: exact, and immune to overlapping
+  // utilities between options
+  function manipVariantSnapshotRaw(el, key) {
+    var rec = manipEnsureRecord(el);
+    var classes = [];
+    for (var i = 0; i < el.classList.length; i++) {
+      if (el.classList[i].indexOf('claude-design-') !== 0) classes.push(el.classList[i]);
+    }
+    var swap = rec.classSwaps ? rec.classSwaps[key] : undefined;
+    return {
+      el: el, isVariant: true, key: 'variant:' + key, classes: classes, swapKey: key,
+      swap: swap ? { from: swap.from, to: swap.to, component: swap.component, group: swap.group, file: swap.file, isVariant: true } : undefined
+    };
+  }
+
+  function manipApplyVariantSnapshot(snap) {
+    var el = snap.el;
+    var ours = [];
+    for (var i = 0; i < el.classList.length; i++) {
+      if (el.classList[i].indexOf('claude-design-') === 0) ours.push(el.classList[i]);
+    }
+    // setAttribute, not el.className — the latter is read-only on SVG elements
+    el.setAttribute('class', snap.classes.concat(ours).join(' '));
+    var rec = manipEnsureRecord(el);
+    if (!rec.classSwaps) rec.classSwaps = {};
+    if (snap.swap) rec.classSwaps[snap.swapKey] = snap.swap;
+    else delete rec.classSwaps[snap.swapKey];
+    queueManipReposition();
+  }
+
+  // The DOM half of a class-family swap, shared with hover preview
+  function manipApplyClassPreview(el, fam, groupKey, mod) {
+    var fromCls = manipCurrentClassFor(el, fam, groupKey);
+    var toCls = mod ? fam.base + fam.sep + mod : null;
+    if (fromCls) el.classList.remove(fromCls);
+    if (toCls) el.classList.add(toCls);
+  }
+
+  function manipSetClassMod(el, fam, groupKey, mod) {
+    var fromCls = manipCurrentClassFor(el, fam, groupKey);
+    var toCls = mod ? fam.base + fam.sep + mod : null;
+    if (fromCls === toCls) return;
+    manipUndoRecordClass(el, fam, groupKey, fromCls);
+    manipApplyClassState(el, fam, groupKey, toCls);
+  }
+
+  // Swap the family's class for this group, tracking it against the baseline
+  function manipApplyClassState(el, fam, groupKey, toCls) {
+    var rec = manipEnsureRecord(el);
+    if (!rec.classSwaps) rec.classSwaps = {};
+    var key = fam.base + fam.sep + '|' + groupKey;
+    var fromCls = manipCurrentClassFor(el, fam, groupKey);
+    if (fromCls) el.classList.remove(fromCls);
+    if (toCls) el.classList.add(toCls);
+    var entry = rec.classSwaps[key];
+    var origin = entry ? entry.from : fromCls;
+    if (origin === toCls) delete rec.classSwaps[key];
+    else rec.classSwaps[key] = { from: origin, to: toCls, base: fam.base, sep: fam.sep, group: groupKey, fam: fam };
+    queueManipReposition();
+  }
+
   function manipPresetsFor(prop, prefix) {
+    if ((MANIP_PROPS[prop] || {}).color) {
+      var palette = manipColorPresets(prop);
+      if (palette.own.length || palette.stock.length) {
+        return { kind: 'color', groups: [
+          { head: 'Project colors', items: palette.own },
+          { head: 'Tailwind palette', items: palette.stock }
+        ].filter(function(g) { return g.items.length; }) };
+      }
+      return { kind: 'color', groups: [{ head: 'Used on this page', items: manipPageColorPresets(prop) }] };
+    }
     var tokenPresets = manipTokenPresets(prop, prefix);
-    if (tokenPresets.length) return { source: 'project', items: tokenPresets };
-    return { source: 'page', items: manipPagePresets(prop) };
+    if (tokenPresets.length) return { kind: 'value', groups: [{ head: 'Project scale', items: tokenPresets }] };
+    return { kind: 'value', groups: [{ head: 'Used on this page', items: manipPagePresets(prop) }] };
   }
 
   function isManipUiTarget(t) {
     if (!t || !t.closest) return false;
-    return !!t.closest('.claude-design-manip-handle, .claude-design-manip-sizelabel, .claude-design-manip-flyout, .claude-design-manip-presets, .claude-design-grid-toast, .claude-design-popover, .claude-design-toolbar, .claude-design-class-inspector, .claude-design-code-btn');
+    return !!t.closest(MANIP_CHROME);
   }
 
   function manipEnsureRecord(el) {
@@ -4374,7 +4935,7 @@ export const annotationScript = `
         baseline[p] = computed.getPropertyValue(p);
         inline[p] = { value: el.style.getPropertyValue(p), priority: el.style.getPropertyPriority(p) };
       });
-      rec = { baseline: baseline, inline: inline, current: {}, tokens: {} };
+      rec = { baseline: baseline, inline: inline, current: {}, tokens: {}, classSwaps: {} };
       manipChanges.set(el, rec);
     }
     return rec;
@@ -4405,8 +4966,6 @@ export const annotationScript = `
   function manipSetProp(el, prop, cssValue, tokenName) {
     var rec = manipEnsureRecord(el);
     if (!rec.tokens) rec.tokens = {};
-    if (tokenName) rec.tokens[prop] = tokenName;
-    else delete rec.tokens[prop];
     var meta = MANIP_PROPS[prop] || {};
     var baseVal = rec.baseline[prop];
     var same;
@@ -4417,15 +4976,157 @@ export const annotationScript = `
       var b = parseFloat(baseVal);
       same = (isFinite(a) && isFinite(b)) ? Math.abs(a - b) < 0.05 : cssValue === baseVal;
     }
-    if (same) {
+    // Back at the baseline means "no change", not "change to the same value"
+    var nextValue = same ? undefined : cssValue;
+    var nextToken = same ? undefined : (tokenName || undefined);
+    // Only a real change earns an undo step; the write itself always runs so the
+    // preview survives the page re-rendering the element underneath us
+    if (nextValue !== rec.current[prop] || nextToken !== rec.tokens[prop]) {
+      manipUndoRecord(el, prop);
+    }
+    manipApplyPropState(el, prop, nextValue, nextToken);
+  }
+
+  // The single place that writes a property's state, shared by edits and undo
+  function manipApplyPropState(el, prop, value, token) {
+    var rec = manipEnsureRecord(el);
+    if (!rec.tokens) rec.tokens = {};
+    if (value === undefined) {
       manipRestoreInline(el, rec, prop);
       delete rec.current[prop];
       delete rec.tokens[prop];
     } else {
-      el.style.setProperty(prop, cssValue, 'important');
-      rec.current[prop] = cssValue;
+      el.style.setProperty(prop, value, 'important');
+      rec.current[prop] = value;
+      if (token) rec.tokens[prop] = token;
+      else delete rec.tokens[prop];
     }
     queueManipReposition();
+  }
+
+  // ---- Undo/redo for design tweaks (Cmd/Ctrl+Z, Shift to redo) ----
+
+  // Remember what a property looked like before it changes. Consecutive edits
+  // to the same property collapse into one step, and a gesture (drag, scrub,
+  // multi-side preset) collapses into one via the open batch.
+  // One history for every kind of edit. Each snapshot carries the key that
+  // identifies what it covers, so a batch keeps only the first snapshot per
+  // (element, key) and consecutive tweaks to the same field collapse into one
+  // step. Only value edits coalesce by time — a click is always its own step.
+  function manipUndoPush(snap, coalesce) {
+    if (manipUndoBatch) {
+      for (var i = 0; i < manipUndoBatch.length; i++) {
+        if (manipUndoBatch[i].el === snap.el && manipUndoBatch[i].key === snap.key) return;
+      }
+      manipUndoBatch.push(snap);
+      return;
+    }
+    var now = Date.now();
+    if (coalesce && manipUndoLastEl === snap.el && manipUndoLastKey === snap.key && now - manipUndoLastTime < 700) {
+      manipUndoLastTime = now;
+      return;
+    }
+    manipUndoLastEl = coalesce ? snap.el : null;
+    manipUndoLastKey = snap.key;
+    manipUndoLastTime = now;
+    manipUndoStack.push([snap]);
+    if (manipUndoStack.length > 200) manipUndoStack.shift();
+    manipRedoStack = [];
+  }
+
+  function manipUndoRecord(el, prop) {
+    var rec = manipEnsureRecord(el);
+    manipUndoPush({
+      el: el, key: 'prop:' + prop, prop: prop,
+      value: rec.current[prop], token: rec.tokens ? rec.tokens[prop] : undefined
+    }, true);
+  }
+
+  // Class swaps ride the same history as property edits
+  function manipUndoRecordClass(el, fam, groupKey, currentCls) {
+    manipUndoPush({
+      el: el, key: 'class:' + fam.base + fam.sep + '|' + groupKey,
+      fam: fam, group: groupKey, cls: currentCls, isClass: true
+    }, false);
+  }
+
+  function manipUndoBeginBatch() {
+    if (!manipUndoBatch) manipUndoBatch = [];
+  }
+
+  function manipUndoEndBatch() {
+    var batch = manipUndoBatch;
+    manipUndoBatch = null;
+    manipUndoLastEl = null;
+    if (!batch || !batch.length) return;
+    manipUndoStack.push(batch);
+    if (manipUndoStack.length > 200) manipUndoStack.shift();
+    manipRedoStack = [];
+  }
+
+  // Swap a batch for the state it replaces, so the opposite stack can put it back
+  function manipApplyUndoBatch(batch) {
+    var inverse = [];
+    var applied = false;
+    batch.forEach(function(snap) {
+      var el = snap.el;
+      if (!el || !el.isConnected) return;
+      if (snap.isVariant) {
+        inverse.push(manipVariantSnapshotRaw(el, snap.swapKey));
+        manipApplyVariantSnapshot(snap);
+        applied = true;
+        return;
+      }
+      if (snap.isClass) {
+        inverse.push({ el: el, fam: snap.fam, group: snap.group, cls: manipCurrentClassFor(el, snap.fam, snap.group), isClass: true });
+        manipApplyClassState(el, snap.fam, snap.group, snap.cls);
+        applied = true;
+        return;
+      }
+      var rec = manipEnsureRecord(el);
+      inverse.push({ el: el, prop: snap.prop, value: rec.current[snap.prop], token: rec.tokens ? rec.tokens[snap.prop] : undefined });
+      manipApplyPropState(el, snap.prop, snap.value, snap.token);
+      applied = true;
+    });
+    if (!applied) return null;
+    refreshManipPanelValues();
+    return inverse;
+  }
+
+  function manipUndo() {
+    while (manipUndoStack.length) {
+      var inverse = manipApplyUndoBatch(manipUndoStack.pop());
+      if (inverse) {
+        manipRedoStack.push(inverse);
+        manipUndoLastEl = null;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function manipRedo() {
+    while (manipRedoStack.length) {
+      var inverse = manipApplyUndoBatch(manipRedoStack.pop());
+      if (inverse) {
+        manipUndoStack.push(inverse);
+        manipUndoLastEl = null;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Drop history for an element whose tweaks have been sent — undoing them
+  // locally would no longer match what the CLI was told
+  function manipForgetUndo(el) {
+    function keep(batch) {
+      var rest = batch.filter(function(snap) { return snap.el !== el; });
+      return rest.length ? rest : null;
+    }
+    manipUndoStack = manipUndoStack.map(keep).filter(Boolean);
+    manipRedoStack = manipRedoStack.map(keep).filter(Boolean);
+    manipUndoLastEl = null;
   }
 
   function manipCurrentNumeric(el, prop) {
@@ -4441,61 +5142,27 @@ export const annotationScript = `
     return v;
   }
 
-  function manipTotalChanges() {
-    var total = 0;
-    manipChanges.forEach(function(rec) {
-      total += Object.keys(rec.current).length;
-    });
-    return total;
+  // Property tweaks and component-class swaps both count as changes
+  function manipRecordChangeCount(rec) {
+    if (!rec) return 0;
+    return Object.keys(rec.current).length + Object.keys(rec.classSwaps || {}).length;
   }
 
-  // Set an element's rendered (border-box) size; converts to the content-box
-  // value when the element's box-sizing needs it so the on-screen size matches
-  // the drag exactly.
-  function manipSetSizeFromRect(el, prop, targetPx) {
-    var computed = window.getComputedStyle(el);
-    var v = targetPx;
-    if (computed.getPropertyValue('box-sizing') !== 'border-box') {
-      if (prop === 'width') {
-        v -= (parseFloat(computed.getPropertyValue('padding-left')) || 0) +
-             (parseFloat(computed.getPropertyValue('padding-right')) || 0) +
-             (parseFloat(computed.getPropertyValue('border-left-width')) || 0) +
-             (parseFloat(computed.getPropertyValue('border-right-width')) || 0);
-      } else {
-        v -= (parseFloat(computed.getPropertyValue('padding-top')) || 0) +
-             (parseFloat(computed.getPropertyValue('padding-bottom')) || 0) +
-             (parseFloat(computed.getPropertyValue('border-top-width')) || 0) +
-             (parseFloat(computed.getPropertyValue('border-bottom-width')) || 0);
-      }
-    }
-    manipSetProp(el, prop, Math.max(0, Math.round(v)) + 'px');
-  }
-
-  // ---- Selection overlay (resize handles + size label) ----
-  // No box outline here: the claude-design-selected class already outlines
-  // the element in the Edit-mode accent.
+  // ---- Selection overlay (size readout) ----
+  // No box outline or resize handles here: the claude-design-selected class
+  // already outlines the element, and W/H are edited in the design panel.
 
   function buildManipOverlay() {
     removeManipOverlay();
     var label = document.createElement('div');
     label.className = 'claude-design-manip-sizelabel';
-    var handles = {};
-    ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].forEach(function(dir) {
-      var h = document.createElement('div');
-      h.className = 'claude-design-manip-handle';
-      h.setAttribute('data-dir', dir);
-      h.addEventListener('mousedown', function(e) { startManipResize(e, dir); }, true);
-      document.body.appendChild(h);
-      handles[dir] = h;
-    });
     document.body.appendChild(label);
-    manipOverlay = { label: label, handles: handles };
+    manipOverlay = { label: label };
   }
 
   function removeManipOverlay() {
     if (!manipOverlay) return;
     manipOverlay.label.remove();
-    Object.keys(manipOverlay.handles).forEach(function(dir) { manipOverlay.handles[dir].remove(); });
     manipOverlay = null;
   }
 
@@ -4508,21 +5175,6 @@ export const annotationScript = `
     if (labelTop > window.innerHeight - 30) labelTop = r.top - 26;
     label.style.top = labelTop + 'px';
     label.style.left = Math.max(4, r.left + r.width / 2 - label.offsetWidth / 2) + 'px';
-
-    // Resizing an inline element has no effect, so hide the handles there
-    var isInline = window.getComputedStyle(manipSelected).getPropertyValue('display') === 'inline';
-    var half = 4.5;
-    var centers = {
-      nw: [r.left, r.top], n: [r.left + r.width / 2, r.top], ne: [r.right, r.top],
-      e: [r.right, r.top + r.height / 2], se: [r.right, r.bottom], s: [r.left + r.width / 2, r.bottom],
-      sw: [r.left, r.bottom], w: [r.left, r.top + r.height / 2]
-    };
-    Object.keys(centers).forEach(function(dir) {
-      var h = manipOverlay.handles[dir];
-      h.style.display = isInline ? 'none' : 'block';
-      h.style.left = (centers[dir][0] - half) + 'px';
-      h.style.top = (centers[dir][1] - half) + 'px';
-    });
   }
 
   function queueManipReposition() {
@@ -4534,8 +5186,11 @@ export const annotationScript = `
       // Resizing moves the element's rect, so keep the popover glued to it
       if (popoverElement) positionPopover();
       if (codeButtonElement) positionCodeButton();
-      positionManipFlyout();
-      positionManipPresets();
+      // Frozen during a hover preview: the row under the cursor must not move
+      if (!manipPreview) {
+        positionManipFlyout();
+        positionManipPresets();
+      }
     });
   }
 
@@ -4546,18 +5201,77 @@ export const annotationScript = `
   // A caret that opens the project scale for one or more props. The prefix
   // overrides the Tailwind prefix the scale is read from (a padding row applies
   // to all four sides, so it lists p-* rather than pt-*).
-  function manipPresetBtnHtml(props, prefix, label) {
-    return '<button class="claude-design-manip-preset-btn" data-props="' + props.join(',') + '"' +
+  function manipPresetBtnHtml(props, prefix, label, text) {
+    return '<button class="claude-design-manip-preset-btn' + (text ? ' claude-design-manip-cross-all' : '') + '"' +
+      ' data-props="' + props.join(',') + '"' +
       (prefix ? ' data-prefix="' + prefix + '"' : '') +
-      ' title="' + (label || 'Project scale') + '" tabindex="-1">' + MANIP_CARET_SVG + '</button>';
+      ' title="' + (label || 'Project scale') + '" tabindex="-1">' +
+      (text ? '<span>' + text + '</span>' : '') + MANIP_CARET_SVG + '</button>';
   }
 
-  // withPresets: wrap the field so a caret sits next to it. The field element
-  // itself stays a bare box — scrub/type editing rewrite its contents.
-  function manipFieldHtml(prop, title, withPresets) {
-    var field = '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
-    if (!withPresets || !MANIP_TOKEN_PREFIX[prop]) return field;
-    return '<span class="claude-design-manip-fieldwrap">' + field + manipPresetBtnHtml([prop]) + '</span>';
+  // Box-model cross: one field per side, laid out where that side sits on the
+  // element, each with its own scale. The centre opens the scale for all four.
+  function manipCrossHtml(kind) {
+    function cell(pos, prop) {
+      return '<span class="claude-design-manip-cross-' + pos + ' claude-design-manip-fieldwrap">' +
+        '<span class="claude-design-manip-field" data-prop="' + prop + '" title="' + prop + '"></span>' +
+        manipPresetBtnHtml([prop], null, prop + ' scale') +
+      '</span>';
+    }
+    var sides = [kind + '-top', kind + '-right', kind + '-bottom', kind + '-left'];
+    return '<div class="claude-design-manip-cross">' +
+      cell('t', sides[0]) +
+      cell('l', sides[3]) +
+      '<span class="claude-design-manip-cross-c">' +
+        manipPresetBtnHtml(sides, kind === 'margin' ? 'm' : 'p', kind + ' scale (all sides)', kind) +
+      '</span>' +
+      cell('r', sides[1]) +
+      cell('b', sides[2]) +
+    '</div>';
+  }
+
+  // Component section: only rendered when the element actually belongs to a
+  // class family with alternatives (see manipClassFamilies)
+  function manipComponentSectionHtml(families) {
+    if (!families.length) return '';
+    var html = '';
+    families.forEach(function(fam, fi) {
+      html += '<div class="claude-design-manip-section">' +
+        '<div class="claude-design-manip-section-label">' +
+          (fam.kind === 'variant' ? escapeHtml(fam.base)
+            : families.length > 1 ? 'Component \\u00b7 ' + escapeHtml(fam.base) : 'Component') +
+        '</div>';
+      fam.groups.forEach(function(group) {
+        html += '<div class="claude-design-manip-row">' +
+          '<span class="claude-design-manip-row-label">' + group.label + '</span>' +
+          '<button class="claude-design-manip-preset-btn claude-design-manip-classbtn"' +
+            ' data-fam="' + fi + '" data-group="' + group.key + '"' +
+            ' title="' + escapeHtml(fam.base) + ' ' + group.label.toLowerCase() + '" tabindex="-1">' +
+            '<span class="claude-design-manip-classbtn-value"></span>' + MANIP_CARET_SVG +
+          '</button>' +
+        '</div>';
+      });
+      html += '</div>';
+    });
+    return html;
+  }
+
+  function manipColorRowHtml(prop, label) {
+    return '<div class="claude-design-manip-row claude-design-manip-color-row" data-prop="' + prop + '">' +
+      '<span class="claude-design-manip-row-label">' + label + '</span>' +
+      '<input type="color" data-prop="' + prop + '">' +
+      '<span class="claude-design-manip-color-hex"></span>' +
+      manipPresetBtnHtml([prop], null, 'Project colors') +
+    '</div>';
+  }
+
+  // A field plus its scale caret. The field element itself stays a bare box —
+  // scrub and type-to-edit rewrite its contents.
+  function manipFieldHtml(prop, title) {
+    return '<span class="claude-design-manip-fieldwrap">' +
+      '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>' +
+      manipPresetBtnHtml([prop]) +
+    '</span>';
   }
 
   function openManipFlyout() {
@@ -4565,6 +5279,8 @@ export const annotationScript = `
     if (!el || !popoverElement) return;
     if (manipPanel) manipPanel.remove();
     manipPagePresetCache = {};
+    // Computed once per open: the sibling scan is too costly to redo on every refresh
+    manipPanelFamilies = manipClassFamilies(el);
 
     var flyout = document.createElement('div');
     flyout.className = 'claude-design-manip-flyout';
@@ -4580,59 +5296,38 @@ export const annotationScript = `
         '<span class="claude-design-manip-flyout-count" style="display:none"></span>' +
         '<button class="claude-design-manip-flyout-reset" style="display:none">Reset</button>' +
       '</div>' +
+      manipComponentSectionHtml(manipPanelFamilies) +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Size</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">W</span>' + manipFieldHtml('width', '', true) +
-          '<span class="claude-design-manip-row-label" style="width:20px !important; text-align:right !important;">H</span>' + manipFieldHtml('height', '', true) +
+          '<span class="claude-design-manip-row-label">W</span>' + manipFieldHtml('width') +
+          '<span class="claude-design-manip-row-label" style="width:20px !important; text-align:right !important;">H</span>' + manipFieldHtml('height') +
         '</div>' +
       '</div>' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Spacing</div>' +
-        '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Margin</span>' +
-          '<span class="claude-design-manip-quad">' +
-            manipFieldHtml('margin-top', 'margin-top') + manipFieldHtml('margin-right', 'margin-right') +
-            manipFieldHtml('margin-bottom', 'margin-bottom') + manipFieldHtml('margin-left', 'margin-left') +
-          '</span>' +
-          manipPresetBtnHtml(['margin-top', 'margin-right', 'margin-bottom', 'margin-left'], 'm', 'Project spacing scale (all sides)') +
-        '</div>' +
-        '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Padding</span>' +
-          '<span class="claude-design-manip-quad">' +
-            manipFieldHtml('padding-top', 'padding-top') + manipFieldHtml('padding-right', 'padding-right') +
-            manipFieldHtml('padding-bottom', 'padding-bottom') + manipFieldHtml('padding-left', 'padding-left') +
-          '</span>' +
-          manipPresetBtnHtml(['padding-top', 'padding-right', 'padding-bottom', 'padding-left'], 'p', 'Project spacing scale (all sides)') +
-        '</div>' +
+        manipCrossHtml('margin') +
+        manipCrossHtml('padding') +
       '</div>' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Text</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Size</span>' + manipFieldHtml('font-size', '', true) +
-          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Wt</span>' + manipFieldHtml('font-weight', '', true) +
+          '<span class="claude-design-manip-row-label">Size</span>' + manipFieldHtml('font-size') +
+          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Wt</span>' + manipFieldHtml('font-weight') +
         '</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label" title="line-height">Line</span>' + manipFieldHtml('line-height', 'line-height', true) +
-          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;" title="letter-spacing">Trk</span>' + manipFieldHtml('letter-spacing', 'letter-spacing', true) +
+          '<span class="claude-design-manip-row-label" title="line-height">Line</span>' + manipFieldHtml('line-height', 'line-height') +
+          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;" title="letter-spacing">Trk</span>' + manipFieldHtml('letter-spacing', 'letter-spacing') +
         '</div>' +
+        manipColorRowHtml('color', 'Color') +
       '</div>' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Style</div>' +
         '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Radius</span>' + manipFieldHtml('border-radius', 'border-radius', true) +
-          (showGap ? '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Gap</span>' + manipFieldHtml('gap', '', true) : '') +
+          '<span class="claude-design-manip-row-label">Radius</span>' + manipFieldHtml('border-radius', 'border-radius') +
+          (showGap ? '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Gap</span>' + manipFieldHtml('gap') : '') +
         '</div>' +
-        '<div class="claude-design-manip-row claude-design-manip-color-row" data-prop="color">' +
-          '<span class="claude-design-manip-row-label">Text</span>' +
-          '<input type="color" data-prop="color">' +
-          '<span class="claude-design-manip-color-hex"></span>' +
-        '</div>' +
-        '<div class="claude-design-manip-row claude-design-manip-color-row" data-prop="background-color">' +
-          '<span class="claude-design-manip-row-label">Fill</span>' +
-          '<input type="color" data-prop="background-color">' +
-          '<span class="claude-design-manip-color-hex"></span>' +
-        '</div>' +
+        manipColorRowHtml('background-color', 'Fill') +
       '</div>';
 
     flyout.innerHTML = html;
@@ -4706,48 +5401,140 @@ export const annotationScript = `
   // ---- Project scale dropdown ----
 
   function closeManipPresets() {
+    manipEndPreview();
     if (manipPresetsAnchor) manipPresetsAnchor.classList.remove('open');
     if (manipPresetsMenu) manipPresetsMenu.remove();
     manipPresetsMenu = null;
     manipPresetsAnchor = null;
   }
 
-  function openManipPresets(btn) {
-    closeManipPresets();
-    if (!manipSelected) return;
-    var props = (btn.getAttribute('data-props') || '').split(',').filter(Boolean);
-    if (!props.length) return;
-    var prop = props[0];
-    var prefix = btn.getAttribute('data-prefix') || MANIP_TOKEN_PREFIX[prop];
-    var res = manipPresetsFor(prop, prefix);
-    var meta = MANIP_PROPS[prop] || {};
-    var current = manipCurrentNumeric(manipSelected, prop);
+  // The class menu lists the family's other modifiers, plus a way back to the
+  // component's default (no modifier)
+  function openManipClassMenu(btn) {
+    var fam = manipPanelFamilies[parseInt(btn.getAttribute('data-fam'), 10)];
+    var groupKey = btn.getAttribute('data-group');
+    if (!fam) return;
+    if (fam.kind === 'variant') return openManipVariantMenu(btn, fam, groupKey);
+    var group = manipFindGroup(fam, groupKey);
+    if (!group) return;
 
-    var menu = document.createElement('div');
-    menu.className = 'claude-design-manip-presets';
-    var head = res.source === 'project' ? 'Project scale' : 'Used on this page';
-    var html = '<div class="claude-design-manip-presets-head">' + head + '</div>';
-    if (!res.items.length) {
-      html += '<div class="claude-design-manip-presets-empty">No scale found</div>';
-    } else {
-      res.items.forEach(function(item, i) {
-        var px = meta.decimals ? Math.round(item.px * 10) / 10 : Math.round(item.px);
-        var isCurrent = Math.abs(item.px - current) < 0.5;
-        html += '<div class="claude-design-manip-preset-item' + (isCurrent ? ' current' : '') + '" data-i="' + i + '">' +
-          '<span class="claude-design-manip-preset-name">' + escapeHtml(item.name) + '</span>' +
-          '<span class="claude-design-manip-preset-value">' + (item.hint ? escapeHtml(item.hint) : px + (meta.unit || '')) + '</span>' +
-        '</div>';
+    var currentCls = manipCurrentClassFor(manipSelected, fam, groupKey);
+    var items = group.mods.map(function(mod) {
+      return { name: fam.base + fam.sep + mod, mod: mod };
+    });
+    items.push({ name: 'None', mod: null });
+
+    var html = '<div class="claude-design-manip-presets-head">' + escapeHtml(fam.base) + ' \\u00b7 ' + group.label + '</div>';
+    items.forEach(function(item, i) {
+      var isCurrent = item.mod ? (fam.base + fam.sep + item.mod) === currentCls : !currentCls;
+      html += '<div class="claude-design-manip-preset-item' + (isCurrent ? ' current' : '') + '" data-i="' + i + '">' +
+        '<span class="claude-design-manip-preset-name">' + escapeHtml(item.name) + '</span>' +
+      '</div>';
+    });
+
+    showManipMenu(btn, html, {
+      onPreview: function(i) {
+        manipPreviewClasses(manipSelected, function() {
+          manipApplyClassPreview(manipSelected, fam, groupKey, items[i].mod);
+        });
+      },
+      onPick: function(i) { manipSetClassMod(manipSelected, fam, groupKey, items[i].mod); }
+    });
+  }
+
+  // cva/tailwind-variants options, named as they are in the source
+  function openManipVariantMenu(btn, fam, groupKey) {
+    var entry = manipFindGroup(fam, groupKey);
+    if (!entry) return;
+    var group = entry.group;
+    var current = manipCurrentVariantOption(manipSelected, fam.set, group);
+
+    var html = '<div class="claude-design-manip-presets-head">' +
+      escapeHtml(fam.set.name) + ' \\u00b7 ' + escapeHtml(group.name) + '</div>';
+    group.options.forEach(function(option, i) {
+      html += '<div class="claude-design-manip-preset-item' + (option.name === current ? ' current' : '') + '" data-i="' + i + '">' +
+        '<span class="claude-design-manip-preset-name">' + escapeHtml(option.name) + '</span>' +
+        // Redundant when the option is literally called "default"
+        (option.name === group.defaultOption && option.name !== 'default'
+          ? '<span class="claude-design-manip-preset-value">default</span>' : '') +
+      '</div>';
+    });
+
+    showManipMenu(btn, html, {
+      onPreview: function(i) {
+        manipPreviewClasses(manipSelected, function() {
+          manipApplyVariantClasses(manipSelected, fam, groupKey, group.options[i].name);
+        });
+      },
+      onPick: function(i) { manipSetVariantOption(manipSelected, fam, groupKey, group.options[i].name); }
+    });
+  }
+
+  // ---- Hover preview ----
+  // Hovering a dropdown row shows the value on the element without committing
+  // it: the change record and the undo history are untouched, so scrubbing down
+  // a long list costs nothing and leaves nothing behind. Clicking commits it
+  // through the normal path; leaving the menu puts the element back.
+
+  function manipEndPreview() {
+    if (!manipPreview) return;
+    var restore = manipPreview;
+    manipPreview = null;
+    restore();
+    refreshManipPanelValues();
+    queueManipReposition();
+  }
+
+  function manipPreviewProps(el, values) {
+    manipEndPreview();
+    var saved = Object.keys(values).map(function(prop) {
+      return { prop: prop, value: el.style.getPropertyValue(prop), priority: el.style.getPropertyPriority(prop) };
+    });
+    manipPreview = function() {
+      saved.forEach(function(entry) {
+        if (entry.value) el.style.setProperty(entry.prop, entry.value, entry.priority);
+        else el.style.removeProperty(entry.prop);
       });
-    }
+    };
+    Object.keys(values).forEach(function(prop) { el.style.setProperty(prop, values[prop], 'important'); });
+    refreshManipPanelValues();
+  }
+
+  // Class swaps restore wholesale — exact, whatever the swap touched
+  function manipPreviewClasses(el, apply) {
+    manipEndPreview();
+    var before = el.getAttribute('class') || '';
+    manipPreview = function() { el.setAttribute('class', before); };
+    apply();
+    refreshManipPanelValues();
+  }
+
+  // Build, show and wire a dropdown for one caret button. Callers only supply
+  // the markup and what to do with the chosen index.
+  function showManipMenu(btn, html, opts) {
+    var menu = document.createElement('div');
+    menu.className = 'claude-design-manip-presets' + (opts.className ? ' ' + opts.className : '');
     menu.innerHTML = html;
     document.body.appendChild(menu);
 
     menu.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
-    menu.querySelectorAll('.claude-design-manip-preset-item').forEach(function(itemEl) {
+    // One handler on the menu: moving between rows swaps the preview, leaving
+    // the menu entirely puts the element back
+    menu.addEventListener('mouseleave', manipEndPreview);
+    menu.querySelectorAll('[data-i]').forEach(function(itemEl) {
+      var index = parseInt(itemEl.getAttribute('data-i'), 10);
+      itemEl.addEventListener('mouseenter', function() {
+        if (manipSelected) opts.onPreview(index);
+      });
       itemEl.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        applyManipPreset(props, res.items[parseInt(itemEl.getAttribute('data-i'), 10)]);
+        // Commit from the real state, not from the preview
+        manipEndPreview();
+        if (manipSelected) {
+          opts.onPick(index);
+          refreshManipPanelValues();
+        }
         closeManipPresets();
       });
     });
@@ -4756,10 +5543,59 @@ export const annotationScript = `
     manipPresetsAnchor = btn;
     btn.classList.add('open');
     positionManipPresets();
-
-    // Keep the picked value in view in a long scale
-    var currentEl = menu.querySelector('.claude-design-manip-preset-item.current');
+    // Keep the value in effect in view in a long list
+    var currentEl = menu.querySelector('.current');
     if (currentEl) menu.scrollTop = Math.max(0, currentEl.offsetTop - menu.clientHeight / 2);
+  }
+
+  function openManipPresets(btn) {
+    closeManipPresets();
+    if (!manipSelected) return;
+    if (btn.hasAttribute('data-fam')) return openManipClassMenu(btn);
+    var props = (btn.getAttribute('data-props') || '').split(',').filter(Boolean);
+    if (!props.length) return;
+    var prop = props[0];
+    var prefix = btn.getAttribute('data-prefix') || MANIP_TOKEN_PREFIX[prop];
+    var res = manipPresetsFor(prop, prefix);
+    var meta = MANIP_PROPS[prop] || {};
+
+    var isColor = res.kind === 'color';
+    // What counts as "the current one": a matching color, or a matching number
+    var currentColor = isColor ? manipNormalizeColor(window.getComputedStyle(manipSelected).getPropertyValue(prop)) : null;
+    var currentValue = isColor ? 0 : manipCurrentNumeric(manipSelected, prop);
+    var flat = [];
+    var html = '';
+
+    res.groups.forEach(function(group) {
+      if (!group.items.length) return;
+      html += '<div class="claude-design-manip-presets-head">' + escapeHtml(group.head) + '</div>';
+      // Colors read better as a swatch grid than as a list of hex values
+      if (isColor) html += '<div class="claude-design-manip-preset-grid">';
+      group.items.forEach(function(item) {
+        var i = flat.push(item) - 1;
+        if (isColor) {
+          html += '<span class="claude-design-manip-preset-swatch' + (item.color === currentColor ? ' current' : '') + '"' +
+            ' data-i="' + i + '" style="background:' + escapeHtml(item.color) + '"' +
+            ' title="' + escapeHtml(item.name + '  ' + item.color) + '"></span>';
+          return;
+        }
+        var px = meta.decimals ? Math.round(item.px * 10) / 10 : Math.round(item.px);
+        html += '<div class="claude-design-manip-preset-item' + (Math.abs(item.px - currentValue) < 0.5 ? ' current' : '') + '" data-i="' + i + '">' +
+          '<span class="claude-design-manip-preset-name">' + escapeHtml(item.name) + '</span>' +
+          '<span class="claude-design-manip-preset-value">' + (item.hint ? escapeHtml(item.hint) : px + (meta.unit || '')) + '</span>' +
+        '</div>';
+      });
+      if (isColor) html += '</div>';
+    });
+    if (!flat.length) {
+      html += '<div class="claude-design-manip-presets-empty">' + (isColor ? 'No colors found' : 'No scale found') + '</div>';
+    }
+
+    showManipMenu(btn, html, {
+      className: isColor ? 'colors' : '',
+      onPreview: function(i) { manipPreviewProps(manipSelected, manipPresetValues(props, flat[i])); },
+      onPick: function(i) { applyManipPreset(props, flat[i]); }
+    });
   }
 
   function positionManipPresets() {
@@ -4778,16 +5614,33 @@ export const annotationScript = `
     manipPresetsMenu.style.top = top + 'px';
   }
 
-  function applyManipPreset(props, item) {
-    if (!item || !manipSelected) return;
+  // The css each prop takes for this option — shared by commit and preview
+  function manipPresetValues(props, item) {
+    var values = {};
+    if (!item) return values;
     props.forEach(function(prop) {
       var meta = MANIP_PROPS[prop] || {};
+      if (meta.color) {
+        values[prop] = item.color;
+        return;
+      }
       var v = item.px;
       if (meta.min !== undefined) v = Math.max(meta.min, v);
       if (meta.max !== undefined) v = Math.min(meta.max, v);
       v = meta.decimals ? Math.round(v * 10) / 10 : Math.round(v);
-      manipSetProp(manipSelected, prop, v + (meta.unit || ''), item.token);
+      values[prop] = v + (meta.unit || '');
     });
+    return values;
+  }
+
+  function applyManipPreset(props, item) {
+    if (!item || !manipSelected) return;
+    var values = manipPresetValues(props, item);
+    manipUndoBeginBatch();
+    props.forEach(function(prop) {
+      manipSetProp(manipSelected, prop, values[prop], item.token);
+    });
+    manipUndoEndBatch();
     refreshManipPanelValues();
   }
 
@@ -4853,7 +5706,7 @@ export const annotationScript = `
     if (!btn) return;
     btn.classList.toggle('active', !!manipPanel);
     var rec = manipSelected ? manipChanges.get(manipSelected) : null;
-    var count = rec ? Object.keys(rec.current).length : 0;
+    var count = rec ? manipRecordChangeCount(rec) : 0;
     btn.classList.toggle('has-changes', count > 0);
     var badge = btn.querySelector('.claude-design-popover-design-count');
     if (badge) badge.textContent = String(count);
@@ -4885,6 +5738,26 @@ export const annotationScript = `
       fieldEl.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
     });
 
+    manipPanel.querySelectorAll('.claude-design-manip-classbtn').forEach(function(btn) {
+      var fam = manipPanelFamilies[parseInt(btn.getAttribute('data-fam'), 10)];
+      if (!fam) return;
+      var groupKey = btn.getAttribute('data-group');
+      var valueEl = btn.querySelector('.claude-design-manip-classbtn-value');
+      var swapKey, cls;
+      if (fam.kind === 'variant') {
+        var vEntry = manipFindGroup(fam, groupKey);
+        cls = vEntry ? manipCurrentVariantOption(el, fam.set, vEntry.group) : null;
+        swapKey = fam.set.name + '|' + groupKey;
+      } else {
+        cls = manipCurrentClassFor(el, fam, groupKey);
+        swapKey = fam.base + fam.sep + '|' + groupKey;
+      }
+      if (valueEl) valueEl.textContent = cls || 'Default';
+      var swap = rec && rec.classSwaps ? rec.classSwaps[swapKey] : null;
+      btn.classList.toggle('changed', !!swap);
+      btn.classList.toggle('unset', !cls);
+    });
+
     manipPanel.querySelectorAll('.claude-design-manip-color-row').forEach(function(row) {
       var prop = row.getAttribute('data-prop');
       var input = row.querySelector('input');
@@ -4901,7 +5774,7 @@ export const annotationScript = `
     });
 
     // Header shows how many tweaks this element carries; Reset appears with them
-    var count = rec ? Object.keys(rec.current).length : 0;
+    var count = rec ? manipRecordChangeCount(rec) : 0;
     var countEl = manipPanel.querySelector('.claude-design-manip-flyout-count');
     var resetBtn = manipPanel.querySelector('.claude-design-manip-flyout-reset');
     if (countEl) {
@@ -4914,24 +5787,36 @@ export const annotationScript = `
   // ---- Interactions: attach, resize, move, scrub, type ----
 
   // Called when the annotation popover opens on an element: puts resize
-  // handles on it, and reopens the design flyout if it was open before.
+  // the size readout on it, and reopens the design flyout if it was open before.
   function manipAttach(el) {
     manipDetach();
     manipSelected = el;
     manipEnsureRecord(el);
     buildManipOverlay();
     positionManipOverlay();
+    // A new prompt box starts with the panel closed, so the box stays out of
+    // the way. "Persistent design panel" in Settings keeps it open instead.
+    if (!manipPanelPersistent) manipFlyoutOpen = false;
     if (manipFlyoutOpen) openManipFlyout();
     updateManipDesignButton();
   }
 
   // Called when the popover closes. Untouched records are pruned; real
   // tweaks stay tracked (and previewed) so reselecting the element resumes.
+  // Dropping the selection without sending discards the tweaks: the preview
+  // reverts and the page matches the code again. Sending (or Add) consumes the
+  // deltas first, so by the time this runs there is nothing left to undo.
   function manipDetach() {
+    // Close the dropdown directly: closeManipFlyout bails early when the panel
+    // is already gone, which would strand the menu on the page
+    closeManipPresets();
     closeManipFlyout(true);
     if (manipSelected) {
       var rec = manipChanges.get(manipSelected);
-      if (rec && Object.keys(rec.current).length === 0) manipChanges.delete(manipSelected);
+      // Reverting is itself an undo step, so Cmd+Z brings the tweaks back
+      // (with their tracking) after an accidental Escape or click-away
+      if (rec && manipRecordChangeCount(rec) > 0) manipResetElement(manipSelected);
+      manipChanges.delete(manipSelected);
     }
     manipSelected = null;
     manipDrag = null;
@@ -4941,35 +5826,38 @@ export const annotationScript = `
   function manipResetElement(el) {
     var rec = manipChanges.get(el);
     if (!rec) return;
+    manipUndoBeginBatch();
     Object.keys(rec.current).forEach(function(p) {
+      manipUndoRecord(el, p);
       manipRestoreInline(el, rec, p);
     });
+    var families = null;
+    Object.keys(rec.classSwaps || {}).forEach(function(key) {
+      var swap = rec.classSwaps[key];
+      if (swap.isVariant) {
+        if (!families) families = manipClassFamilies(el);
+        var fam = null;
+        families.forEach(function(f) { if (f.kind === 'variant' && f.set.name === swap.component) fam = f; });
+        if (fam) manipSetVariantOption(el, fam, swap.group, swap.from);
+        return;
+      }
+      manipUndoRecordClass(el, swap.fam, swap.group, swap.to);
+      if (swap.to) el.classList.remove(swap.to);
+      if (swap.from) el.classList.add(swap.from);
+    });
+    manipUndoEndBatch();
     rec.current = {};
     rec.tokens = {};
+    rec.classSwaps = {};
     queueManipReposition();
     refreshManipPanelValues();
-  }
-
-  function startManipResize(e, dir) {
-    if (!manipSelected) return;
-    e.preventDefault();
-    e.stopPropagation();
-    // Let arrow keys nudge the element after a handle grab (the popover
-    // textarea otherwise keeps focus and eats the arrows for its caret)
-    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-    var r = manipSelected.getBoundingClientRect();
-    manipDrag = {
-      kind: 'resize', dir: dir,
-      startX: e.clientX, startY: e.clientY,
-      startW: r.width, startH: r.height,
-      ratio: r.height > 0 ? r.width / r.height : 1
-    };
   }
 
   function startManipScrub(e, fieldEl) {
     if (!manipSelected) return;
     e.preventDefault();
     e.stopPropagation();
+    manipUndoBeginBatch();
     var prop = fieldEl.getAttribute('data-prop');
     manipDrag = {
       kind: 'scrub', prop: prop, fieldEl: fieldEl,
@@ -5063,6 +5951,7 @@ export const annotationScript = `
       e.preventDefault();
       e.stopPropagation();
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      manipUndoBeginBatch();
       var computed = window.getComputedStyle(manipSelected);
       manipDrag = {
         kind: 'move', started: false,
@@ -5080,26 +5969,7 @@ export const annotationScript = `
     var el = manipSelected;
     if (!el) return;
 
-    if (manipDrag.kind === 'resize') {
-      var dx = e.clientX - manipDrag.startX;
-      var dy = e.clientY - manipDrag.startY;
-      var dir = manipDrag.dir;
-      if (dir.indexOf('w') !== -1) dx = -dx;
-      if (dir.indexOf('n') !== -1) dy = -dy;
-      var newW = manipDrag.startW + dx;
-      var newH = manipDrag.startH + dy;
-      var isCorner = dir.length === 2;
-      if (e.shiftKey && isCorner) newH = newW / manipDrag.ratio;
-      if (dir === 'n' || dir === 's') {
-        manipSetSizeFromRect(el, 'height', newH);
-      } else if (dir === 'e' || dir === 'w') {
-        manipSetSizeFromRect(el, 'width', newW);
-      } else {
-        manipSetSizeFromRect(el, 'width', newW);
-        manipSetSizeFromRect(el, 'height', newH);
-      }
-      manipDrag.resized = true;
-    } else if (manipDrag.kind === 'move') {
+    if (manipDrag.kind === 'move') {
       var mdx = e.clientX - manipDrag.startX;
       var mdy = e.clientY - manipDrag.startY;
       if (!manipDrag.started && Math.abs(mdx) < 4 && Math.abs(mdy) < 4) return;
@@ -5126,6 +5996,7 @@ export const annotationScript = `
     if (!manipDrag) return;
     var drag = manipDrag;
     manipDrag = null;
+    manipUndoEndBatch();
     if (drag.kind === 'scrub') {
       drag.fieldEl.classList.remove('scrubbing');
       if (!drag.moved) {
@@ -5135,7 +6006,7 @@ export const annotationScript = `
     }
     // A completed drag must not fall through as a click (Edit mode's click
     // handler would treat it as click-outside and cancel the popover)
-    if (drag.kind === 'resize' || drag.kind === 'scrub' || (drag.kind === 'move' && drag.started)) {
+    if (drag.kind === 'scrub' || (drag.kind === 'move' && drag.started)) {
       manipSuppressClick = true;
     }
     queueManipReposition();
@@ -5143,8 +6014,27 @@ export const annotationScript = `
   }
 
   function handleManipKeyDown(e) {
-    if (!annotateMode || !manipSelected) return;
+    if (!annotateMode) return;
     var a = document.activeElement;
+
+    // Cmd/Ctrl+Z steps back through design tweaks (Shift to redo). A field
+    // being typed in keeps its own undo, and once the design history is empty
+    // the key falls through to the browser (prompt-box text undo).
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
+      var typingInPanel = a && manipPanel && manipPanel.contains(a) && a.tagName === 'INPUT';
+      if (!typingInPanel) {
+        var stack = e.shiftKey ? manipRedoStack : manipUndoStack;
+        if (stack.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.shiftKey) manipRedo();
+          else manipUndo();
+          return;
+        }
+      }
+    }
+
+    if (!manipSelected) return;
     // Up/down over a design field nudge that value instead of moving the
     // element — the cursor says which control the arrows belong to, so this
     // wins even while the prompt box has focus. A field being typed in is
@@ -5207,38 +6097,94 @@ export const annotationScript = `
     };
   }
 
+  // Written in short, plain sentences (one instruction each, active voice, no
+  // asides or symbols) so the CLI reads the request the same way every time.
   function manipNoteFor(rec) {
-    var named = false;
-    var parts = Object.keys(rec.current).map(function(p) {
-      var token = rec.tokens && rec.tokens[p];
-      if (token) named = true;
-      return p + ': ' + rec.baseline[p] + ' \\u2192 ' + rec.current[p] + (token ? ' (' + token + ')' : '');
+    var sentences = [];
+    var usesToken = false;
+
+    var props = Object.keys(rec.current);
+    if (props.length) {
+      var values = props.map(function(p) {
+        var token = rec.tokens && rec.tokens[p];
+        if (token) usesToken = true;
+        return p + ' ' + rec.baseline[p] + ' to ' + rec.current[p] + (token ? ' (token ' + token + ')' : '');
+      });
+      sentences.push('Change these CSS values: ' + values.join('; ') + '.');
+    }
+
+    var classSwaps = [];
+    var variantSwaps = [];
+    Object.keys(rec.classSwaps || {}).forEach(function(key) {
+      var swap = rec.classSwaps[key];
+      if (swap.isVariant) variantSwaps.push(swap);
+      else classSwaps.push(swap);
     });
-    return 'Apply these exact CSS changes (they are live-previewed on the element as inline styles, so the screenshot shows the intended result): ' +
-      parts.join('; ') +
-      '. Implement them in the source using the project\\u2019s existing styling approach (classes, Tailwind utilities, CSS variables, rem, etc. \\u2014 convert px where that matches the codebase) and change nothing else about the element.' +
-      (named ? ' Values shown with a project token in parentheses were picked from the project\\u2019s own scale \\u2014 use that exact token/utility rather than a raw px value.' : '');
+
+    classSwaps.forEach(function(swap) {
+      if (!swap.from) sentences.push('Add the class ' + swap.to + '.');
+      else if (!swap.to) sentences.push('Remove the class ' + swap.from + '.');
+      else sentences.push('Change the class ' + swap.from + ' to ' + swap.to + '.');
+    });
+
+    variantSwaps.forEach(function(swap) {
+      sentences.push('Change the ' + swap.component + ' ' + swap.group + ' from ' +
+        (swap.from || 'none') + ' to ' + swap.to + '.');
+    });
+
+    if (!sentences.length) return '';
+    sentences.push('The preview shows the result.');
+
+    if (props.length) {
+      sentences.push('The preview uses inline styles.');
+      sentences.push('Write these values in the source code.');
+      sentences.push('Use the same method as the other styles in this project.');
+      if (usesToken) sentences.push('Use the token, not the pixel value, where this note gives a token.');
+    }
+    if (classSwaps.length) {
+      sentences.push('Change the class in the source code.');
+    }
+    if (variantSwaps.length) {
+      var files = [];
+      variantSwaps.forEach(function(swap) {
+        if (swap.file && files.indexOf(swap.file) === -1) files.push(swap.file);
+      });
+      if (files.length) sentences.push('The file ' + files.join(' and ') + ' declares these variants.');
+      sentences.push('Set the variant where the code uses the component.');
+      sentences.push('Do not edit the variant file.');
+    }
+    if (classSwaps.length || variantSwaps.length) {
+      sentences.push('Do not add CSS for this change.');
+    }
+    sentences.push('Do not change anything else.');
+
+    return sentences.join(' ');
   }
 
   // The delta instruction for one element, or '' if it has no tweaks
   function manipDeltaFor(el) {
     if (!el) return '';
     var rec = manipChanges.get(el);
-    if (!rec || Object.keys(rec.current).length === 0) return '';
+    if (!rec || manipRecordChangeCount(rec) === 0) return '';
     return manipNoteFor(rec);
   }
 
-  // Merge a typed note with the element's tracked deltas into one instruction
+  // Merge a typed note with the element's tracked deltas into one instruction.
+  // They stay separate sentences rather than one long clause.
   function composeNoteWithDeltas(el, typed) {
     var delta = manipDeltaFor(el);
-    if (typed && delta) return typed + ' \\u2014 additionally, ' + delta.charAt(0).toLowerCase() + delta.slice(1);
-    return typed || delta;
+    if (!typed) return delta;
+    if (!delta) return typed;
+    var text = typed.trim();
+    if (!/[.!?]$/.test(text)) text += '.';
+    return text + ' ' + delta;
   }
 
   // After a note (with deltas folded in) is sent or queued: the preview stays
   // applied, but the deltas are consumed so they aren't sent twice.
   function manipConsumeDeltas(el) {
     if (!el) return;
+    manipForgetUndo(el);
     manipChanges.delete(el);
     if (el === manipSelected) {
       manipEnsureRecord(el); // fresh baseline: further tweaks diff from here
@@ -5285,6 +6231,10 @@ export const annotationScript = `
     pendingAnnotations = [];
     manipChanges = new Map();
     manipSelected = null;
+    manipUndoStack = [];
+    manipRedoStack = [];
+    manipUndoBatch = null;
+    manipUndoLastEl = null;
   });
 
   // Expose functions for external control
@@ -5300,5 +6250,8 @@ export const annotationScript = `
   window.__claudeDesignSetAltKey = setAltKeyState;
   window.__claudeDesignToggleFreeze = toggleAnimationFreeze;
   window.__claudeDesignSetGridSizes = setGridSizes;
+  window.__claudeDesignSetPanelPersistent = function(persistent) {
+    manipPanelPersistent = !!persistent;
+  };
 })();
 `;

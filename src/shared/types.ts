@@ -118,6 +118,8 @@ export interface AppSettings {
   // Grid overlay sizes (px) toggled with Shift+G in the browser
   gridSpatialSize: number;
   gridBaselineSize: number;
+  // When false (default) the design panel closes with each new selection
+  persistentDesignPanel: boolean;
 }
 
 export interface ProjectPreset {
@@ -185,12 +187,34 @@ export interface DesignToken {
   source: 'tailwind' | 'css-var';
 }
 
+export interface ComponentVariantOption {
+  name: string;
+  classes: string[];
+}
+
+export interface ComponentVariantGroup {
+  name: string;
+  options: ComponentVariantOption[];
+  defaultOption?: string;
+}
+
+// A cva()/tailwind-variants declaration found in the project source, used by the
+// design panel to offer size/variant switching for Tailwind components
+export interface ComponentVariantSet {
+  name: string;
+  file: string;
+  base: string[];
+  slot?: string;
+  groups: ComponentVariantGroup[];
+}
+
 export interface MainAPI {
   createTerminal: (sessionId: string, cwd?: string, shell?: ShellType) => void;
   getPlatform: () => string;
   checkWslAvailable: () => Promise<boolean>;
   listProjectFiles: (projectPath: string) => Promise<ProjectFile[]>;
   listDesignTokens: (projectPath: string) => Promise<DesignToken[]>;
+  listComponentVariants: (projectPath: string) => Promise<ComponentVariantSet[]>;
   destroyTerminal: (sessionId: string) => void;
   sendTerminalInput: (sessionId: string, data: string) => void;
   pasteImageToTerminal: (sessionId: string, filePath: string) => Promise<boolean>;

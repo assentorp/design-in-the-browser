@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { initAnalytics, disableAnalytics } from '../analytics';
 import type { AppSettings, CodeEditor } from '../../shared/types';
 
@@ -32,6 +32,7 @@ const EDITOR_LABELS: Record<CodeEditor, string> = {
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [availableEditors, setAvailableEditors] = useState<CodeEditor[]>([]);
   const [appVersion, setAppVersion] = useState('');
@@ -41,6 +42,25 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     window.mainAPI?.detectEditors().then(setAvailableEditors);
     window.mainAPI?.getAppVersion().then(setAppVersion);
   }, []);
+
+  // Escape closes the modal wherever focus happens to be. Capture phase so it
+  // wins over the shortcuts underneath, and the event stops here.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose]);
+
+  // Pull focus out of the webview, otherwise key presses never reach this
+  // window at all. Runs again when the real body replaces the loading state.
+  useEffect(() => {
+    modalRef.current?.focus();
+  }, [settings]);
 
   const handleChange = async (key: keyof AppSettings, value: number | string | boolean) => {
     if (!settings) return;
@@ -61,6 +81,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           })
         );
       }
+
+      if (key === 'persistentDesignPanel') {
+        window.dispatchEvent(
+          new CustomEvent('claude-design-panel-persistent', {
+            detail: { persistent: !!updated.persistentDesignPanel },
+          })
+        );
+      }
     }
 
     // Toggle PostHog capturing at runtime
@@ -78,7 +106,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   if (!settings) {
     return (
       <div className="modal-overlay" onClick={onClose}>
-        <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
+        <div className="modal modal-settings" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <h2>Settings</h2>
             <button className="modal-close" onClick={onClose}>
@@ -98,7 +126,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-settings" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Settings</h2>
           <button className="modal-close" onClick={onClose}>
@@ -196,6 +224,20 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   </div>
                 </label>
               </div>
+            </div>
+            <div className="settings-group">
+              <label className="settings-label settings-label-row">
+                <input
+                  type="checkbox"
+                  checked={settings.persistentDesignPanel ?? false}
+                  onChange={(e) => handleChange('persistentDesignPanel', e.target.checked)}
+                  disabled={saving}
+                />
+                Persistent design panel
+              </label>
+              <span className="settings-hint">
+                Keep the design panel open when you select another element. Off by default: the panel closes with each new selection, and you reopen it with the sliders button in the prompt box.
+              </span>
             </div>
             <div className="settings-group">
               <label className="settings-label settings-label-row">

@@ -15,6 +15,7 @@ const mainAPI: MainAPI = {
   listProjectFiles: (projectPath: string) => ipcRenderer.invoke('project:list-files', { projectPath }),
 
   listDesignTokens: (projectPath: string) => ipcRenderer.invoke('project:list-tokens', { projectPath }),
+  listComponentVariants: (projectPath: string) => ipcRenderer.invoke('project:list-component-variants', { projectPath }),
 
   destroyTerminal: (sessionId: string) => {
     ipcRenderer.send('terminal:destroy', { sessionId });
