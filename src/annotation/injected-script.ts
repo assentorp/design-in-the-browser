@@ -1207,42 +1207,7 @@ export const annotationScript = `
         text-transform: none !important;
         letter-spacing: normal !important;
       }
-      .claude-design-manip-flyout-header {
-        display: flex !important;
-        align-items: center !important;
-        gap: 8px !important;
-        padding: 10px 12px !important;
-        border-bottom: 1px solid #333 !important;
-      }
-      .claude-design-manip-flyout-title {
-        font-size: 11px !important;
-        font-weight: 600 !important;
-        color: #eb9b78 !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        flex: 1 !important;
-      }
-      .claude-design-manip-flyout-count {
-        font-size: 11px !important;
-        font-weight: 600 !important;
-        color: #eb9b78 !important;
-        background: rgba(198, 97, 63, 0.16) !important;
-        border-radius: 10px !important;
-        padding: 3px 8px !important;
-        white-space: nowrap !important;
-      }
-      .claude-design-manip-flyout-reset {
-        all: unset !important;
-        cursor: pointer !important;
-        color: #888 !important;
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        padding: 3px 7px !important;
-        border-radius: 5px !important;
-      }
-      .claude-design-manip-flyout-reset:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
-      /* Sliders button in the prompt box that toggles the flyout */
+      /* Sliders button in the prompt box that toggles the panel */
       .claude-design-popover .claude-design-popover-design-btn {
         position: relative !important;
         width: 32px !important;
@@ -1257,6 +1222,7 @@ export const annotationScript = `
         transition: background 0.15s ease !important;
         padding: 0 !important;
         margin: 0 !important;
+        flex-shrink: 0 !important;
       }
       .claude-design-popover .claude-design-popover-design-btn:hover {
         background: rgba(255, 255, 255, 0.1) !important;
@@ -1286,6 +1252,7 @@ export const annotationScript = `
         color: #fff !important;
         font-size: 10px !important;
         font-weight: 700 !important;
+        line-height: 1 !important;
         display: none !important;
         align-items: center !important;
         justify-content: center !important;
@@ -1293,45 +1260,133 @@ export const annotationScript = `
       .claude-design-popover .claude-design-popover-design-btn.has-changes .claude-design-popover-design-count {
         display: flex !important;
       }
-      .claude-design-manip-section {
-        padding: 8px 12px !important;
-        border-bottom: 1px solid #303030 !important;
-      }
-      .claude-design-manip-section:last-of-type { border-bottom: none !important; }
-      .claude-design-manip-section-label {
-        font-size: 10px !important;
-        font-weight: 600 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.5px !important;
-        color: #777 !important;
-        margin-bottom: 6px !important;
-      }
-      .claude-design-manip-row {
+      /* ---- Panel chrome: title bar, sections, labels, fields ---- */
+      .claude-design-manip-flyout-header {
         display: flex !important;
         align-items: center !important;
-        gap: 6px !important;
-        margin-bottom: 6px !important;
+        gap: 8px !important;
+        padding: 14px 16px 12px !important;
       }
-      .claude-design-manip-row:last-child { margin-bottom: 0 !important; }
-      .claude-design-manip-row-label {
-        color: #999 !important;
+      .claude-design-manip-flyout-title {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #fff !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        flex: 1 !important;
+      }
+      .claude-design-manip-flyout-count {
         font-size: 11px !important;
-        width: 44px !important;
-        flex-shrink: 0 !important;
+        font-weight: 600 !important;
+        color: #eb9b78 !important;
+        background: rgba(198, 97, 63, 0.16) !important;
+        border-radius: 10px !important;
+        padding: 3px 8px !important;
+        white-space: nowrap !important;
       }
-      /* Margin/padding box: each side sits where it lives on the element, and
-         the centre label opens the scale for all four at once */
+      .claude-design-manip-flyout .claude-design-manip-flyout-reset {
+        all: unset !important;
+        cursor: pointer !important;
+        color: #8f8f8f !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        padding: 4px 8px !important;
+        border-radius: 6px !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-flyout-reset:hover { color: #fff !important; background: rgba(255, 255, 255, 0.08) !important; }
+      .claude-design-manip-section {
+        padding: 14px 16px !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+      }
+      .claude-design-manip-section-label {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #fff !important;
+        margin: 0 0 12px 0 !important;
+      }
+      .claude-design-manip-sublabel {
+        font-size: 11px !important;
+        font-weight: 400 !important;
+        color: #8f8f8f !important;
+        margin: 0 0 6px 0 !important;
+      }
+      .claude-design-manip-sublabel.spaced { margin-top: 12px !important; }
+      /* Two even columns, the rhythm the whole panel is built on */
+      .claude-design-manip-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 8px !important;
+      }
+      .claude-design-manip-grid + .claude-design-manip-grid { margin-top: 12px !important; }
+      .claude-design-manip-cell { min-width: 0 !important; }
+      /* The wrapper is the field the user sees; the scrub target sits inside it */
+      .claude-design-manip-fieldwrap {
+        display: flex !important;
+        align-items: center !important;
+        gap: 7px !important;
+        height: 34px !important;
+        padding: 0 6px 0 10px !important;
+        background: #333 !important;
+        border: 1px solid transparent !important;
+        border-radius: 8px !important;
+        box-sizing: border-box !important;
+        min-width: 0 !important;
+      }
+      .claude-design-manip-fieldwrap:hover { background: #383838 !important; }
+      .claude-design-manip-fieldwrap:has(.claude-design-manip-field.changed) {
+        background: rgba(198, 97, 63, 0.14) !important;
+        border-color: rgba(198, 97, 63, 0.5) !important;
+      }
+      .claude-design-manip-fieldwrap:has(.claude-design-manip-field.scrubbing) {
+        border-color: #c6613f !important;
+      }
+      .claude-design-manip-glyph {
+        color: #8f8f8f !important;
+        font-size: 11px !important;
+        line-height: 1 !important;
+        flex-shrink: 0 !important;
+        min-width: 9px !important;
+      }
+      .claude-design-manip-field {
+        display: block !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        background: none !important;
+        border: none !important;
+        padding: 0 !important;
+        color: #eaeaea !important;
+        font-size: 12px !important;
+        font-variant-numeric: tabular-nums !important;
+        cursor: ew-resize !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      .claude-design-manip-field.changed { color: #eb9b78 !important; }
+      .claude-design-manip-field-input {
+        all: unset !important;
+        width: 100% !important;
+        color: #fff !important;
+        font-size: 12px !important;
+        cursor: text !important;
+      }
+      /* Margin/padding box: each side sits where it lives on the element */
       .claude-design-manip-cross {
         display: grid !important;
         grid-template-columns: 1fr 1fr 1fr !important;
-        gap: 4px !important;
+        gap: 6px !important;
         align-items: center !important;
-        border: 1px dashed #3a3a3a !important;
-        border-radius: 8px !important;
-        padding: 6px !important;
-        margin-bottom: 6px !important;
+        /* A faint well groups the four sides into one box-model diagram */
+        background: rgba(255, 255, 255, 0.03) !important;
+        border-radius: 10px !important;
+        padding: 8px !important;
       }
-      .claude-design-manip-cross:last-child { margin-bottom: 0 !important; }
+      .claude-design-manip-cross .claude-design-manip-fieldwrap {
+        height: 30px !important;
+        padding: 0 4px 0 8px !important;
+        gap: 2px !important;
+      }
       .claude-design-manip-cross-t { grid-column: 2 !important; grid-row: 1 !important; }
       .claude-design-manip-cross-l { grid-column: 1 !important; grid-row: 2 !important; }
       .claude-design-manip-cross-c {
@@ -1344,112 +1399,97 @@ export const annotationScript = `
       }
       .claude-design-manip-cross-r { grid-column: 3 !important; grid-row: 2 !important; }
       .claude-design-manip-cross-b { grid-column: 2 !important; grid-row: 3 !important; }
+      /* Carets */
+      .claude-design-manip-flyout .claude-design-manip-preset-btn {
+        all: unset !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+        width: 20px !important;
+        height: 22px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 5px !important;
+        color: #7a7a7a !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-preset-btn:hover { background: rgba(255, 255, 255, 0.09) !important; color: #fff !important; }
+      .claude-design-manip-flyout .claude-design-manip-preset-btn.open { background: rgba(198, 97, 63, 0.22) !important; color: #eb9b78 !important; }
+      .claude-design-manip-flyout .claude-design-manip-preset-btn svg { width: 9px !important; height: 9px !important; display: block !important; }
       .claude-design-manip-preset-btn.claude-design-manip-cross-all {
         width: auto !important;
         max-width: 100% !important;
-        height: 20px !important;
-        padding: 0 4px !important;
+        height: 30px !important;
+        padding: 0 6px !important;
         gap: 3px !important;
         font-size: 9px !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.4px !important;
+        font-weight: 600 !important;
+        color: #8f8f8f !important;
         overflow: hidden !important;
       }
-      /* Component size/variant picker: a field-shaped button */
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn {
-        width: auto !important;
-        height: auto !important;
-        flex: 1 !important;
-        min-width: 0 !important;
-        justify-content: space-between !important;
-        gap: 6px !important;
-        background: #303030 !important;
-        border: 1px solid transparent !important;
-        border-radius: 6px !important;
-        padding: 4px 6px !important;
-        color: #ccc !important;
-        font-size: 11px !important;
-      }
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn:hover {
-        background: #383838 !important;
-        border-color: #4a4a4a !important;
-        color: #fff !important;
-      }
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn.changed {
-        color: #eb9b78 !important;
-        border-color: rgba(198, 97, 63, 0.55) !important;
-        background: rgba(198, 97, 63, 0.12) !important;
-      }
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn.unset { color: #777 !important; }
-      .claude-design-manip-classbtn-value {
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
-      }
-      /* The flyout normalises text-transform on every descendant, so the label
-         span needs the uppercase itself rather than inheriting it */
       .claude-design-manip-preset-btn.claude-design-manip-cross-all span {
         text-transform: uppercase !important;
         letter-spacing: 0.4px !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
       }
-      .claude-design-manip-field {
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        min-width: 0 !important;
-        flex: 1 !important;
-        background: #303030 !important;
-        border: 1px solid transparent !important;
-        border-radius: 6px !important;
-        padding: 4px 5px !important;
-        color: #ccc !important;
-        font-size: 11px !important;
-        font-variant-numeric: tabular-nums !important;
-        cursor: ew-resize !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-      }
-      .claude-design-manip-field:hover { border-color: #4a4a4a !important; }
-      .claude-design-manip-field.changed {
-        color: #eb9b78 !important;
-        border-color: rgba(198, 97, 63, 0.55) !important;
-        background: rgba(198, 97, 63, 0.12) !important;
-      }
-      .claude-design-manip-field.scrubbing { border-color: #c6613f !important; }
-      .claude-design-manip-field-input {
-        all: unset !important;
+      /* Component size/variant picker: a field-shaped button */
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn {
         width: 100% !important;
-        color: #fff !important;
-        font-size: 11px !important;
-        text-align: center !important;
-        cursor: text !important;
+        height: 34px !important;
+        justify-content: space-between !important;
+        gap: 6px !important;
+        background: #333 !important;
+        border: 1px solid transparent !important;
+        border-radius: 8px !important;
+        padding: 0 8px 0 10px !important;
+        color: #eaeaea !important;
+        font-size: 12px !important;
+        box-sizing: border-box !important;
       }
-      /* Field + its "project scale" caret */
-      .claude-design-manip-fieldwrap {
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn:hover { background: #383838 !important; color: #fff !important; }
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn.changed {
+        color: #eb9b78 !important;
+        border-color: rgba(198, 97, 63, 0.5) !important;
+        background: rgba(198, 97, 63, 0.14) !important;
+      }
+      .claude-design-manip-preset-btn.claude-design-manip-classbtn.unset { color: #7a7a7a !important; }
+      .claude-design-manip-classbtn-value {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+      }
+      /* Colour row: swatch, value, caret — same box as every other field */
+      .claude-design-manip-color-row {
         display: flex !important;
         align-items: center !important;
-        gap: 2px !important;
-        flex: 1 !important;
-        min-width: 0 !important;
+        gap: 9px !important;
+        height: 34px !important;
+        padding: 0 6px 0 8px !important;
+        background: #333 !important;
+        border: 1px solid transparent !important;
+        border-radius: 8px !important;
+        box-sizing: border-box !important;
       }
-      .claude-design-manip-preset-btn {
-        all: unset !important;
+      .claude-design-manip-color-row:hover { background: #383838 !important; }
+      .claude-design-manip-color-row.changed {
+        background: rgba(198, 97, 63, 0.14) !important;
+        border-color: rgba(198, 97, 63, 0.5) !important;
+      }
+      .claude-design-manip-color-row input[type="color"] {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 20px !important;
+        height: 20px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: 1px solid rgba(255, 255, 255, 0.14) !important;
+        border-radius: 5px !important;
+        background: transparent !important;
         cursor: pointer !important;
         flex-shrink: 0 !important;
-        width: 16px !important;
-        height: 22px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        border-radius: 4px !important;
-        color: #777 !important;
       }
-      .claude-design-manip-preset-btn:hover { background: rgba(255,255,255,0.1) !important; color: #fff !important; }
-      .claude-design-manip-preset-btn.open { background: rgba(198, 97, 63, 0.2) !important; color: #eb9b78 !important; }
-      .claude-design-manip-preset-btn svg { width: 9px !important; height: 9px !important; display: block !important; }
-      /* Scale menu — lives on <body> (the flyout clips its own overflow) */
+      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0 !important; }
+      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch { border: none !important; border-radius: 4px !important; }
       .claude-design-manip-presets {
         position: fixed !important;
         z-index: 2147483647 !important;
@@ -1555,11 +1595,15 @@ export const annotationScript = `
       .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch { border: none !important; border-radius: 4px !important; }
       .claude-design-manip-color-row.changed input[type="color"] { border-color: rgba(198, 97, 63, 0.8) !important; }
       .claude-design-manip-color-hex {
-        color: #999 !important;
-        font-size: 11px !important;
+        color: #eaeaea !important;
+        font-size: 12px !important;
         font-variant-numeric: tabular-nums !important;
         flex: 1 !important;
+        min-width: 0 !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
       }
+      .claude-design-manip-color-row.changed .claude-design-manip-color-hex { color: #eb9b78 !important; }
     \`;
     document.head.appendChild(style);
   }
@@ -5346,36 +5390,45 @@ export const annotationScript = `
             : families.length > 1 ? 'Component \\u00b7 ' + escapeHtml(fam.base) : 'Component') +
         '</div>';
       fam.groups.forEach(function(group) {
-        html += '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">' + group.label + '</span>' +
+        html += manipLabelHtml(group.label, group !== fam.groups[0]) +
           '<button class="claude-design-manip-preset-btn claude-design-manip-classbtn"' +
             ' data-fam="' + fi + '" data-group="' + group.key + '"' +
             ' title="' + escapeHtml(fam.base) + ' ' + group.label.toLowerCase() + '" tabindex="-1">' +
             '<span class="claude-design-manip-classbtn-value"></span>' + MANIP_CARET_SVG +
-          '</button>' +
-        '</div>';
+          '</button>';
       });
       html += '</div>';
     });
     return html;
   }
 
-  function manipColorRowHtml(prop, label) {
-    return '<div class="claude-design-manip-row claude-design-manip-color-row" data-prop="' + prop + '">' +
-      '<span class="claude-design-manip-row-label">' + label + '</span>' +
+  function manipColorRowHtml(prop) {
+    return '<div class="claude-design-manip-color-row" data-prop="' + prop + '">' +
       '<input type="color" data-prop="' + prop + '">' +
       '<span class="claude-design-manip-color-hex"></span>' +
       manipPresetBtnHtml([prop], null, 'Project colors') +
     '</div>';
   }
 
+  function manipLabelHtml(text, spaced) {
+    return '<div class="claude-design-manip-sublabel' + (spaced ? ' spaced' : '') + '">' + text + '</div>';
+  }
+
   // A field plus its scale caret. The field element itself stays a bare box —
   // scrub and type-to-edit rewrite its contents.
-  function manipFieldHtml(prop, title) {
+  // The wrapper is the box you see: an optional glyph, the scrub/type target,
+  // and the caret onto the project's scale.
+  function manipFieldHtml(prop, glyph) {
     return '<span class="claude-design-manip-fieldwrap">' +
-      '<span class="claude-design-manip-field" data-prop="' + prop + '"' + (title ? ' title="' + title + '"' : '') + '></span>' +
+      (glyph ? '<span class="claude-design-manip-glyph">' + glyph + '</span>' : '') +
+      '<span class="claude-design-manip-field" data-prop="' + prop + '" title="' + prop + '"></span>' +
       manipPresetBtnHtml([prop]) +
     '</span>';
+  }
+
+  // A labelled half-width cell in the two-column grid
+  function manipCellHtml(label, inner) {
+    return '<div class="claude-design-manip-cell">' + manipLabelHtml(label) + inner + '</div>';
   }
 
   function openManipFlyout() {
@@ -5402,36 +5455,41 @@ export const annotationScript = `
       '</div>' +
       manipComponentSectionHtml(manipPanelFamilies) +
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Size</div>' +
-        '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">W</span>' + manipFieldHtml('width') +
-          '<span class="claude-design-manip-row-label" style="width:20px !important; text-align:right !important;">H</span>' + manipFieldHtml('height') +
+        '<div class="claude-design-manip-section-label">Layout</div>' +
+        manipLabelHtml('Dimensions') +
+        '<div class="claude-design-manip-grid">' +
+          manipFieldHtml('width', 'W') +
+          manipFieldHtml('height', 'H') +
         '</div>' +
       '</div>' +
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-section-label">Spacing</div>' +
+        manipLabelHtml('Margin') +
         manipCrossHtml('margin') +
+        manipLabelHtml('Padding', true) +
         manipCrossHtml('padding') +
       '</div>' +
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Text</div>' +
-        '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Size</span>' + manipFieldHtml('font-size') +
-          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Wt</span>' + manipFieldHtml('font-weight') +
+        '<div class="claude-design-manip-section-label">Typography</div>' +
+        '<div class="claude-design-manip-grid">' +
+          manipCellHtml('Size', manipFieldHtml('font-size', 'A')) +
+          manipCellHtml('Weight', manipFieldHtml('font-weight')) +
         '</div>' +
-        '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label" title="line-height">Line</span>' + manipFieldHtml('line-height', 'line-height') +
-          '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;" title="letter-spacing">Trk</span>' + manipFieldHtml('letter-spacing', 'letter-spacing') +
+        '<div class="claude-design-manip-grid">' +
+          manipCellHtml('Line height', manipFieldHtml('line-height')) +
+          manipCellHtml('Letter spacing', manipFieldHtml('letter-spacing')) +
         '</div>' +
-        manipColorRowHtml('color', 'Color') +
+        manipLabelHtml('Color', true) +
+        manipColorRowHtml('color') +
       '</div>' +
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Style</div>' +
-        '<div class="claude-design-manip-row">' +
-          '<span class="claude-design-manip-row-label">Radius</span>' + manipFieldHtml('border-radius', 'border-radius') +
-          (showGap ? '<span class="claude-design-manip-row-label" style="width:34px !important; text-align:right !important;">Gap</span>' + manipFieldHtml('gap') : '') +
+        '<div class="claude-design-manip-section-label">Appearance</div>' +
+        '<div class="claude-design-manip-grid">' +
+          manipCellHtml('Corner radius', manipFieldHtml('border-radius')) +
+          (showGap ? manipCellHtml('Gap', manipFieldHtml('gap')) : '<div class="claude-design-manip-cell"></div>') +
         '</div>' +
-        manipColorRowHtml('background-color', 'Fill') +
+        manipLabelHtml('Fill', true) +
+        manipColorRowHtml('background-color') +
       '</div>';
 
     flyout.innerHTML = '<div class="claude-design-manip-clip"><div class="claude-design-manip-scroll">' + html + '</div></div>';
@@ -5804,7 +5862,8 @@ export const annotationScript = `
       var v = parseFloat(raw);
       var text;
       if (!isFinite(v)) {
-        text = '\\u2013';
+        // "normal"/unset reads better as Auto than as a dash
+        text = 'Auto';
       } else if (meta.decimals) {
         text = (Math.round(v * 10) / 10).toString();
       } else {
