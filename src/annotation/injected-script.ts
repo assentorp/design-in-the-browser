@@ -148,6 +148,9 @@ export const annotationScript = `
       }
       .claude-design-popover-textarea {
         width: 100% !important;
+        /* block, or the inline baseline gap shows the page through the seam
+           where the design panel joins on */
+        display: block !important;
         min-height: 120px !important;
         max-height: 400px !important;
         background: #303030 !important;
@@ -202,6 +205,10 @@ export const annotationScript = `
         background: rgba(198, 97, 63, 0.16) !important;
         border-radius: 4px !important;
         box-shadow: 0 0 0 2px rgba(198, 97, 63, 0.16) !important;
+      }
+      .claude-design-popover-note {
+        position: relative !important;
+        display: block !important;
       }
       .claude-design-popover-input-row {
         position: relative !important;
@@ -1120,39 +1127,44 @@ export const annotationScript = `
         border-radius: 5px !important;
         white-space: nowrap !important;
       }
-      /* Design flyout: opened from the sliders button in the prompt box.
-         Slides in from the button's direction with a springy ease-out. */
+      /* Design panel: slides open inside the prompt box, one shade darker than
+         the note field so it reads as part of the same surface. */
       .claude-design-manip-flyout {
-        position: fixed !important;
-        z-index: 2147483647 !important;
-        width: 264px !important;
+        position: relative !important;
+        z-index: 1 !important;
+        width: 100% !important;
         background: #262626 !important;
         border: 1px solid #4a4a4a !important;
-        border-radius: 16px !important;
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
+        border-top: none !important;
+        border-radius: 0 0 24px 24px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
         color: #e5e5e5 !important;
         font-size: 12px !important;
         text-align: left !important;
         box-sizing: border-box !important;
         padding: 0 !important;
-        margin: 0 !important;
+        margin: -1px 0 0 0 !important;
         user-select: none !important;
         -webkit-user-select: none !important;
         overflow-x: hidden !important;
         overflow-y: auto !important;
-        max-height: calc(100vh - 16px) !important;
+        max-height: 44vh !important;
         opacity: 0 !important;
-        transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1) !important;
-        will-change: transform, opacity !important;
+        transform: translateY(-6px) !important;
+        transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1) !important;
         pointer-events: none !important;
       }
-      .claude-design-manip-flyout.from-up { transform: translateY(14px) scale(0.97) !important; transform-origin: bottom center !important; }
-      .claude-design-manip-flyout.from-right { transform: translateX(-14px) scale(0.97) !important; transform-origin: left center !important; }
-      .claude-design-manip-flyout.from-left { transform: translateX(14px) scale(0.97) !important; transform-origin: right center !important; }
       .claude-design-manip-flyout.visible {
         opacity: 1 !important;
-        transform: translate(0, 0) scale(1) !important;
+        transform: translateY(0) !important;
         pointer-events: auto !important;
+      }
+      /* The note field and the panel form one box while it is open: square off
+         the seam and let the two shades separate them instead of a hard line */
+      .claude-design-popover-input-row.has-design-panel .claude-design-popover-textarea {
+        border-bottom-left-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+        border-bottom-color: transparent !important;
       }
       .claude-design-manip-flyout *, .claude-design-manip-flyout *::before, .claude-design-manip-flyout *::after {
         box-sizing: border-box !important;
@@ -3078,7 +3090,7 @@ export const annotationScript = `
       positionPopover();
       positionCodeButton();
       positionManipOverlay();
-      positionManipFlyout();
+      positionManipPresets();
     };
     window.addEventListener('scroll', popoverScrollHandler, true);
 
@@ -3154,6 +3166,9 @@ export const annotationScript = `
         '<input type="file" class="claude-design-popover-file" accept="image/*" multiple style="display: none;" />' +
         '<div class="claude-design-popover-input-row">' +
           headerHTML +
+          // The buttons anchor to the note field, not to the row, so the design
+          // panel can sit underneath without displacing them
+          '<div class="claude-design-popover-note">' +
           '<textarea class="claude-design-popover-textarea" placeholder="' + placeholder + '"></textarea>' +
           '<div class="claude-design-popover-actions">' +
             '<div class="claude-design-popover-actions-left">' +
@@ -3171,6 +3186,7 @@ export const annotationScript = `
               addAnotherButton +
               actionButton +
             '</div>' +
+          '</div>' +
           '</div>' +
         '</div>';
 
@@ -5244,10 +5260,7 @@ export const annotationScript = `
       if (popoverElement) positionPopover();
       if (codeButtonElement) positionCodeButton();
       // Frozen during a hover preview: the row under the cursor must not move
-      if (!manipPreview) {
-        positionManipFlyout();
-        positionManipPresets();
-      }
+      if (!manipPreview) positionManipPresets();
     });
   }
 
@@ -5388,7 +5401,15 @@ export const annotationScript = `
       '</div>';
 
     flyout.innerHTML = html;
-    document.body.appendChild(flyout);
+    var inputRow = popoverElement.querySelector('.claude-design-popover-input-row');
+    if (!inputRow) return;
+    inputRow.appendChild(flyout);
+    inputRow.classList.add('has-design-panel');
+    // The panel scrolls, and the dropdown is fixed to its caret — keep them together
+    flyout.addEventListener('scroll', function() {
+      manipEndPreview();
+      positionManipPresets();
+    });
 
     flyout.querySelector('.claude-design-manip-flyout-reset').addEventListener('click', function(e) {
       e.stopPropagation();
@@ -5419,9 +5440,9 @@ export const annotationScript = `
       input.addEventListener('click', function(e) { e.stopPropagation(); });
     });
 
-    // Position first (this also picks the slide-in direction), then animate in
-    positionManipFlyout();
     refreshManipPanelValues();
+    // The popover just grew — re-anchor it before the panel fades in
+    positionPopover();
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         if (manipPanel === flyout) flyout.classList.add('visible');
@@ -5436,11 +5457,17 @@ export const annotationScript = `
     closeManipPresets();
     manipHoverField = null;
     manipPanel = null;
-    if (immediate) {
+    var inputRow = panel.parentNode;
+    function detach() {
       panel.remove();
+      if (inputRow && inputRow.classList) inputRow.classList.remove('has-design-panel');
+      if (popoverElement) positionPopover();
+    }
+    if (immediate) {
+      detach();
     } else {
       panel.classList.remove('visible');
-      setTimeout(function() { panel.remove(); }, 320);
+      setTimeout(detach, 240);
     }
     updateManipDesignButton();
   }
@@ -5699,60 +5726,6 @@ export const annotationScript = `
     });
     manipUndoEndBatch();
     refreshManipPanelValues();
-  }
-
-  // Place the flyout above the prompt box or beside it, wherever there is
-  // room — preferring spots that don't cover the selected element (the
-  // popover usually hangs below it, so "up" would land right on it). The
-  // chosen direction drives the slide-in animation.
-  function positionManipFlyout() {
-    if (!manipPanel || !popoverElement) return;
-    var pr = popoverElement.getBoundingClientRect();
-    var er = (manipSelected && manipSelected.isConnected) ? manipSelected.getBoundingClientRect() : null;
-    var w = manipPanel.offsetWidth || 264;
-    var h = manipPanel.offsetHeight || 300;
-    var pad = 10;
-
-    function clampTop(t) { return Math.min(Math.max(8, t), Math.max(8, window.innerHeight - h - 8)); }
-    function clampLeft(l) { return Math.min(Math.max(8, l), Math.max(8, window.innerWidth - w - 8)); }
-    function overlapWithElement(left, top) {
-      if (!er) return 0;
-      var x = Math.max(0, Math.min(left + w, er.right) - Math.max(left, er.left));
-      var y = Math.max(0, Math.min(top + h, er.bottom) - Math.max(top, er.top));
-      return x * y;
-    }
-
-    var candidates = [];
-    if (pr.top - h - pad >= 8) {
-      candidates.push({ dir: 'from-up', left: clampLeft(pr.left), top: pr.top - h - pad });
-    }
-    if (pr.right + pad + w <= window.innerWidth - 8) {
-      candidates.push({ dir: 'from-right', left: pr.right + pad, top: clampTop(pr.top) });
-    }
-    if (pr.left - pad - w >= 8) {
-      candidates.push({ dir: 'from-left', left: pr.left - pad - w, top: clampTop(pr.top) });
-    }
-    // Nothing fits cleanly — fall back to above, clamped into the viewport
-    if (candidates.length === 0) {
-      candidates.push({ dir: 'from-up', left: clampLeft(pr.left), top: Math.max(8, pr.top - h - pad) });
-    }
-
-    var best = candidates[0];
-    var bestOverlap = overlapWithElement(best.left, best.top);
-    for (var ci = 1; ci < candidates.length && bestOverlap > 0; ci++) {
-      var o = overlapWithElement(candidates[ci].left, candidates[ci].top);
-      if (o < bestOverlap) {
-        best = candidates[ci];
-        bestOverlap = o;
-      }
-    }
-
-    if (!manipPanel.classList.contains(best.dir)) {
-      manipPanel.classList.remove('from-up', 'from-right', 'from-left');
-      manipPanel.classList.add(best.dir);
-    }
-    manipPanel.style.left = best.left + 'px';
-    manipPanel.style.top = best.top + 'px';
   }
 
   // Sliders button in the prompt box: active while the flyout is open,
