@@ -156,6 +156,8 @@ export const annotationScript = `
         background: #303030 !important;
         border: 1px solid #4a4a4a !important;
         border-radius: 24px !important;
+        transition: border-bottom-left-radius 0.24s cubic-bezier(0.23, 1, 0.32, 1),
+                    border-bottom-right-radius 0.24s cubic-bezier(0.23, 1, 0.32, 1) !important;
         padding: 18px 22px !important;
         color: #e5e5e5 !important;
         font-size: 14px !important;
@@ -1127,12 +1129,36 @@ export const annotationScript = `
         border-radius: 5px !important;
         white-space: nowrap !important;
       }
-      /* Design panel: slides open inside the prompt box, one shade darker than
-         the note field so it reads as part of the same surface. */
+      /* Design panel: the prompt box grows to reveal it, one shade darker than
+         the note field so it reads as the same surface. The outer element is a
+         grid whose single row animates 0fr -> 1fr, which is what actually opens
+         the box; the clip layer hides the overflow while it does. */
       .claude-design-manip-flyout {
+        display: grid !important;
+        grid-template-rows: 0fr !important;
         position: relative !important;
         z-index: 1 !important;
         width: 100% !important;
+        margin: -1px 0 0 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        background: none !important;
+        box-sizing: border-box !important;
+        text-align: left !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        /* Exit: collapse a touch quicker than it opened */
+        transition: grid-template-rows 0.2s cubic-bezier(0.23, 1, 0.32, 1) !important;
+      }
+      .claude-design-manip-flyout.visible {
+        grid-template-rows: 1fr !important;
+        transition: grid-template-rows 0.24s cubic-bezier(0.23, 1, 0.32, 1) !important;
+      }
+      .claude-design-manip-clip {
+        overflow: hidden !important;
+        min-height: 0 !important;
+      }
+      .claude-design-manip-scroll {
         background: #262626 !important;
         border: 1px solid #4a4a4a !important;
         border-top: none !important;
@@ -1140,31 +1166,39 @@ export const annotationScript = `
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
         color: #e5e5e5 !important;
         font-size: 12px !important;
-        text-align: left !important;
         box-sizing: border-box !important;
-        padding: 0 !important;
-        margin: -1px 0 0 0 !important;
-        user-select: none !important;
-        -webkit-user-select: none !important;
+        max-height: 44vh !important;
         overflow-x: hidden !important;
         overflow-y: auto !important;
-        max-height: 44vh !important;
         opacity: 0 !important;
-        transform: translateY(-6px) !important;
-        transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1) !important;
         pointer-events: none !important;
+        transition: opacity 0.12s ease-out !important;
       }
-      .claude-design-manip-flyout.visible {
+      .claude-design-manip-flyout.visible .claude-design-manip-scroll {
         opacity: 1 !important;
-        transform: translateY(0) !important;
         pointer-events: auto !important;
+        /* Let the box start opening before the controls arrive */
+        transition: opacity 0.2s ease-out 0.04s !important;
       }
-      /* The note field and the panel form one box while it is open: square off
-         the seam and let the two shades separate them instead of a hard line */
+      /* The note field and the panel form one box while it is open: the corners
+         square off over the same beat as the opening, not before it */
       .claude-design-popover-input-row.has-design-panel .claude-design-popover-textarea {
         border-bottom-left-radius: 0 !important;
         border-bottom-right-radius: 0 !important;
         border-bottom-color: transparent !important;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        /* Keep the cross-fade, drop the movement */
+        .claude-design-manip-flyout,
+        .claude-design-manip-flyout.visible {
+          grid-template-rows: 1fr !important;
+          transition: none !important;
+        }
+        .claude-design-manip-scroll,
+        .claude-design-manip-flyout.visible .claude-design-manip-scroll {
+          transition: opacity 0.12s ease !important;
+        }
+        .claude-design-popover-textarea { transition: none !important; }
       }
       .claude-design-manip-flyout *, .claude-design-manip-flyout *::before, .claude-design-manip-flyout *::after {
         box-sizing: border-box !important;
@@ -5400,13 +5434,13 @@ export const annotationScript = `
         manipColorRowHtml('background-color', 'Fill') +
       '</div>';
 
-    flyout.innerHTML = html;
+    flyout.innerHTML = '<div class="claude-design-manip-clip"><div class="claude-design-manip-scroll">' + html + '</div></div>';
     var inputRow = popoverElement.querySelector('.claude-design-popover-input-row');
     if (!inputRow) return;
     inputRow.appendChild(flyout);
     inputRow.classList.add('has-design-panel');
     // The panel scrolls, and the dropdown is fixed to its caret — keep them together
-    flyout.addEventListener('scroll', function() {
+    flyout.querySelector('.claude-design-manip-scroll').addEventListener('scroll', function() {
       manipEndPreview();
       positionManipPresets();
     });
@@ -5441,11 +5475,10 @@ export const annotationScript = `
     });
 
     refreshManipPanelValues();
-    // The popover just grew — re-anchor it before the panel fades in
-    positionPopover();
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         if (manipPanel === flyout) flyout.classList.add('visible');
+        manipTrackPopoverWhileAnimating();
       });
     });
     updateManipDesignButton();
@@ -5460,16 +5493,29 @@ export const annotationScript = `
     var inputRow = panel.parentNode;
     function detach() {
       panel.remove();
-      if (inputRow && inputRow.classList) inputRow.classList.remove('has-design-panel');
       if (popoverElement) positionPopover();
     }
+    // Rounding the corners back is part of the collapse, so it starts now
+    if (inputRow && inputRow.classList) inputRow.classList.remove('has-design-panel');
     if (immediate) {
       detach();
     } else {
       panel.classList.remove('visible');
-      setTimeout(detach, 240);
+      manipTrackPopoverWhileAnimating();
+      setTimeout(detach, 220);
     }
     updateManipDesignButton();
+  }
+
+  // The box changes height for the length of the open/close, and the popover is
+  // anchored to the element — follow it every frame or it drifts as it grows.
+  function manipTrackPopoverWhileAnimating() {
+    var frames = 0;
+    (function step() {
+      if (!popoverElement || frames++ > 20) return;
+      positionPopover();
+      requestAnimationFrame(step);
+    })();
   }
 
   function toggleManipFlyout() {
