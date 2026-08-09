@@ -75,6 +75,7 @@ export const annotationScript = `
   let manipPresetsMenu = null;       // open "project scale" dropdown
   let manipPresetsAnchor = null;     // caret button the dropdown hangs off
   let manipPreview = null;           // restores the element after a hover preview
+  let manipQueuedRestores = new Map(); // element -> how to undo a queued edit's preview
   let manipPagePresetCache = {};     // prop -> values sampled from the page (per flyout)
 
   // Area selection state (click-and-drag)
@@ -2137,6 +2138,9 @@ export const annotationScript = `
 
   // Add or update pending annotation
   function savePendingAnnotation(el, note) {
+    // Before the deltas are consumed: how to put the page back if this edit
+    // is cancelled rather than sent
+    manipCaptureRestore(el);
     const existing = findPendingAnnotation(el);
     const rect = el.getBoundingClientRect();
     const padding = 10;
@@ -2197,8 +2201,11 @@ export const annotationScript = `
     });
   }
 
-  function clearPendingAnnotations() {
+  function clearPendingAnnotations(revertDesign) {
     pendingAnnotations.forEach(function(ann) {
+      // Sent edits keep their preview, and their capture is spent
+      if (revertDesign) manipRestoreQueued(ann.element);
+      else manipQueuedRestores.delete(ann.element);
       ann.element.classList.remove('claude-design-multi-selected');
       ann.element.classList.remove('claude-design-selected');
       const badge = ann.element.querySelector('.claude-design-multi-badge');
@@ -2231,6 +2238,9 @@ export const annotationScript = `
     if (badge) badge.remove();
 
     pendingAnnotations.splice(index, 1);
+    // Other queued edits may still rely on this element's preview
+    var stillQueued = pendingAnnotations.some(function(other) { return other.element === ann.element; });
+    if (!stillQueued) manipRestoreQueued(ann.element);
     updatePendingBadges();
     notifyPendingUpdate();
 
@@ -4935,7 +4945,10 @@ export const annotationScript = `
         baseline[p] = computed.getPropertyValue(p);
         inline[p] = { value: el.style.getPropertyValue(p), priority: el.style.getPropertyPriority(p) };
       });
-      rec = { baseline: baseline, inline: inline, current: {}, tokens: {}, classSwaps: {} };
+      rec = {
+        baseline: baseline, inline: inline, current: {}, tokens: {}, classSwaps: {},
+        classAttr: el.getAttribute('class') || ''
+      };
       manipChanges.set(el, rec);
     }
     return rec;
@@ -5140,6 +5153,50 @@ export const annotationScript = `
       }
     }
     return v;
+  }
+
+  // Queued edits keep their preview on the page until they are sent. If one is
+  // cancelled instead, the page has to go back to the code — so the state to
+  // undo is captured when the edit is queued, keyed by element so several edits
+  // on one element still revert to the original.
+  function manipCaptureRestore(el) {
+    var rec = manipChanges.get(el);
+    if (!rec || manipRecordChangeCount(rec) === 0) return;
+    if (manipQueuedRestores.has(el)) return; // keep the earliest
+    manipQueuedRestores.set(el, {
+      props: Object.keys(rec.current).map(function(prop) {
+        return { prop: prop, inline: rec.inline[prop] };
+      }),
+      classAttr: rec.classAttr,
+      hadClassSwaps: Object.keys(rec.classSwaps || {}).length > 0
+    });
+  }
+
+  function manipRestoreQueued(el) {
+    var cap = manipQueuedRestores.get(el);
+    if (!cap) return;
+    manipQueuedRestores.delete(el);
+    if (!el || !el.isConnected) return;
+    cap.props.forEach(function(entry) {
+      if (entry.inline && entry.inline.value) el.style.setProperty(entry.prop, entry.inline.value, entry.inline.priority);
+      else el.style.removeProperty(entry.prop);
+    });
+    if (cap.hadClassSwaps) {
+      // Put back the element's own classes, keeping ours (selection, badges)
+      var ours = [];
+      for (var i = 0; i < el.classList.length; i++) {
+        if (el.classList[i].indexOf('claude-design-') === 0) ours.push(el.classList[i]);
+      }
+      el.setAttribute('class', (cap.classAttr + ' ' + ours.join(' ')).trim());
+    }
+    // The element is no longer mid-edit: start fresh if it is selected again
+    manipChanges.delete(el);
+    manipForgetUndo(el);
+    if (el === manipSelected) {
+      manipEnsureRecord(el);
+      refreshManipPanelValues();
+    }
+    queueManipReposition();
   }
 
   // Property tweaks and component-class swaps both count as changes
@@ -6235,6 +6292,7 @@ export const annotationScript = `
     manipRedoStack = [];
     manipUndoBatch = null;
     manipUndoLastEl = null;
+    manipQueuedRestores = new Map();
   });
 
   // Expose functions for external control
@@ -6243,7 +6301,7 @@ export const annotationScript = `
   window.__claudeDesignIsEnabled = function() { return annotateMode; };
   window.__claudeDesignSendAll = sendAllAnnotations;
   window.__claudeDesignRemoveItem = removePendingAnnotation;
-  window.__claudeDesignClearAll = clearPendingAnnotations;
+  window.__claudeDesignClearAll = function() { clearPendingAnnotations(true); };
   window.__claudeDesignCancelAnnotation = cancelAnnotation;
   window.__claudeDesignAddToTodo = addToTodoList;
   window.__claudeDesignNotifyPending = notifyPendingUpdate;
