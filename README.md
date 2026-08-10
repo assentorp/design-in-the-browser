@@ -5,7 +5,8 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Contributions](https://img.shields.io/badge/contributions-not%20accepted-lightgrey.svg)](CONTRIBUTING.md)
 
-[![Watch the video](https://img.youtube.com/vi/VZx9wBM2G-Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=VZx9wBM2G-Y)
+[![Watch the video](<img width="1280" height="729" alt="maxresdefault" src="https://github.com/user-attachments/assets/93ac854e-577f-438f-b90e-31d407676569" />
+)](https://www.youtube.com/watch?v=VZx9wBM2G-Y)
 
 No more tab-switching, screenshot-pasting, and explaining which button you mean. Just click it.
 
