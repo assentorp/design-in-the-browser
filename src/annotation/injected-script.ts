@@ -1276,28 +1276,26 @@ export const annotationScript = `
         text-overflow: ellipsis !important;
         flex: 1 !important;
       }
-      .claude-design-manip-flyout-count {
-        font-size: 11px !important;
-        font-weight: 600 !important;
-        color: #eb9b78 !important;
-        background: rgba(198, 97, 63, 0.16) !important;
-        border-radius: 10px !important;
-        padding: 3px 8px !important;
-        white-space: nowrap !important;
-      }
       .claude-design-manip-flyout .claude-design-manip-flyout-reset {
         all: unset !important;
         cursor: pointer !important;
         color: #8f8f8f !important;
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        padding: 4px 8px !important;
+        width: 24px !important;
+        height: 24px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
         border-radius: 6px !important;
+        flex-shrink: 0 !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-flyout-reset svg {
+        width: 14px !important;
+        height: 14px !important;
+        display: block !important;
       }
       .claude-design-manip-flyout .claude-design-manip-flyout-reset:hover { color: #fff !important; background: rgba(255, 255, 255, 0.08) !important; }
       /* The rule above resets every property, which would beat an inline display:none */
-      .claude-design-manip-flyout .claude-design-manip-flyout-reset.hidden,
-      .claude-design-manip-flyout .claude-design-manip-flyout-count.hidden { display: none !important; }
+      .claude-design-manip-flyout .claude-design-manip-flyout-reset.hidden { display: none !important; }
       /* One group at a time: the whole panel stays a fixed, small height */
       .claude-design-manip-tabs {
         display: flex !important;
@@ -5562,8 +5560,11 @@ export const annotationScript = `
     var html = '' +
       '<div class="claude-design-manip-flyout-header">' +
         '<span class="claude-design-manip-flyout-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
-        '<span class="claude-design-manip-flyout-count hidden"></span>' +
-        '<button class="claude-design-manip-flyout-reset hidden">Reset</button>' +
+        '<button class="claude-design-manip-flyout-reset hidden" title="Reset changes to this element">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>' +
+          '</svg>' +
+        '</button>' +
       '</div>' +
       '<div class="claude-design-manip-tabs">' +
         tabs.map(function(tab) {
@@ -6027,12 +6028,7 @@ export const annotationScript = `
 
     // Header shows how many tweaks this element carries; Reset appears with them
     var count = rec ? manipRecordChangeCount(rec) : 0;
-    var countEl = manipPanel.querySelector('.claude-design-manip-flyout-count');
     var resetBtn = manipPanel.querySelector('.claude-design-manip-flyout-reset');
-    if (countEl) {
-      countEl.classList.toggle('hidden', count === 0);
-      countEl.textContent = count + (count === 1 ? ' change' : ' changes');
-    }
     if (resetBtn) resetBtn.classList.toggle('hidden', count === 0);
   }
 
