@@ -5,7 +5,7 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Contributions](https://img.shields.io/badge/contributions-not%20accepted-lightgrey.svg)](CONTRIBUTING.md)
 
-![mockup](https://github.com/user-attachments/assets/81f81ec8-4fd6-4e5c-8e0c-cdbce3e42824)
+[![Watch the video](https://img.youtube.com/vi/VZx9wBM2G-Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=VZx9wBM2G-Y)
 
 No more tab-switching, screenshot-pasting, and explaining which button you mean. Just click it.
 
