@@ -1297,47 +1297,33 @@ export const annotationScript = `
       /* The rule above resets every property, which would beat an inline display:none */
       .claude-design-manip-flyout .claude-design-manip-flyout-reset.hidden { display: none !important; }
       /* Which pseudo-state the fields below are editing */
-      .claude-design-manip-states {
-        display: flex !important;
-        gap: 2px !important;
-        padding: 0 12px 8px !important;
-      }
-      .claude-design-manip-flyout .claude-design-manip-state {
+      .claude-design-manip-flyout .claude-design-manip-statebtn {
         all: unset !important;
         cursor: pointer !important;
         position: relative !important;
-        flex: 1 !important;
-        min-width: 0 !important;
-        height: 24px !important;
         display: flex !important;
         align-items: center !important;
-        justify-content: center !important;
-        border-radius: 6px !important;
-        color: #7a7a7a !important;
+        gap: 3px !important;
+        height: 20px !important;
+        padding: 0 5px !important;
+        border-radius: 5px !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+        color: #8f8f8f !important;
         font-size: 10px !important;
         font-weight: 500 !important;
         white-space: nowrap !important;
-        overflow: hidden !important;
+        flex-shrink: 0 !important;
       }
-      .claude-design-manip-flyout .claude-design-manip-state:hover {
-        background: rgba(255, 255, 255, 0.06) !important;
-        color: #ccc !important;
+      .claude-design-manip-flyout .claude-design-manip-statebtn:hover {
+        background: rgba(255, 255, 255, 0.12) !important;
+        color: #ddd !important;
       }
-      .claude-design-manip-flyout .claude-design-manip-state.active {
+      /* Editing a state is worth noticing — it changes what every field means */
+      .claude-design-manip-flyout .claude-design-manip-statebtn.on-state {
         background: rgba(198, 97, 63, 0.22) !important;
         color: #eb9b78 !important;
       }
-      .claude-design-manip-state-dot {
-        position: absolute !important;
-        top: 4px !important;
-        right: 5px !important;
-        width: 4px !important;
-        height: 4px !important;
-        border-radius: 50% !important;
-        background: #c6613f !important;
-        display: none !important;
-      }
-      .claude-design-manip-flyout .claude-design-manip-state.changed .claude-design-manip-state-dot { display: block !important; }
+      .claude-design-manip-flyout .claude-design-manip-statebtn svg { width: 8px !important; height: 8px !important; display: block !important; }
       /* One group at a time: the whole panel stays a fixed, small height */
       .claude-design-manip-tabs {
         display: flex !important;
@@ -5848,10 +5834,11 @@ export const annotationScript = `
       '</div>' });
     tabs.push({ key: 'color', label: 'Color', body:
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-grid">' +
-          manipCellHtml('Text', manipColorRowHtml('color')) +
-          manipCellHtml('Fill', manipColorRowHtml('background-color')) +
-        '</div>' +
+        // Full width: a swatch, hex and opacity do not fit in half a row
+        manipLabelHtml('Text') +
+        manipColorRowHtml('color') +
+        manipLabelHtml('Fill', true) +
+        manipColorRowHtml('background-color') +
       '</div>' });
 
     var hasActive = tabs.some(function(tab) { return tab.key === manipActiveTab; });
@@ -5860,21 +5847,17 @@ export const annotationScript = `
     var html = '' +
       '<div class="claude-design-manip-flyout-header">' +
         '<span class="claude-design-manip-flyout-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
+        (manipIsTailwindProject()
+          ? '<button class="claude-design-manip-statebtn" title="Which state these controls edit">' +
+              '<span class="claude-design-manip-statebtn-value"></span>' + MANIP_CARET_SVG +
+            '</button>'
+          : '') +
         '<button class="claude-design-manip-flyout-reset hidden" title="Reset changes to this element">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
             '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>' +
           '</svg>' +
         '</button>' +
       '</div>' +
-      (manipIsTailwindProject()
-        ? '<div class="claude-design-manip-states">' +
-            [{ key: 'default', label: 'Default' }].concat(MANIP_STATES).map(function(state) {
-              return '<button class="claude-design-manip-state' + (state.key === manipActiveState ? ' active' : '') + '"' +
-                ' data-state="' + state.key + '" title="Edit the ' + state.label.toLowerCase() + ' state">' +
-                state.label + '<span class="claude-design-manip-state-dot"></span></button>';
-            }).join('') +
-          '</div>'
-        : '') +
       '<div class="claude-design-manip-tabs">' +
         tabs.map(function(tab) {
           return '<button class="claude-design-manip-tab' + (tab.key === manipActiveTab ? ' active' : '') + '"' +
@@ -5915,23 +5898,16 @@ export const annotationScript = `
       refreshManipPanelValues();
     }
 
-    flyout.querySelectorAll('.claude-design-manip-state').forEach(function(stateEl) {
-      stateEl.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
-      stateEl.addEventListener('click', function(e) {
+    var stateBtn = flyout.querySelector('.claude-design-manip-statebtn');
+    if (stateBtn) {
+      stateBtn.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+      stateBtn.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        if (!manipSelected) return;
-        manipEndPreview();
-        closeManipPresets();
-        var key = stateEl.getAttribute('data-state');
-        if (key === 'default') manipLeaveState(manipSelected);
-        else manipEnterState(manipSelected, key);
-        flyout.querySelectorAll('.claude-design-manip-state').forEach(function(other) {
-          other.classList.toggle('active', other.getAttribute('data-state') === manipActiveState);
-        });
-        refreshManipPanelValues();
+        if (manipPresetsAnchor === stateBtn) return closeManipPresets();
+        openManipStateMenu(stateBtn);
       });
-    });
+    }
 
     var tabsRow = flyout.querySelector('.claude-design-manip-tabs');
     if (tabsRow) {
@@ -6174,7 +6150,7 @@ export const annotationScript = `
     menu.querySelectorAll('[data-i]').forEach(function(itemEl) {
       var index = parseInt(itemEl.getAttribute('data-i'), 10);
       itemEl.addEventListener('mouseenter', function() {
-        if (manipSelected) opts.onPreview(index);
+        if (manipSelected && opts.onPreview) opts.onPreview(index);
       });
       itemEl.addEventListener('click', function(e) {
         e.preventDefault();
@@ -6196,6 +6172,30 @@ export const annotationScript = `
     // Keep the value in effect in view in a long list
     var currentEl = menu.querySelector('.current');
     if (currentEl) menu.scrollTop = Math.max(0, currentEl.offsetTop - menu.clientHeight / 2);
+  }
+
+  function openManipStateMenu(btn) {
+    closeManipPresets();
+    if (!manipSelected) return;
+    var rec = manipChanges.get(manipSelected);
+    var options = [{ key: 'default', label: 'Default' }].concat(MANIP_STATES);
+    var html = '<div class="claude-design-manip-presets-head">State</div>';
+    options.forEach(function(option, i) {
+      var count = option.key === 'default'
+        ? (rec ? Object.keys(rec.current).length + Object.keys(rec.classSwaps || {}).length : 0)
+        : (rec && rec.states && rec.states[option.key] ? Object.keys(rec.states[option.key].current).length : 0);
+      html += '<div class="claude-design-manip-preset-item' + (option.key === manipActiveState ? ' current' : '') + '" data-i="' + i + '">' +
+        '<span class="claude-design-manip-preset-name">' + option.label + '</span>' +
+        (count ? '<span class="claude-design-manip-preset-value">' + count + '</span>' : '') +
+      '</div>';
+    });
+    showManipMenu(btn, html, {
+      onPick: function(i) {
+        var key = options[i].key;
+        if (key === 'default') manipLeaveState(manipSelected);
+        else manipEnterState(manipSelected, key);
+      }
+    });
   }
 
   function openManipChoiceMenu(btn) {
@@ -6393,13 +6393,14 @@ export const annotationScript = `
     manipPanel.querySelectorAll('.claude-design-manip-tab').forEach(function(tabEl) {
       tabEl.classList.toggle('changed', !!changedTabs[tabEl.getAttribute('data-tab')]);
     });
-    manipPanel.querySelectorAll('.claude-design-manip-state').forEach(function(stateEl) {
-      var key = stateEl.getAttribute('data-state');
-      var count = key === 'default'
-        ? (rec ? Object.keys(rec.current).length + Object.keys(rec.classSwaps || {}).length : 0)
-        : (rec && rec.states && rec.states[key] ? Object.keys(rec.states[key].current).length : 0);
-      stateEl.classList.toggle('changed', count > 0);
-    });
+    var stateBtn = manipPanel.querySelector('.claude-design-manip-statebtn');
+    if (stateBtn) {
+      var label = 'Default';
+      MANIP_STATES.forEach(function(state) { if (state.key === manipActiveState) label = state.label; });
+      var valueEl = stateBtn.querySelector('.claude-design-manip-statebtn-value');
+      if (valueEl) valueEl.textContent = label;
+      stateBtn.classList.toggle('on-state', manipActiveState !== 'default');
+    }
 
     manipPanel.querySelectorAll('.claude-design-manip-choice').forEach(function(btn) {
       var prop = btn.getAttribute('data-choice');
