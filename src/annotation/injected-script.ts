@@ -1298,6 +1298,52 @@ export const annotationScript = `
       /* The rule above resets every property, which would beat an inline display:none */
       .claude-design-manip-flyout .claude-design-manip-flyout-reset.hidden,
       .claude-design-manip-flyout .claude-design-manip-flyout-count.hidden { display: none !important; }
+      /* One group at a time: the whole panel stays a fixed, small height */
+      .claude-design-manip-tabs {
+        display: flex !important;
+        gap: 2px !important;
+        padding: 0 12px 10px !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-tab {
+        all: unset !important;
+        cursor: pointer !important;
+        position: relative !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        height: 28px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 7px !important;
+        color: #8f8f8f !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-tab:hover {
+        background: rgba(255, 255, 255, 0.06) !important;
+        color: #ddd !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-tab.active {
+        background: #333 !important;
+        color: #fff !important;
+      }
+      .claude-design-manip-tab-dot {
+        position: absolute !important;
+        top: 5px !important;
+        right: 6px !important;
+        width: 5px !important;
+        height: 5px !important;
+        border-radius: 50% !important;
+        background: #c6613f !important;
+        display: none !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-tab.changed .claude-design-manip-tab-dot { display: block !important; }
+      .claude-design-manip-pane { display: none !important; }
+      .claude-design-manip-pane.active { display: block !important; }
+      .claude-design-manip-pane .claude-design-manip-section { border-top: none !important; padding-top: 0 !important; }
       .claude-design-manip-section {
         padding: 12px 16px !important;
         border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
@@ -4688,6 +4734,7 @@ export const annotationScript = `
   var manipClassIndex = null;      // {set, keys, sheets} of every class the page's CSS defines
   var manipSiblingCache = {};      // "base|sep" -> modifiers found for it
   var manipPanelFamilies = [];     // families rendered in the open flyout
+  var manipActiveTab = 'layout';   // which group the panel shows, remembered across selections
 
   function manipEnsureClassIndex() {
     // Dev servers inject stylesheets as you edit, so rebuild when the sheet
@@ -5296,6 +5343,15 @@ export const annotationScript = `
     queueManipReposition();
   }
 
+  // Which tab a property is edited on, so a tab can show it holds a change
+  var MANIP_TAB_OF_PROP = {
+    'width': 'layout', 'height': 'layout', 'border-radius': 'layout', 'gap': 'layout',
+    'margin-top': 'spacing', 'margin-right': 'spacing', 'margin-bottom': 'spacing', 'margin-left': 'spacing',
+    'padding-top': 'spacing', 'padding-right': 'spacing', 'padding-bottom': 'spacing', 'padding-left': 'spacing',
+    'font-size': 'text', 'font-weight': 'text', 'line-height': 'text', 'letter-spacing': 'text',
+    'color': 'color', 'background-color': 'color'
+  };
+
   // Property tweaks and component-class swaps both count as changes
   function manipRecordChangeCount(rec) {
     if (!rec) return 0;
@@ -5450,15 +5506,17 @@ export const annotationScript = `
     var display = computed.getPropertyValue('display');
     var showGap = display.indexOf('flex') !== -1 || display.indexOf('grid') !== -1;
 
-    var html = '' +
-      '<div class="claude-design-manip-flyout-header">' +
-        '<span class="claude-design-manip-flyout-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
-        '<span class="claude-design-manip-flyout-count hidden"></span>' +
-        '<button class="claude-design-manip-flyout-reset hidden">Reset</button>' +
-      '</div>' +
-      manipComponentSectionHtml(manipPanelFamilies) +
+    // Groups the element actually has something to say about
+    var tabs = [];
+    if (manipPanelFamilies.length) {
+      tabs.push({
+        key: 'component',
+        label: manipPanelFamilies.length === 1 ? manipPanelFamilies[0].base : 'Component',
+        body: manipComponentSectionHtml(manipPanelFamilies)
+      });
+    }
+    tabs.push({ key: 'layout', label: 'Layout', body:
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Layout</div>' +
         manipLabelHtml('Dimensions') +
         '<div class="claude-design-manip-grid">' +
           manipFieldHtml('width', 'W') +
@@ -5468,32 +5526,56 @@ export const annotationScript = `
           manipCellHtml('Corner radius', manipFieldHtml('border-radius')) +
           (showGap ? manipCellHtml('Gap', manipFieldHtml('gap')) : '<div class="claude-design-manip-cell"></div>') +
         '</div>' +
-      '</div>' +
+      '</div>' });
+    tabs.push({ key: 'spacing', label: 'Spacing', body:
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Spacing</div>' +
         manipLabelHtml('Margin') +
         manipCrossHtml('margin') +
         manipLabelHtml('Padding', true) +
         manipCrossHtml('padding') +
-      '</div>' +
+      '</div>' });
+    // Type controls only earn their tab when there is text to style
+    if ((el.textContent || '').trim()) {
+      tabs.push({ key: 'text', label: 'Text', body:
+        '<div class="claude-design-manip-section">' +
+          '<div class="claude-design-manip-grid">' +
+            manipCellHtml('Size', manipFieldHtml('font-size')) +
+            manipCellHtml('Weight', manipFieldHtml('font-weight')) +
+          '</div>' +
+          '<div class="claude-design-manip-grid">' +
+            manipCellHtml('Line height', manipFieldHtml('line-height')) +
+            manipCellHtml('Letter spacing', manipFieldHtml('letter-spacing')) +
+          '</div>' +
+        '</div>' });
+    }
+    tabs.push({ key: 'color', label: 'Color', body:
       '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Typography</div>' +
-        '<div class="claude-design-manip-grid">' +
-          manipCellHtml('Size', manipFieldHtml('font-size')) +
-          manipCellHtml('Weight', manipFieldHtml('font-weight')) +
-        '</div>' +
-        '<div class="claude-design-manip-grid">' +
-          manipCellHtml('Line height', manipFieldHtml('line-height')) +
-          manipCellHtml('Letter spacing', manipFieldHtml('letter-spacing')) +
-        '</div>' +
-      '</div>' +
-      '<div class="claude-design-manip-section">' +
-        '<div class="claude-design-manip-section-label">Color</div>' +
         '<div class="claude-design-manip-grid">' +
           manipCellHtml('Text', manipColorRowHtml('color')) +
           manipCellHtml('Fill', manipColorRowHtml('background-color')) +
         '</div>' +
-      '</div>';
+      '</div>' });
+
+    var hasActive = tabs.some(function(tab) { return tab.key === manipActiveTab; });
+    if (!hasActive) manipActiveTab = tabs[0].key;
+
+    var html = '' +
+      '<div class="claude-design-manip-flyout-header">' +
+        '<span class="claude-design-manip-flyout-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
+        '<span class="claude-design-manip-flyout-count hidden"></span>' +
+        '<button class="claude-design-manip-flyout-reset hidden">Reset</button>' +
+      '</div>' +
+      '<div class="claude-design-manip-tabs">' +
+        tabs.map(function(tab) {
+          return '<button class="claude-design-manip-tab' + (tab.key === manipActiveTab ? ' active' : '') + '"' +
+            ' data-tab="' + tab.key + '">' + escapeHtml(tab.label) +
+            '<span class="claude-design-manip-tab-dot"></span></button>';
+        }).join('') +
+      '</div>' +
+      tabs.map(function(tab) {
+        return '<div class="claude-design-manip-pane' + (tab.key === manipActiveTab ? ' active' : '') + '"' +
+          ' data-tab="' + tab.key + '">' + tab.body + '</div>';
+      }).join('');
 
     flyout.innerHTML = '<div class="claude-design-manip-clip"><div class="claude-design-manip-scroll">' + html + '</div></div>';
     var inputRow = popoverElement.querySelector('.claude-design-popover-input-row');
@@ -5504,6 +5586,26 @@ export const annotationScript = `
     flyout.querySelector('.claude-design-manip-scroll').addEventListener('scroll', function() {
       manipEndPreview();
       positionManipPresets();
+    });
+
+    flyout.querySelectorAll('.claude-design-manip-tab').forEach(function(tabEl) {
+      tabEl.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        manipActiveTab = tabEl.getAttribute('data-tab');
+        manipEndPreview();
+        closeManipPresets();
+        flyout.querySelectorAll('.claude-design-manip-tab').forEach(function(other) {
+          other.classList.toggle('active', other === tabEl);
+        });
+        flyout.querySelectorAll('.claude-design-manip-pane').forEach(function(pane) {
+          pane.classList.toggle('active', pane.getAttribute('data-tab') === manipActiveTab);
+        });
+        // The panel just changed height; keep the box anchored
+        if (popoverElement) positionPopover();
+        refreshManipPanelValues();
+      });
+      tabEl.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
     });
 
     flyout.querySelector('.claude-design-manip-flyout-reset').addEventListener('click', function(e) {
@@ -5874,6 +5976,18 @@ export const annotationScript = `
       }
       fieldEl.textContent = text;
       fieldEl.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
+    });
+
+    var changedTabs = {};
+    if (rec) {
+      Object.keys(rec.current).forEach(function(prop) {
+        var tab = MANIP_TAB_OF_PROP[prop];
+        if (tab) changedTabs[tab] = true;
+      });
+      if (Object.keys(rec.classSwaps || {}).length) changedTabs.component = true;
+    }
+    manipPanel.querySelectorAll('.claude-design-manip-tab').forEach(function(tabEl) {
+      tabEl.classList.toggle('changed', !!changedTabs[tabEl.getAttribute('data-tab')]);
     });
 
     manipPanel.querySelectorAll('.claude-design-manip-classbtn').forEach(function(btn) {
