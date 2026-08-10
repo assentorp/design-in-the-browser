@@ -1296,6 +1296,48 @@ export const annotationScript = `
       .claude-design-manip-flyout .claude-design-manip-flyout-reset:hover { color: #fff !important; background: rgba(255, 255, 255, 0.08) !important; }
       /* The rule above resets every property, which would beat an inline display:none */
       .claude-design-manip-flyout .claude-design-manip-flyout-reset.hidden { display: none !important; }
+      /* Which pseudo-state the fields below are editing */
+      .claude-design-manip-states {
+        display: flex !important;
+        gap: 2px !important;
+        padding: 0 12px 8px !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-state {
+        all: unset !important;
+        cursor: pointer !important;
+        position: relative !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        height: 24px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 6px !important;
+        color: #7a7a7a !important;
+        font-size: 10px !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-state:hover {
+        background: rgba(255, 255, 255, 0.06) !important;
+        color: #ccc !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-state.active {
+        background: rgba(198, 97, 63, 0.22) !important;
+        color: #eb9b78 !important;
+      }
+      .claude-design-manip-state-dot {
+        position: absolute !important;
+        top: 4px !important;
+        right: 5px !important;
+        width: 4px !important;
+        height: 4px !important;
+        border-radius: 50% !important;
+        background: #c6613f !important;
+        display: none !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-state.changed .claude-design-manip-state-dot { display: block !important; }
       /* One group at a time: the whole panel stays a fixed, small height */
       .claude-design-manip-tabs {
         display: flex !important;
@@ -4673,6 +4715,9 @@ export const annotationScript = `
   function manipColorParts(el, prop) {
     var meta = MANIP_PROPS[prop] || {};
     var rec = manipChanges.get(el);
+    if (rec && manipActiveState !== 'default' && rec.states && rec.states[manipActiveState]) {
+      rec = rec.states[manipActiveState];
+    }
     var raw = (rec && rec.current[prop] !== undefined)
       ? rec.current[prop]
       : window.getComputedStyle(el).getPropertyValue(meta.readProp || prop);
@@ -4784,8 +4829,130 @@ export const annotationScript = `
   var manipSiblingCache = {};      // "base|sep" -> modifiers found for it
   var manipPanelFamilies = [];     // families rendered in the open flyout
   var manipActiveTab = 'layout';   // which group the panel shows, remembered across selections
+  var manipActiveState = 'default';// which pseudo-state the panel is editing
+  var manipStateApplied = {};      // props the state preview put on the element
+  var manipStateRules = null;      // class -> {state -> declarations}, from the page's CSS
   var manipTabHoverTimer = null;   // hover-to-switch intent delay
   var manipTabHovering = false;    // pointer is over the tab row
+
+  // ---- Pseudo-states, Tailwind-style ----
+  // Tailwind puts states on the element itself (hover:bg-x), and compiles them
+  // to .hover\\:bg-x:hover { ... }. So the element's own classes say what its
+  // states are, and the compiled rule says exactly what they look like.
+  var MANIP_STATES = [
+    { key: 'hover', label: 'Hover', prefixes: ['hover'] },
+    { key: 'focus', label: 'Focus', prefixes: ['focus', 'focus-visible'] },
+    { key: 'active', label: 'Active', prefixes: ['active'] }
+  ];
+
+  function manipStateOfPrefix(prefix) {
+    for (var i = 0; i < MANIP_STATES.length; i++) {
+      if (MANIP_STATES[i].prefixes.indexOf(prefix) !== -1) return MANIP_STATES[i].key;
+    }
+    return null;
+  }
+
+  // Only offered where Tailwind is in play — this reads variant classes, not
+  // arbitrary stylesheet rules
+  function manipIsTailwindProject() {
+    var tokens = window.__claudeDesignTokens || [];
+    for (var i = 0; i < tokens.length; i++) {
+      if (tokens[i].source === 'tailwind') return true;
+    }
+    return false;
+  }
+
+  // Declarations from every compiled state rule, keyed by the class that owns it
+  function manipEnsureStateRules() {
+    if (manipStateRules && manipStateRules.sheets === document.styleSheets.length) return manipStateRules;
+    var byClass = {};
+    var budget = 60000;
+    function walk(rules) {
+      for (var i = 0; i < rules.length && budget > 0; i++) {
+        var rule = rules[i];
+        budget--;
+        if (rule.cssRules && !rule.selectorText) { walk(rule.cssRules); continue; }
+        if (!rule.selectorText || !rule.style) continue;
+        var match = rule.selectorText.match(/^\\.((?:\\\\.|[^\\s:.,>+~])+):(hover|focus|focus-visible|active)$/);
+        if (!match) continue;
+        var className = match[1].replace(/\\\\/g, '');
+        var decls = byClass[className] || (byClass[className] = {});
+        for (var j = 0; j < rule.style.length; j++) {
+          var prop = rule.style[j];
+          decls[prop] = rule.style.getPropertyValue(prop);
+        }
+      }
+    }
+    var sheets = document.styleSheets;
+    for (var s2 = 0; s2 < sheets.length; s2++) {
+      try {
+        if (sheets[s2].cssRules) walk(sheets[s2].cssRules);
+      } catch (err) { /* cross-origin */ }
+    }
+    manipStateRules = { byClass: byClass, sheets: document.styleSheets.length };
+    return manipStateRules;
+  }
+
+  // The variant classes this element carries, grouped by state
+  function manipStateClasses(el, stateKey) {
+    var out = [];
+    if (!el || !el.classList) return out;
+    for (var i = 0; i < el.classList.length; i++) {
+      var cls = el.classList[i];
+      var colon = cls.indexOf(':');
+      if (colon <= 0) continue;
+      var prefix = cls.slice(0, colon);
+      if (manipStateOfPrefix(prefix) !== stateKey) continue;
+      out.push({ cls: cls, prefix: prefix, utility: cls.slice(colon + 1) });
+    }
+    return out;
+  }
+
+  // What the element looks like in that state: every declaration its variant
+  // classes contribute, in class order
+  function manipStateDeclarations(el, stateKey) {
+    var index = manipEnsureStateRules();
+    var decls = {};
+    manipStateClasses(el, stateKey).forEach(function(entry) {
+      var found = index.byClass[entry.cls];
+      if (!found) return;
+      Object.keys(found).forEach(function(prop) { decls[prop] = found[prop]; });
+    });
+    return decls;
+  }
+
+  // Show the element as it looks in a state, so it can be edited on sight
+  function manipEnterState(el, stateKey) {
+    manipLeaveState(el);
+    manipActiveState = stateKey;
+    if (stateKey === 'default' || !el) return;
+    var rec = manipEnsureRecord(el);
+    var stateRec = manipStateRecord(rec, stateKey, el);
+    Object.keys(stateRec.decls).forEach(function(prop) {
+      el.style.setProperty(prop, stateRec.decls[prop], 'important');
+      manipStateApplied[prop] = true;
+    });
+    Object.keys(stateRec.current).forEach(function(prop) {
+      el.style.setProperty(prop, stateRec.current[prop], 'important');
+      manipStateApplied[prop] = true;
+    });
+    queueManipReposition();
+  }
+
+  // Put the element back to its default look, keeping any default-state edits
+  function manipLeaveState(el) {
+    var props = Object.keys(manipStateApplied);
+    manipStateApplied = {};
+    manipActiveState = 'default';
+    if (!el || !el.isConnected || !props.length) return;
+    var rec = manipChanges.get(el);
+    props.forEach(function(prop) {
+      if (rec && rec.current[prop] !== undefined) el.style.setProperty(prop, rec.current[prop], 'important');
+      else if (rec) manipRestoreInline(el, rec, prop);
+      else el.style.removeProperty(prop);
+    });
+    queueManipReposition();
+  }
 
   function manipEnsureClassIndex() {
     // Dev servers inject stylesheets as you edit, so rebuild when the sheet
@@ -5172,7 +5339,7 @@ export const annotationScript = `
   // instruction can name it instead of only the resolved px. Any other way of
   // setting the prop passes nothing, which clears a previously picked token.
   function manipSetProp(el, prop, cssValue, tokenName) {
-    var rec = manipEnsureRecord(el);
+    var rec = manipActiveRecord(el);
     if (!rec.tokens) rec.tokens = {};
     var meta = MANIP_PROPS[prop] || {};
     var baseVal = rec.baseline[prop];
@@ -5197,10 +5364,18 @@ export const annotationScript = `
 
   // The single place that writes a property's state, shared by edits and undo
   function manipApplyPropState(el, prop, value, token) {
-    var rec = manipEnsureRecord(el);
+    var rec = manipActiveRecord(el);
     if (!rec.tokens) rec.tokens = {};
+    if (manipActiveState !== 'default') manipStateApplied[prop] = true;
     if (value === undefined) {
-      manipRestoreInline(el, rec, prop);
+      // Back to what the state itself shows, or to the element's own value
+      if (manipActiveState !== 'default') {
+        var read = (MANIP_PROPS[prop] || {}).readProp || prop;
+        if (rec.decls[read] !== undefined) el.style.setProperty(prop, rec.decls[read], 'important');
+        else manipRestoreInline(el, manipChanges.get(el), prop);
+      } else {
+        manipRestoreInline(el, rec, prop);
+      }
       delete rec.current[prop];
       delete rec.tokens[prop];
     } else {
@@ -5243,7 +5418,7 @@ export const annotationScript = `
   }
 
   function manipUndoRecord(el, prop) {
-    var rec = manipEnsureRecord(el);
+    var rec = manipActiveRecord(el);
     manipUndoPush({
       el: el, key: 'prop:' + prop, prop: prop,
       value: rec.current[prop], token: rec.tokens ? rec.tokens[prop] : undefined
@@ -5291,7 +5466,7 @@ export const annotationScript = `
         applied = true;
         return;
       }
-      var rec = manipEnsureRecord(el);
+      var rec = manipActiveRecord(el);
       inverse.push({ el: el, prop: snap.prop, value: rec.current[snap.prop], token: rec.tokens ? rec.tokens[snap.prop] : undefined });
       manipApplyPropState(el, snap.prop, snap.value, snap.token);
       applied = true;
@@ -5428,10 +5603,37 @@ export const annotationScript = `
     'color': 'color', 'background-color': 'color'
   };
 
+  // Editing a state writes to that state's sub-record, not the element's own
+  function manipStateRecord(rec, stateKey, el) {
+    if (!rec.states) rec.states = {};
+    if (!rec.states[stateKey]) {
+      var decls = manipStateDeclarations(el, stateKey);
+      var computed = window.getComputedStyle(el);
+      var baseline = {};
+      Object.keys(MANIP_PROPS).forEach(function(prop) {
+        var read = MANIP_PROPS[prop].readProp || prop;
+        // What the state shows today: its own declaration, or the base value
+        baseline[prop] = decls[read] !== undefined ? decls[read] : computed.getPropertyValue(read);
+      });
+      rec.states[stateKey] = { baseline: baseline, decls: decls, current: {}, tokens: {} };
+    }
+    return rec.states[stateKey];
+  }
+
+  function manipActiveRecord(el) {
+    var rec = manipEnsureRecord(el);
+    if (manipActiveState === 'default') return rec;
+    return manipStateRecord(rec, manipActiveState, el);
+  }
+
   // Property tweaks and component-class swaps both count as changes
   function manipRecordChangeCount(rec) {
     if (!rec) return 0;
-    return Object.keys(rec.current).length + Object.keys(rec.classSwaps || {}).length;
+    var total = Object.keys(rec.current).length + Object.keys(rec.classSwaps || {}).length;
+    Object.keys(rec.states || {}).forEach(function(key) {
+      total += Object.keys(rec.states[key].current).length;
+    });
+    return total;
   }
 
   // ---- Selection overlay (size readout) ----
@@ -5664,6 +5866,15 @@ export const annotationScript = `
           '</svg>' +
         '</button>' +
       '</div>' +
+      (manipIsTailwindProject()
+        ? '<div class="claude-design-manip-states">' +
+            [{ key: 'default', label: 'Default' }].concat(MANIP_STATES).map(function(state) {
+              return '<button class="claude-design-manip-state' + (state.key === manipActiveState ? ' active' : '') + '"' +
+                ' data-state="' + state.key + '" title="Edit the ' + state.label.toLowerCase() + ' state">' +
+                state.label + '<span class="claude-design-manip-state-dot"></span></button>';
+            }).join('') +
+          '</div>'
+        : '') +
       '<div class="claude-design-manip-tabs">' +
         tabs.map(function(tab) {
           return '<button class="claude-design-manip-tab' + (tab.key === manipActiveTab ? ' active' : '') + '"' +
@@ -5703,6 +5914,24 @@ export const annotationScript = `
       if (popoverElement && !manipTabHovering) positionPopover();
       refreshManipPanelValues();
     }
+
+    flyout.querySelectorAll('.claude-design-manip-state').forEach(function(stateEl) {
+      stateEl.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+      stateEl.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!manipSelected) return;
+        manipEndPreview();
+        closeManipPresets();
+        var key = stateEl.getAttribute('data-state');
+        if (key === 'default') manipLeaveState(manipSelected);
+        else manipEnterState(manipSelected, key);
+        flyout.querySelectorAll('.claude-design-manip-state').forEach(function(other) {
+          other.classList.toggle('active', other.getAttribute('data-state') === manipActiveState);
+        });
+        refreshManipPanelValues();
+      });
+    });
 
     var tabsRow = flyout.querySelector('.claude-design-manip-tabs');
     if (tabsRow) {
@@ -6164,6 +6393,13 @@ export const annotationScript = `
     manipPanel.querySelectorAll('.claude-design-manip-tab').forEach(function(tabEl) {
       tabEl.classList.toggle('changed', !!changedTabs[tabEl.getAttribute('data-tab')]);
     });
+    manipPanel.querySelectorAll('.claude-design-manip-state').forEach(function(stateEl) {
+      var key = stateEl.getAttribute('data-state');
+      var count = key === 'default'
+        ? (rec ? Object.keys(rec.current).length + Object.keys(rec.classSwaps || {}).length : 0)
+        : (rec && rec.states && rec.states[key] ? Object.keys(rec.states[key].current).length : 0);
+      stateEl.classList.toggle('changed', count > 0);
+    });
 
     manipPanel.querySelectorAll('.claude-design-manip-choice').forEach(function(btn) {
       var prop = btn.getAttribute('data-choice');
@@ -6235,6 +6471,7 @@ export const annotationScript = `
     // Close the dropdown directly: closeManipFlyout bails early when the panel
     // is already gone, which would strand the menu on the page
     closeManipPresets();
+    if (manipSelected) manipLeaveState(manipSelected);
     closeManipFlyout(true);
     if (manipSelected) {
       var rec = manipChanges.get(manipSelected);
@@ -6562,9 +6799,26 @@ export const annotationScript = `
         (swap.from || 'none') + ' to ' + swap.to + '.');
     });
 
+    var stateSentences = [];
+    Object.keys(rec.states || {}).forEach(function(stateKey) {
+      var stateRec = rec.states[stateKey];
+      var props = Object.keys(stateRec.current);
+      if (!props.length) return;
+      var values = props.map(function(prop) {
+        var token = stateRec.tokens[prop];
+        return prop + ' ' + stateRec.baseline[prop] + ' to ' + stateRec.current[prop] +
+          (token ? ' (class ' + stateKey + ':' + token + ')' : '');
+      });
+      stateSentences.push('On ' + stateKey + ', change these CSS values: ' + values.join('; ') + '.');
+    });
+    sentences = sentences.concat(stateSentences);
+
     if (!sentences.length) return '';
     sentences.push('The preview shows the result.');
 
+    if (stateSentences.length) {
+      sentences.push('Write each state change as a Tailwind variant class on the element, for example hover:bg-brand.');
+    }
     if (props.length) {
       sentences.push('The preview uses inline styles.');
       sentences.push('Write these values in the source code.');
