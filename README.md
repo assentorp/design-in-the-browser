@@ -5,9 +5,7 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Contributions](https://img.shields.io/badge/contributions-not%20accepted-lightgrey.svg)](CONTRIBUTING.md)
 
-[![Watch the video](<img width="1280" height="729" alt="maxresdefault" src="https://github.com/user-attachments/assets/93ac854e-577f-438f-b90e-31d407676569" />
-)](https://www.youtube.com/watch?v=VZx9wBM2G-Y)
-
+[![Watch the video](https://github.com/user-attachments/assets/93ac854e-577f-438f-b90e-31d407676569)](https://www.youtube.com/watch?v=VZx9wBM2G-Y)
 No more tab-switching, screenshot-pasting, and explaining which button you mean. Just click it.
 
 A desktop app for visually annotating elements in a live browser and sending edit instructions directly to an AI coding assistant running in a side-by-side terminal. Point at what you want changed, describe the change, and let the AI handle the code.
