@@ -4733,6 +4733,8 @@ export const annotationScript = `
   var manipSiblingCache = {};      // "base|sep" -> modifiers found for it
   var manipPanelFamilies = [];     // families rendered in the open flyout
   var manipActiveTab = 'layout';   // which group the panel shows, remembered across selections
+  var manipTabHoverTimer = null;   // hover-to-switch intent delay
+  var manipTabHovering = false;    // pointer is over the tab row
 
   function manipEnsureClassIndex() {
     // Dev servers inject stylesheets as you edit, so rebuild when the sheet
@@ -5589,22 +5591,48 @@ export const annotationScript = `
       positionManipPresets();
     });
 
+    function showTab(key) {
+      if (!manipPanel || key === manipActiveTab) return;
+      manipActiveTab = key;
+      manipEndPreview();
+      closeManipPresets();
+      flyout.querySelectorAll('.claude-design-manip-tab').forEach(function(other) {
+        other.classList.toggle('active', other.getAttribute('data-tab') === key);
+      });
+      flyout.querySelectorAll('.claude-design-manip-pane').forEach(function(pane) {
+        pane.classList.toggle('active', pane.getAttribute('data-tab') === key);
+      });
+      // Panes differ in height. Re-anchoring while the pointer is on the tab row
+      // could slide the tabs out from under it, so that waits until it leaves.
+      if (popoverElement && !manipTabHovering) positionPopover();
+      refreshManipPanelValues();
+    }
+
+    var tabsRow = flyout.querySelector('.claude-design-manip-tabs');
+    if (tabsRow) {
+      tabsRow.addEventListener('mouseenter', function() { manipTabHovering = true; });
+      tabsRow.addEventListener('mouseleave', function() {
+        manipTabHovering = false;
+        clearTimeout(manipTabHoverTimer);
+        if (popoverElement) positionPopover();
+      });
+    }
+
     flyout.querySelectorAll('.claude-design-manip-tab').forEach(function(tabEl) {
+      var key = tabEl.getAttribute('data-tab');
+      // Hover navigates, after a beat — a pointer sweeping across the row
+      // shouldn't flick through every group on the way past
+      tabEl.addEventListener('mouseenter', function() {
+        if (manipDrag || manipPresetsMenu) return;
+        clearTimeout(manipTabHoverTimer);
+        manipTabHoverTimer = setTimeout(function() { showTab(key); }, 70);
+      });
+      tabEl.addEventListener('mouseleave', function() { clearTimeout(manipTabHoverTimer); });
       tabEl.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        manipActiveTab = tabEl.getAttribute('data-tab');
-        manipEndPreview();
-        closeManipPresets();
-        flyout.querySelectorAll('.claude-design-manip-tab').forEach(function(other) {
-          other.classList.toggle('active', other === tabEl);
-        });
-        flyout.querySelectorAll('.claude-design-manip-pane').forEach(function(pane) {
-          pane.classList.toggle('active', pane.getAttribute('data-tab') === manipActiveTab);
-        });
-        // The panel just changed height; keep the box anchored
-        if (popoverElement) positionPopover();
-        refreshManipPanelValues();
+        clearTimeout(manipTabHoverTimer);
+        showTab(key);
       });
       tabEl.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
     });
@@ -5651,6 +5679,8 @@ export const annotationScript = `
   function closeManipFlyout(immediate) {
     var panel = manipPanel;
     if (!panel) return;
+    clearTimeout(manipTabHoverTimer);
+    manipTabHovering = false;
     closeManipPresets();
     manipHoverField = null;
     manipPanel = null;
