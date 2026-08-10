@@ -1641,6 +1641,12 @@ export const annotationScript = `
       .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px !important; }
       .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch { border: none !important; border-radius: 4px !important; }
       .claude-design-manip-color-row.changed input[type="color"] { border-color: rgba(198, 97, 63, 0.8) !important; }
+      .claude-design-manip-alpha {
+        flex: 0 0 auto !important;
+        min-width: 18px !important;
+        text-align: right !important;
+      }
+      .claude-design-manip-color-row .claude-design-manip-glyph { min-width: 0 !important; }
       .claude-design-manip-color-hex {
         color: #eaeaea !important;
         font-size: 12px !important;
@@ -4662,6 +4668,48 @@ export const annotationScript = `
     return rgbToHex(parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), alpha);
   }
 
+  // A colour field can be shown two ways: the colour itself, or its alpha as a
+  // percentage. Tailwind writes that alpha as a /NN modifier on the utility.
+  function manipColorParts(el, prop) {
+    var meta = MANIP_PROPS[prop] || {};
+    var rec = manipChanges.get(el);
+    var raw = (rec && rec.current[prop] !== undefined)
+      ? rec.current[prop]
+      : window.getComputedStyle(el).getPropertyValue(meta.readProp || prop);
+    var ctx = manipColorCtx();
+    ctx.fillStyle = '#000000';
+    ctx.fillStyle = String(raw).trim();
+    var normalized = ctx.fillStyle;
+    if (normalized.charAt(0) === '#') return { hex: normalized, alpha: 1 };
+    var m = normalized.match(/^rgba?\\(\\s*([0-9.]+)[,\\s]+([0-9.]+)[,\\s]+([0-9.]+)(?:[,\\s/]+([0-9.]+))?\\s*\\)$/);
+    if (!m) return { hex: '#000000', alpha: 1 };
+    return {
+      hex: rgbToHex(parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)),
+      alpha: m[4] === undefined ? 1 : parseFloat(m[4])
+    };
+  }
+
+  // Choosing a colour on a fully transparent one means you want to see it, so
+  // alpha 0 is not worth preserving
+  function manipKeepAlpha(el, prop) {
+    var alpha = manipColorParts(el, prop).alpha;
+    return alpha > 0 ? alpha : 1;
+  }
+
+  function manipColorWithAlpha(hex, alpha) {
+    var c = colorToRgb(hex);
+    if (alpha >= 0.999) return rgbToHex(c.r, c.g, c.b);
+    return 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + (Math.round(alpha * 1000) / 1000) + ')';
+  }
+
+  // bg-primary + 10% -> bg-primary/10, the way Tailwind writes it
+  function manipTokenWithAlpha(token, alpha) {
+    if (!token) return token;
+    var base = String(token).replace(/\\/\\d+$/, '');
+    if (alpha >= 0.999) return base;
+    return base + '/' + Math.round(alpha * 100);
+  }
+
   // The project's colors for a property: text-* for color, bg-* for fill,
   // plus every CSS colour variable. Project-specific entries come first.
   function manipColorPresets(prop) {
@@ -5289,6 +5337,30 @@ export const annotationScript = `
     manipUndoLastEl = null;
   }
 
+  // Reading and writing a field, whichever of the two it shows
+  function manipFieldMeta(prop, view) {
+    if (view === 'alpha') return { min: 0, max: 100, step: 1, unit: '' };
+    return MANIP_PROPS[prop] || {};
+  }
+
+  function manipReadField(el, prop, view) {
+    if (view === 'alpha') return Math.round(manipColorParts(el, prop).alpha * 100);
+    return manipCurrentNumeric(el, prop);
+  }
+
+  function manipWriteField(el, prop, view, value) {
+    if (view === 'alpha') {
+      var parts = manipColorParts(el, prop);
+      var alpha = Math.max(0, Math.min(100, value)) / 100;
+      var rec = manipChanges.get(el);
+      var token = rec && rec.tokens ? rec.tokens[prop] : undefined;
+      manipSetProp(el, prop, manipColorWithAlpha(parts.hex, alpha), manipTokenWithAlpha(token, alpha));
+      return;
+    }
+    var meta = MANIP_PROPS[prop] || {};
+    manipSetProp(el, prop, value + (meta.unit || ''));
+  }
+
   function manipCurrentNumeric(el, prop) {
     var computed = window.getComputedStyle(el);
     var v = parseFloat(computed.getPropertyValue((MANIP_PROPS[prop] || {}).readProp || prop));
@@ -5469,6 +5541,9 @@ export const annotationScript = `
     return '<div class="claude-design-manip-color-row" data-prop="' + prop + '">' +
       '<input type="color" data-prop="' + prop + '">' +
       '<span class="claude-design-manip-color-hex"></span>' +
+      '<span class="claude-design-manip-field claude-design-manip-alpha" data-prop="' + prop + '"' +
+        ' data-view="alpha" title="opacity %"></span>' +
+      '<span class="claude-design-manip-glyph">%</span>' +
       manipPresetBtnHtml([prop], null, 'Project colors') +
     '</div>';
   }
@@ -5680,7 +5755,8 @@ export const annotationScript = `
     flyout.querySelectorAll('input[type="color"]').forEach(function(input) {
       input.addEventListener('input', function() {
         if (!manipSelected) return;
-        manipSetProp(manipSelected, input.getAttribute('data-prop'), input.value);
+        var prop = input.getAttribute('data-prop');
+        manipSetProp(manipSelected, prop, manipColorWithAlpha(input.value, manipKeepAlpha(manipSelected, prop)));
         refreshManipPanelValues();
       });
       input.addEventListener('mousedown', function(e) { e.stopPropagation(); });
@@ -6003,7 +6079,7 @@ export const annotationScript = `
     props.forEach(function(prop) {
       var meta = MANIP_PROPS[prop] || {};
       if (meta.color) {
-        values[prop] = item.color;
+        values[prop] = manipColorWithAlpha(item.color, manipKeepAlpha(manipSelected, prop));
         return;
       }
       var v = item.px;
@@ -6020,7 +6096,12 @@ export const annotationScript = `
     var values = manipPresetValues(props, item);
     manipUndoBeginBatch();
     props.forEach(function(prop) {
-      manipSetProp(manipSelected, prop, values[prop], item.token);
+      var token = item.token;
+      // A translucent colour is written bg-brand/10, so the token carries it
+      if ((MANIP_PROPS[prop] || {}).color) {
+        token = manipTokenWithAlpha(token, manipKeepAlpha(manipSelected, prop));
+      }
+      manipSetProp(manipSelected, prop, values[prop], token);
     });
     manipUndoEndBatch();
     refreshManipPanelValues();
@@ -6051,6 +6132,11 @@ export const annotationScript = `
     manipPanel.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
       if (fieldEl.querySelector('input')) return; // being edited by typing
       var prop = fieldEl.getAttribute('data-prop');
+      if (fieldEl.getAttribute('data-view') === 'alpha') {
+        fieldEl.textContent = String(manipReadField(el, prop, 'alpha'));
+        fieldEl.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
+        return;
+      }
       var meta = MANIP_PROPS[prop] || {};
       var raw = computed.getPropertyValue(meta.readProp || prop);
       var v = parseFloat(raw);
@@ -6111,14 +6197,9 @@ export const annotationScript = `
       var prop = row.getAttribute('data-prop');
       var input = row.querySelector('input');
       var hexLabel = row.querySelector('.claude-design-manip-color-hex');
-      var raw = computed.getPropertyValue((MANIP_PROPS[prop] || {}).readProp || prop);
-      var hex = '#000000';
-      try {
-        var c = colorToRgb(raw);
-        hex = rgbToHex(c.r, c.g, c.b);
-      } catch (err) { /* keep default */ }
-      if (document.activeElement !== input) input.value = hex;
-      hexLabel.textContent = hex;
+      var parts = manipColorParts(el, prop);
+      if (document.activeElement !== input) input.value = parts.hex;
+      hexLabel.textContent = parts.hex;
       row.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
     });
 
@@ -6203,10 +6284,11 @@ export const annotationScript = `
     e.stopPropagation();
     manipUndoBeginBatch();
     var prop = fieldEl.getAttribute('data-prop');
+    var view = fieldEl.getAttribute('data-view');
     manipDrag = {
-      kind: 'scrub', prop: prop, fieldEl: fieldEl,
+      kind: 'scrub', prop: prop, view: view, fieldEl: fieldEl,
       startX: e.clientX,
-      startVal: manipCurrentNumeric(manipSelected, prop),
+      startVal: manipReadField(manipSelected, prop, view),
       moved: false
     };
     fieldEl.classList.add('scrubbing');
@@ -6214,8 +6296,8 @@ export const annotationScript = `
 
   // One arrow-key step for a property: Shift = 10x, Alt = fine (0.1x),
   // clamped and rounded the same way scrubbing is.
-  function manipStepValue(prop, from, dir, ev) {
-    var meta = MANIP_PROPS[prop] || {};
+  function manipStepValue(prop, from, dir, ev, metaOverride) {
+    var meta = metaOverride || MANIP_PROPS[prop] || {};
     var mult = ev && ev.shiftKey ? 10 : (ev && ev.altKey ? 0.1 : 1);
     var v = from + dir * (meta.step || 1) * mult;
     if (meta.min !== undefined) v = Math.max(meta.min, v);
@@ -6231,18 +6313,20 @@ export const annotationScript = `
     var el = manipSelected;
     if (!el || !fieldEl) return;
     var prop = fieldEl.getAttribute('data-prop');
-    var meta = MANIP_PROPS[prop] || {};
+    var view = fieldEl.getAttribute('data-view');
+    var meta = manipFieldMeta(prop, view);
     if (meta.color) return;
-    var v = manipStepValue(prop, manipCurrentNumeric(el, prop), dir, ev);
-    manipSetProp(el, prop, v + (meta.unit || ''));
+    var v = manipStepValue(prop, manipReadField(el, prop, view), dir, ev, meta);
+    manipWriteField(el, prop, view, v);
     refreshManipPanelValues();
   }
 
   function beginManipFieldEdit(fieldEl, prop) {
     var el = manipSelected;
     if (!el) return;
-    var meta = MANIP_PROPS[prop] || {};
-    var cur = manipCurrentNumeric(el, prop);
+    var view = fieldEl.getAttribute('data-view');
+    var meta = manipFieldMeta(prop, view);
+    var cur = manipReadField(el, prop, view);
     var display = meta.decimals ? (Math.round(cur * 10) / 10) : Math.round(cur);
     fieldEl.innerHTML = '<input class="claude-design-manip-field-input" type="text">';
     var input = fieldEl.querySelector('input');
@@ -6259,23 +6343,25 @@ export const annotationScript = `
         if (meta.min !== undefined) v = Math.max(meta.min, v);
         if (meta.max !== undefined) v = Math.min(meta.max, v);
         if (meta.step === 100) v = Math.round(v / 100) * 100;
-        manipSetProp(el, prop, v + (meta.unit || ''));
+        manipWriteField(el, prop, view, v);
       }
+      // Drop the input so the field goes back to displaying its value
+      fieldEl.textContent = '';
       refreshManipPanelValues();
     }
     input.addEventListener('keydown', function(ev) {
       ev.stopPropagation();
       if (ev.key === 'Enter') commit();
-      if (ev.key === 'Escape') { done = true; refreshManipPanelValues(); }
+      if (ev.key === 'Escape') { done = true; fieldEl.textContent = ''; refreshManipPanelValues(); }
       // Up/down nudge the value and preview it live, leaving the field open
       if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
         ev.preventDefault();
         var from = parseFloat(input.value);
-        if (!isFinite(from)) from = manipCurrentNumeric(el, prop);
-        var next = manipStepValue(prop, from, ev.key === 'ArrowUp' ? 1 : -1, ev);
+        if (!isFinite(from)) from = manipReadField(el, prop, view);
+        var next = manipStepValue(prop, from, ev.key === 'ArrowUp' ? 1 : -1, ev, meta);
         input.value = String(next);
         input.select();
-        manipSetProp(el, prop, next + (meta.unit || ''));
+        manipWriteField(el, prop, view, next);
         refreshManipPanelValues();
       }
     });
@@ -6323,7 +6409,7 @@ export const annotationScript = `
     } else if (manipDrag.kind === 'scrub') {
       var sdx = e.clientX - manipDrag.startX;
       if (Math.abs(sdx) > 2) manipDrag.moved = true;
-      var meta = MANIP_PROPS[manipDrag.prop] || {};
+      var meta = manipFieldMeta(manipDrag.prop, manipDrag.view);
       var mult = e.shiftKey ? 10 : (e.altKey ? 0.1 : 1);
       var v = manipDrag.startVal + sdx * (meta.step || 1) * mult;
       if (meta.min !== undefined) v = Math.max(meta.min, v);
@@ -6331,7 +6417,7 @@ export const annotationScript = `
       if (meta.step === 100) v = Math.round(v / 100) * 100;
       else if (meta.decimals) v = Math.round(v * 10) / 10;
       else v = Math.round(v);
-      manipSetProp(el, manipDrag.prop, v + (meta.unit || ''));
+      manipWriteField(el, manipDrag.prop, manipDrag.view, v);
     }
     refreshManipPanelValues();
   }
