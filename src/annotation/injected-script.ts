@@ -1480,7 +1480,7 @@ export const annotationScript = `
         text-overflow: ellipsis !important;
       }
       /* Component size/variant picker: a field-shaped button */
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn {
+      .claude-design-manip-preset-btn.claude-design-manip-fieldbtn {
         width: 100% !important;
         height: 32px !important;
         justify-content: space-between !important;
@@ -1493,13 +1493,13 @@ export const annotationScript = `
         font-size: 12px !important;
         box-sizing: border-box !important;
       }
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn:hover { background: #383838 !important; color: #fff !important; }
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn.changed {
+      .claude-design-manip-preset-btn.claude-design-manip-fieldbtn:hover { background: #383838 !important; color: #fff !important; }
+      .claude-design-manip-preset-btn.claude-design-manip-fieldbtn.changed {
         color: #eb9b78 !important;
         border-color: rgba(198, 97, 63, 0.5) !important;
         background: rgba(198, 97, 63, 0.14) !important;
       }
-      .claude-design-manip-preset-btn.claude-design-manip-classbtn.unset { color: #7a7a7a !important; }
+      .claude-design-manip-preset-btn.claude-design-manip-fieldbtn.unset { color: #7a7a7a !important; }
       .claude-design-manip-classbtn-value {
         overflow: hidden !important;
         text-overflow: ellipsis !important;
@@ -4474,6 +4474,9 @@ export const annotationScript = `
     'line-height':      { min: 0, step: 1, unit: 'px' },
     'letter-spacing':   { step: 0.1, unit: 'px', decimals: 1 },
     'border-radius':    { min: 0, step: 1, unit: 'px' },
+    'border-width':     { min: 0, step: 1, unit: 'px', readProp: 'border-top-width' },
+    'border-style':     { choices: ['none', 'solid', 'dashed', 'dotted', 'double'], readProp: 'border-top-style' },
+    'border-color':     { color: true, readProp: 'border-top-color' },
     'gap':              { min: 0, step: 1, unit: 'px' },
     'color':            { color: true },
     'background-color': { color: true }
@@ -4489,7 +4492,7 @@ export const annotationScript = `
     'width': 'w', 'height': 'h',
     'margin-top': 'mt', 'margin-right': 'mr', 'margin-bottom': 'mb', 'margin-left': 'ml',
     'padding-top': 'pt', 'padding-right': 'pr', 'padding-bottom': 'pb', 'padding-left': 'pl',
-    'gap': 'gap', 'font-size': 'text', 'font-weight': 'font',
+    'gap': 'gap', 'border-width': 'border', 'font-size': 'text', 'font-weight': 'font',
     'line-height': 'leading', 'letter-spacing': 'tracking', 'border-radius': 'rounded'
   };
 
@@ -4663,7 +4666,7 @@ export const annotationScript = `
   // plus every CSS colour variable. Project-specific entries come first.
   function manipColorPresets(prop) {
     var tokens = window.__claudeDesignTokens || [];
-    var prefix = prop === 'color' ? 'text-' : 'bg-';
+    var prefix = prop === 'color' ? 'text-' : (prop === 'border-color' ? 'border-' : 'bg-');
     var own = [];
     var stock = [];
     var seen = {};
@@ -5086,7 +5089,7 @@ export const annotationScript = `
       var baseline = {};
       var inline = {};
       Object.keys(MANIP_PROPS).forEach(function(p) {
-        baseline[p] = computed.getPropertyValue(p);
+        baseline[p] = computed.getPropertyValue(MANIP_PROPS[p].readProp || p);
         inline[p] = { value: el.style.getPropertyValue(p), priority: el.style.getPropertyPriority(p) };
       });
       rec = {
@@ -5288,7 +5291,7 @@ export const annotationScript = `
 
   function manipCurrentNumeric(el, prop) {
     var computed = window.getComputedStyle(el);
-    var v = parseFloat(computed.getPropertyValue(prop));
+    var v = parseFloat(computed.getPropertyValue((MANIP_PROPS[prop] || {}).readProp || prop));
     if (!isFinite(v)) {
       if (prop === 'line-height') {
         v = (parseFloat(computed.getPropertyValue('font-size')) || 16) * 1.2;
@@ -5348,6 +5351,7 @@ export const annotationScript = `
     'width': 'layout', 'height': 'layout', 'border-radius': 'layout', 'gap': 'layout',
     'margin-top': 'spacing', 'margin-right': 'spacing', 'margin-bottom': 'spacing', 'margin-left': 'spacing',
     'padding-top': 'spacing', 'padding-right': 'spacing', 'padding-bottom': 'spacing', 'padding-left': 'spacing',
+    'border-width': 'border', 'border-style': 'border', 'border-color': 'border',
     'font-size': 'text', 'font-weight': 'text', 'line-height': 'text', 'letter-spacing': 'text',
     'color': 'color', 'background-color': 'color'
   };
@@ -5450,7 +5454,7 @@ export const annotationScript = `
         '</div>';
       fam.groups.forEach(function(group) {
         html += manipLabelHtml(group.label, group !== fam.groups[0]) +
-          '<button class="claude-design-manip-preset-btn claude-design-manip-classbtn"' +
+          '<button class="claude-design-manip-preset-btn claude-design-manip-fieldbtn claude-design-manip-classbtn"' +
             ' data-fam="' + fi + '" data-group="' + group.key + '"' +
             ' title="' + escapeHtml(fam.base) + ' ' + group.label.toLowerCase() + '" tabindex="-1">' +
             '<span class="claude-design-manip-classbtn-value"></span>' + MANIP_CARET_SVG +
@@ -5483,6 +5487,14 @@ export const annotationScript = `
       '<span class="claude-design-manip-field" data-prop="' + prop + '" title="' + prop + '"></span>' +
       manipPresetBtnHtml([prop]) +
     '</span>';
+  }
+
+  // Keyword properties (border-style) get a button that opens their choices
+  function manipChoiceHtml(prop) {
+    return '<button class="claude-design-manip-preset-btn claude-design-manip-fieldbtn claude-design-manip-choice"' +
+      ' data-choice="' + prop + '" title="' + prop + '" tabindex="-1">' +
+      '<span class="claude-design-manip-classbtn-value"></span>' + MANIP_CARET_SVG +
+    '</button>';
   }
 
   // A labelled half-width cell in the two-column grid
@@ -5548,6 +5560,15 @@ export const annotationScript = `
           '</div>' +
         '</div>' });
     }
+    tabs.push({ key: 'border', label: 'Border', body:
+      '<div class="claude-design-manip-section">' +
+        '<div class="claude-design-manip-grid">' +
+          manipCellHtml('Width', manipFieldHtml('border-width')) +
+          manipCellHtml('Style', manipChoiceHtml('border-style')) +
+        '</div>' +
+        manipLabelHtml('Color', true) +
+        manipColorRowHtml('border-color') +
+      '</div>' });
     tabs.push({ key: 'color', label: 'Color', body:
       '<div class="claude-design-manip-section">' +
         '<div class="claude-design-manip-grid">' +
@@ -5872,9 +5893,46 @@ export const annotationScript = `
     if (currentEl) menu.scrollTop = Math.max(0, currentEl.offsetTop - menu.clientHeight / 2);
   }
 
+  function openManipChoiceMenu(btn) {
+    var prop = btn.getAttribute('data-choice');
+    var meta = MANIP_PROPS[prop] || {};
+    var choices = meta.choices || [];
+    var current = window.getComputedStyle(manipSelected).getPropertyValue(meta.readProp || prop).trim();
+    var html = '<div class="claude-design-manip-presets-head">' + escapeHtml(prop) + '</div>';
+    choices.forEach(function(choice, i) {
+      html += '<div class="claude-design-manip-preset-item' + (choice === current ? ' current' : '') + '" data-i="' + i + '">' +
+        '<span class="claude-design-manip-preset-name">' + choice + '</span>' +
+      '</div>';
+    });
+    showManipMenu(btn, html, {
+      onPreview: function(i) {
+        manipPreviewProps(manipSelected, manipChoiceValues(prop, choices[i]));
+      },
+      onPick: function(i) {
+        manipUndoBeginBatch();
+        var values = manipChoiceValues(prop, choices[i]);
+        Object.keys(values).forEach(function(key) { manipSetProp(manipSelected, key, values[key]); });
+        manipUndoEndBatch();
+      }
+    });
+  }
+
+  // Width alone shows nothing while the style is none, so a visible style
+  // brings a width with it
+  function manipChoiceValues(prop, choice) {
+    var values = {};
+    values[prop] = choice;
+    if (prop === 'border-style' && choice !== 'none' &&
+        manipCurrentNumeric(manipSelected, 'border-width') === 0) {
+      values['border-width'] = '1px';
+    }
+    return values;
+  }
+
   function openManipPresets(btn) {
     closeManipPresets();
     if (!manipSelected) return;
+    if (btn.hasAttribute('data-choice')) return openManipChoiceMenu(btn);
     if (btn.hasAttribute('data-fam')) return openManipClassMenu(btn);
     var props = (btn.getAttribute('data-props') || '').split(',').filter(Boolean);
     if (!props.length) return;
@@ -5994,7 +6052,7 @@ export const annotationScript = `
       if (fieldEl.querySelector('input')) return; // being edited by typing
       var prop = fieldEl.getAttribute('data-prop');
       var meta = MANIP_PROPS[prop] || {};
-      var raw = computed.getPropertyValue(prop);
+      var raw = computed.getPropertyValue(meta.readProp || prop);
       var v = parseFloat(raw);
       var text;
       if (!isFinite(v)) {
@@ -6021,6 +6079,14 @@ export const annotationScript = `
       tabEl.classList.toggle('changed', !!changedTabs[tabEl.getAttribute('data-tab')]);
     });
 
+    manipPanel.querySelectorAll('.claude-design-manip-choice').forEach(function(btn) {
+      var prop = btn.getAttribute('data-choice');
+      var meta = MANIP_PROPS[prop] || {};
+      var valueEl = btn.querySelector('.claude-design-manip-classbtn-value');
+      if (valueEl) valueEl.textContent = computed.getPropertyValue(meta.readProp || prop).trim() || 'none';
+      btn.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
+    });
+
     manipPanel.querySelectorAll('.claude-design-manip-classbtn').forEach(function(btn) {
       var fam = manipPanelFamilies[parseInt(btn.getAttribute('data-fam'), 10)];
       if (!fam) return;
@@ -6045,7 +6111,7 @@ export const annotationScript = `
       var prop = row.getAttribute('data-prop');
       var input = row.querySelector('input');
       var hexLabel = row.querySelector('.claude-design-manip-color-hex');
-      var raw = computed.getPropertyValue(prop);
+      var raw = computed.getPropertyValue((MANIP_PROPS[prop] || {}).readProp || prop);
       var hex = '#000000';
       try {
         var c = colorToRgb(raw);
