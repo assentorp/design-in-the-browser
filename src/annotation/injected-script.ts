@@ -2029,10 +2029,12 @@ export const annotationScript = `
   }
 
   // Escape HTML for safe display
+  // Reused: menu builds call this once per row/swatch
+  let escapeHtmlDiv = null;
   function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (!escapeHtmlDiv) escapeHtmlDiv = document.createElement('div');
+    escapeHtmlDiv.textContent = text;
+    return escapeHtmlDiv.innerHTML;
   }
 
   // Color format conversion utilities
@@ -2134,11 +2136,20 @@ export const annotationScript = `
   }
 
   // Convert any CSS color to RGB using canvas
+  // One shared canvas: this runs several times per frame while a colour is
+  // scrubbed or picked, and creating a canvas per call dominates the cost
+  var colorToRgbCtx = null;
   function colorToRgb(colorStr) {
-    var canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
-    var ctx = canvas.getContext('2d');
+    if (!colorToRgbCtx) {
+      var canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      colorToRgbCtx = canvas.getContext('2d', { willReadFrequently: true });
+    }
+    var ctx = colorToRgbCtx;
+    ctx.clearRect(0, 0, 1, 1);
+    // A fresh canvas paints invalid values black; seeding keeps that behaviour
+    ctx.fillStyle = '#000000';
     ctx.fillStyle = colorStr;
     ctx.fillRect(0, 0, 1, 1);
     var data = ctx.getImageData(0, 0, 1, 1).data;
@@ -5081,6 +5092,9 @@ export const annotationScript = `
   // list: the project's shadow-* utilities and --shadow* variables, deduped by
   // what they actually resolve to. "None" always leads, so one can be removed.
   function manipShadowPresets() {
+    // Cached per panel open like the page sweeps: the label lookup runs this
+    // on every refresh, and resolving each token walks the root's variables
+    if (manipPagePresetCache['shadow:presets']) return manipPagePresetCache['shadow:presets'];
     var tokens = window.__claudeDesignTokens || [];
     var out = [{ name: 'none', value: 'none', token: null }];
     var seen = {};
@@ -5094,6 +5108,7 @@ export const annotationScript = `
       seen[key] = true;
       out.push({ name: t.name, value: value, token: t.name });
     });
+    manipPagePresetCache['shadow:presets'] = out;
     return out;
   }
 
@@ -5203,7 +5218,9 @@ export const annotationScript = `
     var rec = manipChanges.get(el);
     var token = rec && rec.tokens ? rec.tokens['box-shadow'] : null;
     if (token) return token;
-    var current = manipNormalizeShadow(window.getComputedStyle(el).getPropertyValue('box-shadow'));
+    // Through the record when the panel wrote the value: a computed read right
+    // after a style write forces a recalc, and this runs per refresh
+    var current = manipNormalizeShadow(manipCurrentShadow(el));
     if (current === 'none') return 'none';
     var match = null;
     manipShadowPresets().forEach(function(item) {
@@ -7192,7 +7209,12 @@ export const annotationScript = `
     var computed = window.getComputedStyle(el);
     var rec = manipChanges.get(el);
 
-    manipPanel.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
+    // Only the visible pane's controls are read and written: this runs on
+    // every frame of a scrub, and each computed read after a style write costs
+    // a recalc. A pane that comes back on screen is refreshed by showTab.
+    var pane = manipPanel.querySelector('.claude-design-manip-pane.active') || manipPanel;
+
+    pane.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
       if (fieldEl.querySelector('input')) return; // being edited by typing
       var prop = fieldEl.getAttribute('data-prop');
       var view = fieldEl.getAttribute('data-view');
@@ -7237,7 +7259,7 @@ export const annotationScript = `
       stateBtn.classList.toggle('on-state', manipActiveState !== 'default');
     }
 
-    manipPanel.querySelectorAll('.claude-design-manip-choice').forEach(function(btn) {
+    pane.querySelectorAll('.claude-design-manip-choice').forEach(function(btn) {
       var prop = btn.getAttribute('data-choice');
       var meta = MANIP_PROPS[prop] || {};
       var valueEl = btn.querySelector('.claude-design-manip-classbtn-value');
@@ -7245,7 +7267,7 @@ export const annotationScript = `
       btn.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
     });
 
-    manipPanel.querySelectorAll('.claude-design-manip-shadowbtn').forEach(function(btn) {
+    pane.querySelectorAll('.claude-design-manip-shadowbtn').forEach(function(btn) {
       var valueEl = btn.querySelector('.claude-design-manip-classbtn-value');
       var label = manipShadowLabel(el);
       if (valueEl) valueEl.textContent = label;
@@ -7253,7 +7275,7 @@ export const annotationScript = `
       btn.classList.toggle('unset', label === 'none');
     });
 
-    manipPanel.querySelectorAll('.claude-design-manip-classbtn').forEach(function(btn) {
+    pane.querySelectorAll('.claude-design-manip-classbtn').forEach(function(btn) {
       var fam = manipPanelFamilies[parseInt(btn.getAttribute('data-fam'), 10)];
       if (!fam) return;
       var groupKey = btn.getAttribute('data-group');
@@ -7273,7 +7295,7 @@ export const annotationScript = `
       btn.classList.toggle('unset', !cls);
     });
 
-    manipPanel.querySelectorAll('.claude-design-manip-color-row').forEach(function(row) {
+    pane.querySelectorAll('.claude-design-manip-color-row').forEach(function(row) {
       var prop = row.getAttribute('data-prop');
       var fill = row.querySelector('.claude-design-manip-swatch-fill');
       var hexLabel = row.querySelector('.claude-design-manip-color-hex');
@@ -7285,7 +7307,7 @@ export const annotationScript = `
 
     // The stack can change under the panel (a preset, an undo), so the rows
     // follow it rather than only the fields inside them
-    var shadowHost = manipPanel.querySelector('.claude-design-manip-shadow-list');
+    var shadowHost = pane.querySelector('.claude-design-manip-shadow-list');
     if (shadowHost) {
       var layers = manipShadowLayers(el);
       if (shadowHost.getAttribute('data-count') !== String(layers.length)) {
