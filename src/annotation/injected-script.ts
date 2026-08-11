@@ -105,6 +105,13 @@ export const annotationScript = `
         outline: 3px solid #c6613f !important;
         outline-offset: 2px !important;
       }
+      /* While the design panel is open the element is being styled, so the ring
+         gets out of the way of the edge it would otherwise hide: a border or a
+         shadow has to be readable as you change it. Corner marks keep saying
+         which element this is. */
+      .claude-design-selected.claude-design-selected-quiet {
+        outline: none !important;
+      }
       .claude-design-popover {
         position: fixed !important;
         z-index: 2147483647 !important;
@@ -443,6 +450,12 @@ export const annotationScript = `
       }
       .claude-design-code-btn *  {
         cursor: default !important;
+      }
+      /* It sits inside the element's top-right corner, which is a corner you are
+         styling once the design panel is open */
+      .claude-design-code-btn.hidden-for-panel {
+        opacity: 0 !important;
+        pointer-events: none !important;
       }
       .claude-design-code-btn:hover {
         background: #a8522f !important;
@@ -1115,6 +1128,34 @@ export const annotationScript = `
       }
 
       /* ---- Direct manipulation (part of Edit mode) ---- */
+      .claude-design-manip-corner {
+        position: fixed !important;
+        box-sizing: border-box !important;
+        pointer-events: none !important;
+        z-index: 2147483646 !important;
+        width: 12px !important;
+        height: 12px !important;
+        border: 2px solid #c6613f !important;
+        opacity: 0 !important;
+        transition: opacity 0.16s ease !important;
+      }
+      .claude-design-manip-corner.visible { opacity: 1 !important; }
+      .claude-design-manip-corner.tl {
+        border-right: none !important; border-bottom: none !important;
+        border-top-left-radius: 4px !important;
+      }
+      .claude-design-manip-corner.tr {
+        border-left: none !important; border-bottom: none !important;
+        border-top-right-radius: 4px !important;
+      }
+      .claude-design-manip-corner.bl {
+        border-right: none !important; border-top: none !important;
+        border-bottom-left-radius: 4px !important;
+      }
+      .claude-design-manip-corner.br {
+        border-left: none !important; border-top: none !important;
+        border-bottom-right-radius: 4px !important;
+      }
       .claude-design-manip-sizelabel {
         position: fixed !important;
         pointer-events: none !important;
@@ -1550,21 +1591,29 @@ export const annotationScript = `
         background: rgba(198, 97, 63, 0.14) !important;
         border-color: rgba(198, 97, 63, 0.5) !important;
       }
-      .claude-design-manip-color-row input[type="color"] {
-        -webkit-appearance: none !important;
-        appearance: none !important;
+      /* Swatches sit on a checkerboard so a translucent colour reads as one */
+      .claude-design-manip-flyout .claude-design-manip-swatch {
+        all: unset !important;
         width: 20px !important;
         height: 20px !important;
-        padding: 0 !important;
-        margin: 0 !important;
         border: 1px solid rgba(255, 255, 255, 0.14) !important;
         border-radius: 5px !important;
-        background: transparent !important;
         cursor: pointer !important;
-        flex-shrink: 0 !important;
+        flex: none !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        background-color: #8a8a8a !important;
+        background-image:
+          linear-gradient(45deg, #5c5c5c 25%, transparent 25%),
+          linear-gradient(-45deg, #5c5c5c 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #5c5c5c 75%),
+          linear-gradient(-45deg, transparent 75%, #5c5c5c 75%) !important;
+        background-size: 8px 8px !important;
+        background-position: 0 0, 0 4px, 4px -4px, -4px 0 !important;
       }
-      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0 !important; }
-      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch { border: none !important; border-radius: 4px !important; }
+      .claude-design-manip-flyout .claude-design-manip-swatch:hover { border-color: rgba(255, 255, 255, 0.5) !important; }
+      .claude-design-manip-flyout .claude-design-manip-swatch.open { border-color: #eb9b78 !important; }
+      .claude-design-manip-swatch-fill { display: block !important; width: 100% !important; height: 100% !important; }
       .claude-design-manip-presets {
         position: fixed !important;
         z-index: 2147483647 !important;
@@ -1632,6 +1681,30 @@ export const annotationScript = `
         font-size: 11px !important;
         white-space: nowrap !important;
       }
+      /* Shadow variant: each option carries a sample of what it paints */
+      .claude-design-manip-presets.shadows { min-width: 186px !important; }
+      .claude-design-manip-presets.shadows .claude-design-manip-preset-item {
+        padding: 7px 10px !important;
+      }
+      /* A shadow is dark and the menu is darker, so the sample sits on a light
+         stage — the same reason a swatch book prints on white */
+      .claude-design-manip-shadow-stage {
+        flex: none !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 46px !important;
+        height: 26px !important;
+        border-radius: 5px !important;
+        background: #e6e6e6 !important;
+        overflow: hidden !important;
+      }
+      .claude-design-manip-shadow-chip {
+        width: 26px !important;
+        height: 12px !important;
+        border-radius: 3px !important;
+        background: #fff !important;
+      }
       /* Color variant: swatch grid rather than a list of values */
       .claude-design-manip-presets.colors { width: 200px !important; min-width: 200px !important; }
       .claude-design-manip-preset-grid {
@@ -1653,22 +1726,13 @@ export const annotationScript = `
         border-color: #eb9b78 !important;
         box-shadow: 0 0 0 2px rgba(198, 97, 63, 0.5) !important;
       }
-      .claude-design-manip-color-row input[type="color"] {
-        -webkit-appearance: none !important;
-        appearance: none !important;
+      .claude-design-manip-color-row .claude-design-manip-swatch {
         width: 24px !important;
         height: 24px !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: 1px solid #4a4a4a !important;
         border-radius: 6px !important;
-        background: transparent !important;
-        cursor: pointer !important;
-        flex-shrink: 0 !important;
+        border-color: #4a4a4a !important;
       }
-      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px !important; }
-      .claude-design-manip-color-row input[type="color"]::-webkit-color-swatch { border: none !important; border-radius: 4px !important; }
-      .claude-design-manip-color-row.changed input[type="color"] { border-color: rgba(198, 97, 63, 0.8) !important; }
+      .claude-design-manip-color-row.changed .claude-design-manip-swatch { border-color: rgba(198, 97, 63, 0.8) !important; }
       .claude-design-manip-alpha {
         flex: 0 0 auto !important;
         min-width: 18px !important;
@@ -1685,6 +1749,196 @@ export const annotationScript = `
         text-overflow: ellipsis !important;
       }
       .claude-design-manip-color-row.changed .claude-design-manip-color-hex { color: #eb9b78 !important; }
+      /* ---- Colour picker: field, hue, opacity, hex, then the project's own ---- */
+      .claude-design-manip-presets.picker {
+        width: 236px !important;
+        min-width: 236px !important;
+        max-height: 420px !important;
+        padding: 10px !important;
+      }
+      .claude-design-manip-cp-sv {
+        position: relative !important;
+        height: 130px !important;
+        border-radius: 8px !important;
+        cursor: crosshair !important;
+        background-image:
+          linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+          linear-gradient(to right, #fff, rgba(255, 255, 255, 0)) !important;
+      }
+      .claude-design-manip-cp-bars {
+        display: flex !important;
+        align-items: center !important;
+        gap: 9px !important;
+        margin-top: 10px !important;
+      }
+      .claude-design-manip-presets .claude-design-manip-cp-pick {
+        all: unset !important;
+        flex: none !important;
+        width: 26px !important;
+        height: 26px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 6px !important;
+        color: #aaa !important;
+        cursor: pointer !important;
+      }
+      .claude-design-manip-presets .claude-design-manip-cp-pick:hover { background: rgba(255, 255, 255, 0.08) !important; color: #fff !important; }
+      .claude-design-manip-cp-pick svg { width: 14px !important; height: 14px !important; display: block !important; }
+      .claude-design-manip-cp-tracks {
+        flex: 1 !important;
+        min-width: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 9px !important;
+      }
+      .claude-design-manip-cp-hue, .claude-design-manip-cp-alpha {
+        position: relative !important;
+        height: 10px !important;
+        border-radius: 5px !important;
+        cursor: pointer !important;
+      }
+      .claude-design-manip-cp-hue {
+        background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00) !important;
+      }
+      .claude-design-manip-cp-alpha {
+        background-color: #8a8a8a !important;
+        background-image:
+          linear-gradient(45deg, #5c5c5c 25%, transparent 25%),
+          linear-gradient(-45deg, #5c5c5c 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #5c5c5c 75%),
+          linear-gradient(-45deg, transparent 75%, #5c5c5c 75%) !important;
+        background-size: 8px 8px !important;
+        background-position: 0 0, 0 4px, 4px -4px, -4px 0 !important;
+      }
+      .claude-design-manip-cp-alpha-fill {
+        position: absolute !important;
+        inset: 0 !important;
+        border-radius: 5px !important;
+      }
+      .claude-design-manip-cp-knob {
+        position: absolute !important;
+        width: 13px !important;
+        height: 13px !important;
+        margin: -6.5px 0 0 -6.5px !important;
+        border-radius: 50% !important;
+        border: 2px solid #fff !important;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+        pointer-events: none !important;
+        box-sizing: border-box !important;
+      }
+      .claude-design-manip-cp-tracks .claude-design-manip-cp-knob { top: 50% !important; }
+      .claude-design-manip-cp-fields {
+        display: flex !important;
+        gap: 6px !important;
+        margin: 10px 0 2px !important;
+      }
+      .claude-design-manip-cp-field {
+        display: flex !important;
+        align-items: center !important;
+        gap: 3px !important;
+        height: 26px !important;
+        padding: 0 8px !important;
+        background: #333 !important;
+        border: 1px solid transparent !important;
+        border-radius: 6px !important;
+        color: #8f8f8f !important;
+        font-size: 11px !important;
+      }
+      .claude-design-manip-cp-field:focus-within { border-color: #5a5a5a !important; }
+      .claude-design-manip-cp-field.hex { flex: 1 !important; min-width: 0 !important; }
+      .claude-design-manip-cp-field.alpha { flex: none !important; width: 68px !important; }
+      .claude-design-manip-presets .claude-design-manip-cp-input {
+        all: unset !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        color: #eaeaea !important;
+        font-size: 12px !important;
+        font-variant-numeric: tabular-nums !important;
+        text-transform: uppercase !important;
+        cursor: text !important;
+        user-select: text !important;
+        -webkit-user-select: text !important;
+      }
+      /* ---- Shadow layers ---- */
+      .claude-design-manip-labelrow {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-iconbtn {
+        all: unset !important;
+        width: 18px !important;
+        height: 18px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 5px !important;
+        color: #9a9a9a !important;
+        cursor: pointer !important;
+        flex: none !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-iconbtn:hover { background: rgba(255, 255, 255, 0.1) !important; color: #fff !important; }
+      .claude-design-manip-iconbtn svg { width: 11px !important; height: 11px !important; display: block !important; }
+      .claude-design-manip-shadow-head, .claude-design-manip-shadow-row {
+        display: flex !important;
+        align-items: center !important;
+        gap: 5px !important;
+      }
+      .claude-design-manip-shadow-head {
+        padding: 6px 0 3px !important;
+        color: #7a7a7a !important;
+        font-size: 9px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.4px !important;
+      }
+      .claude-design-manip-shadow-head span {
+        flex: 1 !important;
+        min-width: 0 !important;
+        text-align: center !important;
+      }
+      /* Line the labels up with the fields: swatch, then four fields, then the
+         two trailing buttons */
+      .claude-design-manip-shadow-head .lead { flex: none !important; width: 20px !important; }
+      .claude-design-manip-shadow-head .trail { flex: none !important; width: 49px !important; }
+      .claude-design-manip-shadow-row { margin-top: 5px !important; }
+      .claude-design-manip-shadow-row .claude-design-manip-field {
+        flex: 1 !important;
+        min-width: 0 !important;
+        height: 26px !important;
+        padding: 0 6px !important;
+        background: #333 !important;
+        border-radius: 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-shadow-inset {
+        all: unset !important;
+        flex: none !important;
+        height: 26px !important;
+        padding: 0 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        border-radius: 6px !important;
+        background: #333 !important;
+        color: #8f8f8f !important;
+        font-size: 10px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        box-sizing: border-box !important;
+      }
+      .claude-design-manip-flyout .claude-design-manip-shadow-inset:hover { color: #fff !important; }
+      .claude-design-manip-flyout .claude-design-manip-shadow-inset.on {
+        background: rgba(198, 97, 63, 0.2) !important;
+        color: #eb9b78 !important;
+      }
+      .claude-design-manip-shadow-empty {
+        padding: 4px 0 !important;
+        color: #7a7a7a !important;
+        font-size: 11px !important;
+      }
     \`;
     document.head.appendChild(style);
   }
@@ -3440,6 +3694,9 @@ export const annotationScript = `
       });
 
       document.body.appendChild(codeButtonElement);
+      // The panel can already be open (it is attached before this button, and
+      // the persistent setting reopens it), so it starts hidden in that case
+      manipUpdateSelectionChrome();
     }
 
     const textarea = popoverElement.querySelector('textarea');
@@ -4513,14 +4770,15 @@ export const annotationScript = `
     'border-color':     { color: true, readProp: 'border-top-color' },
     'gap':              { min: 0, step: 1, unit: 'px' },
     'color':            { color: true },
-    'background-color': { color: true }
+    'background-color': { color: true },
+    'box-shadow':       { shadow: true }
   };
 
   // Tailwind utility prefix that owns each property's scale, used to pull the
   // project's own values out of window.__claudeDesignTokens
   // Every piece of UI this script puts on the page. One list: it decides both
   // what a pointer/keyboard event should ignore and what page sampling skips.
-  var MANIP_CHROME = '.claude-design-popover, .claude-design-toolbar, .claude-design-manip-flyout, .claude-design-manip-presets, .claude-design-manip-sizelabel, .claude-design-class-inspector, .claude-design-code-btn, .claude-design-shortcut-hints, .claude-design-grid-toast';
+  var MANIP_CHROME = '.claude-design-popover, .claude-design-toolbar, .claude-design-manip-flyout, .claude-design-manip-presets, .claude-design-manip-sizelabel, .claude-design-manip-corner, .claude-design-class-inspector, .claude-design-code-btn, .claude-design-shortcut-hints, .claude-design-grid-toast';
 
   var MANIP_TOKEN_PREFIX = {
     'width': 'w', 'height': 'h',
@@ -4733,6 +4991,37 @@ export const annotationScript = `
     return 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + (Math.round(alpha * 1000) / 1000) + ')';
   }
 
+  // The picker thinks in HSV: one hue, then a square of saturation x value
+  function manipHexToHsv(hex) {
+    var c = colorToRgb(hex);
+    var r = c.r / 255, g = c.g / 255, b = c.b / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var d = max - min;
+    var h = 0;
+    if (d) {
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return { h: h, s: max ? d / max : 0, v: max };
+  }
+
+  var MANIP_HSV_SEGMENTS = [[1, 2, 0], [2, 1, 0], [0, 1, 2], [0, 2, 1], [2, 0, 1], [1, 0, 2]];
+  function manipHsvToHex(h, s, v) {
+    h = ((h % 360) + 360) % 360;
+    var c = v * s;
+    var x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    var m = v - c;
+    var parts = [0, c, x];
+    var seg = MANIP_HSV_SEGMENTS[Math.floor(h / 60) % 6];
+    return rgbToHex(
+      Math.round((parts[seg[0]] + m) * 255),
+      Math.round((parts[seg[1]] + m) * 255),
+      Math.round((parts[seg[2]] + m) * 255)
+    );
+  }
+
   // bg-primary + 10% -> bg-primary/10, the way Tailwind writes it
   function manipTokenWithAlpha(token, alpha) {
     if (!token) return token;
@@ -4786,6 +5075,141 @@ export const annotationScript = `
     entries = entries.slice(0, 24);
     manipPagePresetCache[cacheKey] = entries;
     return entries;
+  }
+
+  // Shadows are whole values, not numbers on a scale, so they get their own
+  // list: the project's shadow-* utilities and --shadow* variables, deduped by
+  // what they actually resolve to. "None" always leads, so one can be removed.
+  function manipShadowPresets() {
+    var tokens = window.__claudeDesignTokens || [];
+    var out = [{ name: 'none', value: 'none', token: null }];
+    var seen = {};
+    tokens.forEach(function(t) {
+      if (!/^(shadow($|-)|--(box-)?shadow)/.test(t.name)) return;
+      var value = manipResolveVar(t.value).trim();
+      // A shadow is lengths and a colour; anything else is a stray token
+      if (!value || value === 'none' || !/(px|rem|em)\\b/.test(value)) return;
+      var key = manipNormalizeShadow(value);
+      if (key === 'none' || seen[key]) return;
+      seen[key] = true;
+      out.push({ name: t.name, value: value, token: t.name });
+    });
+    return out;
+  }
+
+  // Shadows can be written many ways ("0 1px 3px #0001" vs the computed
+  // "rgba(0, 0, 0, 0.07) 0px 1px 3px 0px"), so compare them the way the
+  // browser sees them. A detached probe keeps the page's own elements out of it.
+  // Cached: the panel re-reads every shadow on each refresh, and a refresh runs
+  // on every frame of a scrub
+  var manipShadowProbe = null;
+  var manipShadowNormCache = {};
+  function manipNormalizeShadow(value) {
+    var v = String(value || '').trim();
+    if (!v || v === 'none') return 'none';
+    if (manipShadowNormCache[v]) return manipShadowNormCache[v];
+    if (!manipShadowProbe) {
+      manipShadowProbe = document.createElement('div');
+      manipShadowProbe.className = 'claude-design-shadow-probe';
+      manipShadowProbe.style.cssText = 'position:fixed!important;left:-9999px!important;top:0!important;' +
+        'width:1px!important;height:1px!important;pointer-events:none!important;';
+      document.documentElement.appendChild(manipShadowProbe);
+    }
+    manipShadowProbe.style.boxShadow = '';
+    manipShadowProbe.style.boxShadow = v;
+    var out = window.getComputedStyle(manipShadowProbe).getPropertyValue('box-shadow').trim() || 'none';
+    manipShadowNormCache[v] = out;
+    return out;
+  }
+
+  // ---- Shadow layers: a stack, editable one layer at a time ----
+
+  // Split a comma list whose items contain commas of their own
+  // ("rgba(0, 0, 0, .1) 0 1px 3px, rgba(...) 0 1px 2px")
+  function manipSplitLayers(value) {
+    var out = [];
+    var depth = 0;
+    var cur = '';
+    for (var i = 0; i < value.length; i++) {
+      var ch = value.charAt(i);
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map(function(s) { return s.trim(); }).filter(Boolean);
+  }
+
+  // "rgba(0, 0, 0, 0.1) 0px 4px 6px -1px" -> {x, y, blur, spread, color, inset}.
+  // Lengths are kept in px: that is what the fields scrub in.
+  function manipParseShadowLayer(str) {
+    var rest = ' ' + str + ' ';
+    var inset = /\\sinset\\s/.test(rest);
+    if (inset) rest = rest.replace(/\\sinset\\s/, ' ');
+    var color = null;
+    var fn = rest.match(/(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\\([^)]*\\)/i);
+    var hex = fn ? null : rest.match(/#[0-9a-fA-F]{3,8}/);
+    var word = (fn || hex) ? null : rest.match(/\\s([a-zA-Z]{3,})\\s/);
+    if (fn) color = fn[0];
+    else if (hex) color = hex[0];
+    else if (word) color = word[1];
+    if (color) rest = rest.replace(color, ' ');
+    var nums = rest.match(/-?[0-9]*\\.?[0-9]+(px|rem|em)?/g) || [];
+    function len(i) {
+      if (!nums[i]) return 0;
+      var n = parseFloat(nums[i]);
+      if (!isFinite(n)) return 0;
+      if (/rem|em$/.test(nums[i])) n *= manipRootFontSize();
+      return Math.round(n);
+    }
+    return {
+      x: len(0), y: len(1), blur: len(2), spread: len(3),
+      color: color || 'rgba(0, 0, 0, 0.25)', inset: inset
+    };
+  }
+
+  function manipSerializeShadows(layers) {
+    if (!layers.length) return 'none';
+    return layers.map(function(l) {
+      return (l.inset ? 'inset ' : '') +
+        l.x + 'px ' + l.y + 'px ' + l.blur + 'px ' + l.spread + 'px ' + l.color;
+    }).join(', ');
+  }
+
+  // The value in force: what the panel has written, else what the page paints
+  function manipCurrentShadow(el) {
+    var rec = manipChanges.get(el);
+    if (rec && manipActiveState !== 'default' && rec.states && rec.states[manipActiveState]) {
+      rec = rec.states[manipActiveState];
+    }
+    if (rec && rec.current['box-shadow'] !== undefined) return rec.current['box-shadow'];
+    return window.getComputedStyle(el).getPropertyValue('box-shadow');
+  }
+
+  function manipShadowLayers(el) {
+    var value = String(manipCurrentShadow(el) || '').trim();
+    if (!value || value === 'none') return [];
+    return manipSplitLayers(value).map(manipParseShadowLayer);
+  }
+
+  function manipSetShadowLayers(el, layers, token) {
+    manipSetProp(el, 'box-shadow', manipSerializeShadows(layers), token);
+  }
+
+  // What the shadow button reads: the token that was picked, else the project
+  // name for whatever the element currently paints.
+  function manipShadowLabel(el) {
+    var rec = manipChanges.get(el);
+    var token = rec && rec.tokens ? rec.tokens['box-shadow'] : null;
+    if (token) return token;
+    var current = manipNormalizeShadow(window.getComputedStyle(el).getPropertyValue('box-shadow'));
+    if (current === 'none') return 'none';
+    var match = null;
+    manipShadowPresets().forEach(function(item) {
+      if (!match && manipNormalizeShadow(item.value) === current) match = item.name;
+    });
+    return match || 'custom';
   }
 
   // Always {kind, groups:[{head, items}]} so the menu renders with one loop
@@ -5332,6 +5756,8 @@ export const annotationScript = `
     var same;
     if (meta.color) {
       same = manipColorsEqual(cssValue, baseVal);
+    } else if (meta.shadow) {
+      same = manipNormalizeShadow(cssValue) === manipNormalizeShadow(baseVal);
     } else {
       var a = parseFloat(cssValue);
       var b = parseFloat(baseVal);
@@ -5501,15 +5927,37 @@ export const annotationScript = `
   // Reading and writing a field, whichever of the two it shows
   function manipFieldMeta(prop, view) {
     if (view === 'alpha') return { min: 0, max: 100, step: 1, unit: '' };
+    // Blur cannot go negative; the offsets and the spread can
+    if (manipShadowView(view)) return { step: 1, unit: 'px', min: manipShadowView(view).part === 'blur' ? 0 : undefined };
     return MANIP_PROPS[prop] || {};
+  }
+
+  // "sh:1:blur" -> which layer and which of its numbers a field edits
+  function manipShadowView(view) {
+    if (!view || view.indexOf('sh:') !== 0) return null;
+    var parts = view.split(':');
+    return { index: parseInt(parts[1], 10), part: parts[2] };
   }
 
   function manipReadField(el, prop, view) {
     if (view === 'alpha') return Math.round(manipColorParts(el, prop).alpha * 100);
+    var shadow = manipShadowView(view);
+    if (shadow) {
+      var layer = manipShadowLayers(el)[shadow.index];
+      return layer ? layer[shadow.part] : 0;
+    }
     return manipCurrentNumeric(el, prop);
   }
 
   function manipWriteField(el, prop, view, value) {
+    var shadow = manipShadowView(view);
+    if (shadow) {
+      var layers = manipShadowLayers(el);
+      if (!layers[shadow.index]) return;
+      layers[shadow.index][shadow.part] = Math.round(value);
+      manipSetShadowLayers(el, layers);
+      return;
+    }
     if (view === 'alpha') {
       var parts = manipColorParts(el, prop);
       var alpha = Math.max(0, Math.min(100, value)) / 100;
@@ -5586,7 +6034,7 @@ export const annotationScript = `
     'padding-top': 'spacing', 'padding-right': 'spacing', 'padding-bottom': 'spacing', 'padding-left': 'spacing',
     'border-width': 'border', 'border-style': 'border', 'border-color': 'border',
     'font-size': 'text', 'font-weight': 'text', 'line-height': 'text', 'letter-spacing': 'text',
-    'color': 'color', 'background-color': 'color'
+    'color': 'text', 'background-color': 'surface', 'box-shadow': 'surface'
   };
 
   // Editing a state writes to that state's sub-record, not the element's own
@@ -5622,22 +6070,41 @@ export const annotationScript = `
     return total;
   }
 
-  // ---- Selection overlay (size readout) ----
-  // No box outline or resize handles here: the claude-design-selected class
-  // already outlines the element, and W/H are edited in the design panel.
+  // ---- Selection overlay (size readout, corner marks) ----
+  // No resize handles here: W/H are edited in the design panel. The solid ring
+  // comes from the claude-design-selected class; the corner marks take over
+  // from it while the panel is open (see manipUpdateSelectionChrome).
+
+  var MANIP_CORNERS = ['tl', 'tr', 'bl', 'br'];
 
   function buildManipOverlay() {
     removeManipOverlay();
     var label = document.createElement('div');
     label.className = 'claude-design-manip-sizelabel';
     document.body.appendChild(label);
-    manipOverlay = { label: label };
+    var corners = MANIP_CORNERS.map(function(pos) {
+      var mark = document.createElement('div');
+      mark.className = 'claude-design-manip-corner ' + pos;
+      document.body.appendChild(mark);
+      return mark;
+    });
+    manipOverlay = { label: label, corners: corners };
   }
 
   function removeManipOverlay() {
     if (!manipOverlay) return;
     manipOverlay.label.remove();
+    manipOverlay.corners.forEach(function(mark) { mark.remove(); });
     manipOverlay = null;
+  }
+
+  // The element keeps its ring, and its code button, until the panel opens on it
+  function manipUpdateSelectionChrome() {
+    if (manipSelected) manipSelected.classList.toggle('claude-design-selected-quiet', !!manipPanel);
+    if (codeButtonElement) codeButtonElement.classList.toggle('hidden-for-panel', !!manipPanel);
+    if (!manipOverlay) return;
+    manipOverlay.corners.forEach(function(mark) { mark.classList.toggle('visible', !!manipPanel); });
+    positionManipOverlay();
   }
 
   function positionManipOverlay() {
@@ -5649,6 +6116,17 @@ export const annotationScript = `
     if (labelTop > window.innerHeight - 30) labelTop = r.top - 26;
     label.style.top = labelTop + 'px';
     label.style.left = Math.max(4, r.left + r.width / 2 - label.offsetWidth / 2) + 'px';
+    // Sat on the element's own edge the marks would hide a border, so they
+    // stand off it — far enough to read, close enough to still point at it
+    var gap = 5;
+    var arm = 12;
+    manipOverlay.corners.forEach(function(mark, i) {
+      var pos = MANIP_CORNERS[i];
+      var left = pos.charAt(1) === 'l' ? r.left - gap : r.right + gap - arm;
+      var top = pos.charAt(0) === 't' ? r.top - gap : r.bottom + gap - arm;
+      mark.style.left = Math.round(left) + 'px';
+      mark.style.top = Math.round(top) + 'px';
+    });
   }
 
   function queueManipReposition() {
@@ -5727,7 +6205,7 @@ export const annotationScript = `
 
   function manipColorRowHtml(prop) {
     return '<div class="claude-design-manip-color-row" data-prop="' + prop + '">' +
-      '<input type="color" data-prop="' + prop + '">' +
+      manipSwatchHtml('data-color-prop="' + prop + '"') +
       '<span class="claude-design-manip-color-hex"></span>' +
       '<span class="claude-design-manip-field claude-design-manip-alpha" data-prop="' + prop + '"' +
         ' data-view="alpha" title="opacity %"></span>' +
@@ -5756,6 +6234,51 @@ export const annotationScript = `
   function manipChoiceHtml(prop) {
     return '<button class="claude-design-manip-preset-btn claude-design-manip-fieldbtn claude-design-manip-choice"' +
       ' data-choice="' + prop + '" title="' + prop + '" tabindex="-1">' +
+      '<span class="claude-design-manip-classbtn-value"></span>' + MANIP_CARET_SVG +
+    '</button>';
+  }
+
+  // Opens the picker. The fill is a separate layer so the checkerboard under it
+  // shows through a translucent colour.
+  function manipSwatchHtml(attrs) {
+    return '<button class="claude-design-manip-swatch" ' + attrs + ' title="Pick a colour" tabindex="-1">' +
+      '<span class="claude-design-manip-swatch-fill"></span>' +
+    '</button>';
+  }
+
+  var MANIP_PLUS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  var MANIP_X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  var MANIP_PIPETTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/>' +
+    '<path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>';
+
+  // One row per shadow in the stack, each with its own colour and offsets
+  function manipShadowRowsHtml(el) {
+    var layers = manipShadowLayers(el);
+    if (!layers.length) return '<div class="claude-design-manip-shadow-empty">No shadow</div>';
+    var html = '<div class="claude-design-manip-shadow-head">' +
+      '<span class="lead"></span><span>X</span><span>Y</span><span>Blur</span><span>Spread</span>' +
+      '<span class="trail"></span></div>';
+    layers.forEach(function(layer, i) {
+      html += '<div class="claude-design-manip-shadow-row" data-layer="' + i + '">' +
+        manipSwatchHtml('data-shadow-color="' + i + '"') +
+        ['x', 'y', 'blur', 'spread'].map(function(part) {
+          return '<span class="claude-design-manip-field" data-prop="box-shadow"' +
+            ' data-view="sh:' + i + ':' + part + '" title="' + part + '"></span>';
+        }).join('') +
+        '<button class="claude-design-manip-shadow-inset' + (layer.inset ? ' on' : '') + '"' +
+          ' data-shadow-inset="' + i + '" title="Inner shadow" tabindex="-1">in</button>' +
+        '<button class="claude-design-manip-iconbtn" data-shadow-del="' + i + '"' +
+          ' title="Remove this shadow" tabindex="-1">' + MANIP_X_SVG + '</button>' +
+      '</div>';
+    });
+    return html;
+  }
+
+  // Shadow picks a whole value, so it reads like a choice rather than a field
+  function manipShadowBtnHtml() {
+    return '<button class="claude-design-manip-preset-btn claude-design-manip-fieldbtn claude-design-manip-shadowbtn"' +
+      ' data-shadow="box-shadow" title="box-shadow" tabindex="-1">' +
       '<span class="claude-design-manip-classbtn-value"></span>' + MANIP_CARET_SVG +
     '</button>';
   }
@@ -5809,8 +6332,9 @@ export const annotationScript = `
         manipLabelHtml('Padding', true) +
         manipCrossHtml('padding') +
       '</div>' });
-    // Type controls only earn their tab when there is text to style
-    if ((el.textContent || '').trim()) {
+    // Type controls only earn their tab when there is something to style —
+    // text, or an icon that paints itself with the text colour
+    if ((el.textContent || '').trim() || el.tagName.toLowerCase() === 'svg' || el.querySelector('svg')) {
       tabs.push({ key: 'text', label: 'Text', body:
         '<div class="claude-design-manip-section">' +
           '<div class="claude-design-manip-grid">' +
@@ -5821,6 +6345,9 @@ export const annotationScript = `
             manipCellHtml('Line height', manipFieldHtml('line-height')) +
             manipCellHtml('Letter spacing', manipFieldHtml('letter-spacing')) +
           '</div>' +
+          // Full width: a swatch, hex and opacity do not fit in half a row
+          manipLabelHtml('Color', true) +
+          manipColorRowHtml('color') +
         '</div>' });
     }
     tabs.push({ key: 'border', label: 'Border', body:
@@ -5832,13 +6359,16 @@ export const annotationScript = `
         manipLabelHtml('Color', true) +
         manipColorRowHtml('border-color') +
       '</div>' });
-    tabs.push({ key: 'color', label: 'Color', body:
+    tabs.push({ key: 'surface', label: 'Surface', body:
       '<div class="claude-design-manip-section">' +
-        // Full width: a swatch, hex and opacity do not fit in half a row
-        manipLabelHtml('Text') +
-        manipColorRowHtml('color') +
-        manipLabelHtml('Fill', true) +
+        manipLabelHtml('Fill') +
         manipColorRowHtml('background-color') +
+        '<div class="claude-design-manip-sublabel spaced claude-design-manip-labelrow">Shadow' +
+          '<button class="claude-design-manip-iconbtn" data-shadow-add="1"' +
+            ' title="Add a shadow" tabindex="-1">' + MANIP_PLUS_SVG + '</button>' +
+        '</div>' +
+        manipShadowBtnHtml() +
+        '<div class="claude-design-manip-shadow-list"></div>' +
       '</div>' });
 
     var hasActive = tabs.some(function(tab) { return tab.key === manipActiveTab; });
@@ -5942,12 +6472,7 @@ export const annotationScript = `
       e.stopPropagation();
       if (manipSelected) manipResetElement(manipSelected);
     });
-    flyout.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
-      fieldEl.addEventListener('mousedown', function(e) { startManipScrub(e, fieldEl); }, true);
-      // Arrow keys nudge whichever field the cursor is over
-      fieldEl.addEventListener('mouseenter', function() { manipHoverField = fieldEl; });
-      fieldEl.addEventListener('mouseleave', function() { if (manipHoverField === fieldEl) manipHoverField = null; });
-    });
+    manipWireFields(flyout);
     flyout.querySelectorAll('.claude-design-manip-preset-btn').forEach(function(btn) {
       btn.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
       btn.addEventListener('click', function(e) {
@@ -5957,18 +6482,24 @@ export const annotationScript = `
         else openManipPresets(btn);
       });
     });
-    flyout.querySelectorAll('input[type="color"]').forEach(function(input) {
-      input.addEventListener('input', function() {
+    manipWireSwatches(flyout);
+    var addShadow = flyout.querySelector('[data-shadow-add]');
+    if (addShadow) {
+      addShadow.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+      addShadow.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
         if (!manipSelected) return;
-        var prop = input.getAttribute('data-prop');
-        manipSetProp(manipSelected, prop, manipColorWithAlpha(input.value, manipKeepAlpha(manipSelected, prop)));
-        refreshManipPanelValues();
+        var layers = manipShadowLayers(manipSelected);
+        layers.push({ x: 0, y: 2, blur: 4, spread: 0, color: 'rgba(0, 0, 0, 0.25)', inset: false });
+        manipSetShadowLayers(manipSelected, layers);
+        manipRenderShadowRows();
       });
-      input.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-      input.addEventListener('click', function(e) { e.stopPropagation(); });
-    });
+    }
+    manipRenderShadowRows();
 
     refreshManipPanelValues();
+    manipUpdateSelectionChrome();
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         if (manipPanel === flyout) flyout.classList.add('visible');
@@ -6000,6 +6531,7 @@ export const annotationScript = `
       manipTrackPopoverWhileAnimating();
       setTimeout(detach, 220);
     }
+    manipUpdateSelectionChrome();
     updateManipDesignButton();
   }
 
@@ -6032,6 +6564,7 @@ export const annotationScript = `
     if (manipPresetsMenu) manipPresetsMenu.remove();
     manipPresetsMenu = null;
     manipPresetsAnchor = null;
+    manipPicker = null;
   }
 
   // The class menu lists the family's other modifiers, plus a way back to the
@@ -6222,6 +6755,306 @@ export const annotationScript = `
     });
   }
 
+  function openManipShadowMenu(btn) {
+    var items = manipShadowPresets();
+    var current = manipNormalizeShadow(window.getComputedStyle(manipSelected).getPropertyValue('box-shadow'));
+    var html = '<div class="claude-design-manip-presets-head">box-shadow</div>';
+    items.forEach(function(item, i) {
+      var isCurrent = manipNormalizeShadow(item.value) === current;
+      html += '<div class="claude-design-manip-preset-item' + (isCurrent ? ' current' : '') + '" data-i="' + i + '">' +
+        '<span class="claude-design-manip-preset-name">' + escapeHtml(item.name) + '</span>' +
+        // The value itself is too long to read, so show what it looks like
+        '<span class="claude-design-manip-shadow-stage">' +
+          '<span class="claude-design-manip-shadow-chip" style="box-shadow:' + escapeHtml(item.value) + '"></span>' +
+        '</span>' +
+      '</div>';
+    });
+    showManipMenu(btn, html, {
+      className: 'shadows',
+      onPreview: function(i) { manipPreviewProps(manipSelected, { 'box-shadow': items[i].value }); },
+      onPick: function(i) {
+        manipSetProp(manipSelected, 'box-shadow', items[i].value, items[i].token);
+        manipRenderShadowRows();
+      }
+    });
+  }
+
+  // Shared by the panel and by shadow rows, which are re-rendered as the stack
+  // changes and have to come back wired
+  function manipWireFields(root) {
+    root.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
+      fieldEl.addEventListener('mousedown', function(e) { startManipScrub(e, fieldEl); }, true);
+      // Arrow keys nudge whichever field the cursor is over
+      fieldEl.addEventListener('mouseenter', function() { manipHoverField = fieldEl; });
+      fieldEl.addEventListener('mouseleave', function() { if (manipHoverField === fieldEl) manipHoverField = null; });
+    });
+  }
+
+  function manipWireSwatches(root) {
+    root.querySelectorAll('.claude-design-manip-swatch').forEach(function(btn) {
+      btn.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!manipSelected) return;
+        if (manipPresetsAnchor === btn) return closeManipPresets();
+        var prop = btn.getAttribute('data-color-prop');
+        var layer = btn.getAttribute('data-shadow-color');
+        openManipColorPicker(btn, prop ? manipColorPropCtx(prop) : manipShadowColorCtx(parseInt(layer, 10)));
+      });
+    });
+  }
+
+  // The stack is read back from the value every time, so a row list is only
+  // ever a view of it
+  function manipRenderShadowRows() {
+    if (!manipPanel || !manipSelected) return;
+    var host = manipPanel.querySelector('.claude-design-manip-shadow-list');
+    if (!host) return;
+    var layers = manipShadowLayers(manipSelected);
+    host.setAttribute('data-count', String(layers.length));
+    host.innerHTML = manipShadowRowsHtml(manipSelected);
+    manipWireFields(host);
+    manipWireSwatches(host);
+    host.querySelectorAll('[data-shadow-del], [data-shadow-inset]').forEach(function(btn) {
+      btn.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!manipSelected) return;
+        var current = manipShadowLayers(manipSelected);
+        var del = btn.getAttribute('data-shadow-del');
+        var index = parseInt(del !== null ? del : btn.getAttribute('data-shadow-inset'), 10);
+        if (!current[index]) return;
+        if (del !== null) current.splice(index, 1);
+        else current[index].inset = !current[index].inset;
+        manipSetShadowLayers(manipSelected, current);
+        manipRenderShadowRows();
+      });
+    });
+    refreshManipPanelValues();
+  }
+
+  // ---- Colour picker ----
+  // Ours rather than the browser's swatch dialog: it edits in place, keeps the
+  // project's palette a click away, and works the same for a CSS property and
+  // for one shadow layer's colour (the ctx says how to read and write).
+
+  var manipPicker = null;
+
+  // A CSS colour property, as the picker sees it
+  function manipColorPropCtx(prop) {
+    return {
+      head: prop,
+      read: function() { return manipColorParts(manipSelected, prop); },
+      write: function(hex, alpha, token) {
+        manipSetProp(manipSelected, prop, manipColorWithAlpha(hex, alpha),
+          token ? manipTokenWithAlpha(token, alpha) : undefined);
+      },
+      tokenProp: prop
+    };
+  }
+
+  // One shadow layer's colour. Tokens do not apply: the stack is a whole value.
+  function manipShadowColorCtx(index) {
+    function layer() { return manipShadowLayers(manipSelected)[index]; }
+    return {
+      head: 'shadow colour',
+      read: function() {
+        var l = layer();
+        var ctx = manipColorCtx();
+        ctx.fillStyle = '#000000';
+        ctx.fillStyle = l ? l.color : '#000000';
+        var parts = String(ctx.fillStyle).match(/^rgba?\\(\\s*([0-9.]+)[,\\s]+([0-9.]+)[,\\s]+([0-9.]+)(?:[,\\s/]+([0-9.]+))?\\s*\\)$/);
+        if (!parts) return { hex: ctx.fillStyle.charAt(0) === '#' ? ctx.fillStyle : '#000000', alpha: 1 };
+        return {
+          hex: rgbToHex(parseInt(parts[1], 10), parseInt(parts[2], 10), parseInt(parts[3], 10)),
+          alpha: parts[4] === undefined ? 1 : parseFloat(parts[4])
+        };
+      },
+      write: function(hex, alpha) {
+        var layers = manipShadowLayers(manipSelected);
+        if (!layers[index]) return;
+        layers[index].color = manipColorWithAlpha(hex, alpha);
+        manipSetShadowLayers(manipSelected, layers);
+      },
+      tokenProp: 'background-color'
+    };
+  }
+
+  function openManipColorPicker(anchor, ctx) {
+    closeManipPresets();
+    if (!manipSelected) return;
+    var palette = manipColorPresets(ctx.tokenProp);
+    var swatches = palette.own.concat(palette.stock);
+    var head = swatches.length ? 'Project colors' : 'Used on this page';
+    if (!swatches.length) swatches = manipPageColorPresets(ctx.tokenProp);
+    swatches = swatches.slice(0, 24);
+
+    var html = '<div class="claude-design-manip-cp-sv"><span class="claude-design-manip-cp-knob"></span></div>' +
+      '<div class="claude-design-manip-cp-bars">' +
+        (window.EyeDropper
+          ? '<button class="claude-design-manip-cp-pick" title="Pick a colour from the page" tabindex="-1">' + MANIP_PIPETTE_SVG + '</button>'
+          : '') +
+        '<div class="claude-design-manip-cp-tracks">' +
+          '<div class="claude-design-manip-cp-hue"><span class="claude-design-manip-cp-knob"></span></div>' +
+          '<div class="claude-design-manip-cp-alpha">' +
+            '<span class="claude-design-manip-cp-alpha-fill"></span>' +
+            '<span class="claude-design-manip-cp-knob"></span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="claude-design-manip-cp-fields">' +
+        '<span class="claude-design-manip-cp-field hex">#<input class="claude-design-manip-cp-input hex" spellcheck="false" maxlength="6"></span>' +
+        '<span class="claude-design-manip-cp-field alpha"><input class="claude-design-manip-cp-input opacity">%</span>' +
+      '</div>';
+    if (swatches.length) {
+      html += '<div class="claude-design-manip-presets-head">' + escapeHtml(head) + '</div>' +
+        '<div class="claude-design-manip-preset-grid">' +
+          swatches.map(function(item, i) {
+            return '<span class="claude-design-manip-preset-swatch" data-sw="' + i + '"' +
+              ' style="background:' + escapeHtml(item.color) + '"' +
+              ' title="' + escapeHtml(item.name + '  ' + item.color) + '"></span>';
+          }).join('') +
+        '</div>';
+    }
+
+    showManipMenu(anchor, html, { className: 'picker' });
+    var menu = manipPresetsMenu;
+    var start = ctx.read();
+    var hsv = manipHexToHsv(start.hex);
+    manipPicker = {
+      ctx: ctx, menu: menu, h: hsv.h, s: hsv.s, v: hsv.v, a: start.alpha,
+      sv: menu.querySelector('.claude-design-manip-cp-sv'),
+      hue: menu.querySelector('.claude-design-manip-cp-hue'),
+      alpha: menu.querySelector('.claude-design-manip-cp-alpha'),
+      hexInput: menu.querySelector('.claude-design-manip-cp-input.hex'),
+      alphaInput: menu.querySelector('.claude-design-manip-cp-input.opacity')
+    };
+
+    manipPaintPicker();
+
+    // The menu swallows mousedown at capture, so the drag starts from a
+    // listener on the menu itself and works out which track was hit
+    menu.addEventListener('mousedown', function(e) {
+      // The menu kills the default on mousedown (it must not steal focus from
+      // the note field), so the inputs are focused by hand
+      if (e.target === manipPicker.hexInput || e.target === manipPicker.alphaInput) {
+        e.target.focus();
+        e.target.select();
+        return;
+      }
+      var track = null;
+      if (manipPicker.sv.contains(e.target)) track = 'sv';
+      else if (manipPicker.hue.contains(e.target)) track = 'hue';
+      else if (manipPicker.alpha.contains(e.target)) track = 'alpha';
+      if (!track) return;
+      e.preventDefault();
+      manipUndoBeginBatch();
+      manipDrag = { kind: 'picker', track: track, trackEl: manipPicker[track] };
+      manipPickerTrack(e);
+    }, true);
+
+    manipPicker.hexInput.addEventListener('input', function() {
+      var hex = manipPicker.hexInput.value.replace(/[^0-9a-fA-F]/g, '');
+      if (hex.length === 3) hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2);
+      if (hex.length !== 6) return;
+      var next = manipHexToHsv('#' + hex);
+      manipPicker.h = next.h;
+      manipPicker.s = next.s;
+      manipPicker.v = next.v;
+      manipCommitPicker(true);
+    });
+    manipPicker.alphaInput.addEventListener('input', function() {
+      var pct = parseFloat(manipPicker.alphaInput.value);
+      if (!isFinite(pct)) return;
+      manipPicker.a = Math.max(0, Math.min(100, pct)) / 100;
+      manipCommitPicker(true);
+    });
+    [manipPicker.hexInput, manipPicker.alphaInput].forEach(function(input) {
+      input.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+      input.addEventListener('keydown', function(e) {
+        e.stopPropagation();
+        if (e.key === 'Enter' || e.key === 'Escape') closeManipPresets();
+      });
+    });
+
+    var pick = menu.querySelector('.claude-design-manip-cp-pick');
+    if (pick) {
+      pick.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        new window.EyeDropper().open().then(function(result) {
+          if (!manipPicker || !manipSelected) return;
+          var next = manipHexToHsv(result.sRGBHex);
+          manipPicker.h = next.h;
+          manipPicker.s = next.s;
+          manipPicker.v = next.v;
+          manipCommitPicker();
+        }, function() {});
+      });
+    }
+
+    menu.querySelectorAll('[data-sw]').forEach(function(swatch) {
+      var item = swatches[parseInt(swatch.getAttribute('data-sw'), 10)];
+      swatch.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var next = manipHexToHsv(item.color);
+        manipPicker.h = next.h;
+        manipPicker.s = next.s;
+        manipPicker.v = next.v;
+        // The project's own name for the colour rides along, so the note can
+        // ask for the token rather than the hex
+        manipCommitPicker(false, item.token);
+      });
+    });
+  }
+
+  // Write the picker's colour to whatever it was opened on
+  function manipCommitPicker(skipInputs, token) {
+    if (!manipPicker || !manipSelected) return;
+    manipPicker.ctx.write(manipHsvToHex(manipPicker.h, manipPicker.s, manipPicker.v), manipPicker.a, token);
+    manipPaintPicker(skipInputs);
+    refreshManipPanelValues();
+  }
+
+  function manipPaintPicker(skipInputs) {
+    if (!manipPicker) return;
+    var p = manipPicker;
+    var hex = manipHsvToHex(p.h, p.s, p.v);
+    p.sv.style.backgroundColor = manipHsvToHex(p.h, 1, 1);
+    p.sv.firstElementChild.style.left = (p.s * 100) + '%';
+    p.sv.firstElementChild.style.top = ((1 - p.v) * 100) + '%';
+    p.sv.firstElementChild.style.background = hex;
+    p.hue.firstElementChild.style.left = (((p.h % 360) + 360) % 360 / 360 * 100) + '%';
+    p.hue.firstElementChild.style.background = manipHsvToHex(p.h, 1, 1);
+    var fill = p.alpha.querySelector('.claude-design-manip-cp-alpha-fill');
+    fill.style.background = 'linear-gradient(to right, ' + manipColorWithAlpha(hex, 0) + ', ' + hex + ')';
+    p.alpha.lastElementChild.style.left = (p.a * 100) + '%';
+    p.alpha.lastElementChild.style.background = manipColorWithAlpha(hex, p.a);
+    // Skipped while typing, or the field would rewrite what is being typed
+    if (skipInputs) return;
+    p.hexInput.value = hex.replace('#', '');
+    p.alphaInput.value = String(Math.round(p.a * 100));
+  }
+
+  function manipPickerTrack(e) {
+    if (!manipPicker || !manipDrag || !manipDrag.trackEl) return;
+    var r = manipDrag.trackEl.getBoundingClientRect();
+    var fx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    if (manipDrag.track === 'sv') {
+      var fy = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+      manipPicker.s = fx;
+      manipPicker.v = 1 - fy;
+    } else if (manipDrag.track === 'hue') {
+      manipPicker.h = fx * 360;
+    } else {
+      manipPicker.a = fx;
+    }
+    manipCommitPicker();
+  }
+
   // Width alone shows nothing while the style is none, so a visible style
   // brings a width with it
   function manipChoiceValues(prop, choice) {
@@ -6238,6 +7071,7 @@ export const annotationScript = `
     closeManipPresets();
     if (!manipSelected) return;
     if (btn.hasAttribute('data-choice')) return openManipChoiceMenu(btn);
+    if (btn.hasAttribute('data-shadow')) return openManipShadowMenu(btn);
     if (btn.hasAttribute('data-fam')) return openManipClassMenu(btn);
     var props = (btn.getAttribute('data-props') || '').split(',').filter(Boolean);
     if (!props.length) return;
@@ -6361,8 +7195,9 @@ export const annotationScript = `
     manipPanel.querySelectorAll('.claude-design-manip-field').forEach(function(fieldEl) {
       if (fieldEl.querySelector('input')) return; // being edited by typing
       var prop = fieldEl.getAttribute('data-prop');
-      if (fieldEl.getAttribute('data-view') === 'alpha') {
-        fieldEl.textContent = String(manipReadField(el, prop, 'alpha'));
+      var view = fieldEl.getAttribute('data-view');
+      if (view === 'alpha' || manipShadowView(view)) {
+        fieldEl.textContent = String(Math.round(manipReadField(el, prop, view)));
         fieldEl.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
         return;
       }
@@ -6410,6 +7245,14 @@ export const annotationScript = `
       btn.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
     });
 
+    manipPanel.querySelectorAll('.claude-design-manip-shadowbtn').forEach(function(btn) {
+      var valueEl = btn.querySelector('.claude-design-manip-classbtn-value');
+      var label = manipShadowLabel(el);
+      if (valueEl) valueEl.textContent = label;
+      btn.classList.toggle('changed', !!(rec && rec.current['box-shadow'] !== undefined));
+      btn.classList.toggle('unset', label === 'none');
+    });
+
     manipPanel.querySelectorAll('.claude-design-manip-classbtn').forEach(function(btn) {
       var fam = manipPanelFamilies[parseInt(btn.getAttribute('data-fam'), 10)];
       if (!fam) return;
@@ -6432,13 +7275,33 @@ export const annotationScript = `
 
     manipPanel.querySelectorAll('.claude-design-manip-color-row').forEach(function(row) {
       var prop = row.getAttribute('data-prop');
-      var input = row.querySelector('input');
+      var fill = row.querySelector('.claude-design-manip-swatch-fill');
       var hexLabel = row.querySelector('.claude-design-manip-color-hex');
       var parts = manipColorParts(el, prop);
-      if (document.activeElement !== input) input.value = parts.hex;
+      if (fill) fill.style.background = manipColorWithAlpha(parts.hex, parts.alpha);
       hexLabel.textContent = parts.hex;
       row.classList.toggle('changed', !!(rec && rec.current[prop] !== undefined));
     });
+
+    // The stack can change under the panel (a preset, an undo), so the rows
+    // follow it rather than only the fields inside them
+    var shadowHost = manipPanel.querySelector('.claude-design-manip-shadow-list');
+    if (shadowHost) {
+      var layers = manipShadowLayers(el);
+      if (shadowHost.getAttribute('data-count') !== String(layers.length)) {
+        manipRenderShadowRows();
+        return;
+      }
+      shadowHost.querySelectorAll('[data-shadow-color]').forEach(function(btn) {
+        var layer = layers[parseInt(btn.getAttribute('data-shadow-color'), 10)];
+        var swatchFill = btn.querySelector('.claude-design-manip-swatch-fill');
+        if (layer && swatchFill) swatchFill.style.background = layer.color;
+      });
+      shadowHost.querySelectorAll('[data-shadow-inset]').forEach(function(btn) {
+        var layer = layers[parseInt(btn.getAttribute('data-shadow-inset'), 10)];
+        btn.classList.toggle('on', !!(layer && layer.inset));
+      });
+    }
 
     // Header shows how many tweaks this element carries; Reset appears with them
     var count = rec ? manipRecordChangeCount(rec) : 0;
@@ -6475,6 +7338,7 @@ export const annotationScript = `
     if (manipSelected) manipLeaveState(manipSelected);
     closeManipFlyout(true);
     if (manipSelected) {
+      manipSelected.classList.remove('claude-design-selected-quiet');
       var rec = manipChanges.get(manipSelected);
       // Reverting is itself an undo step, so Cmd+Z brings the tweaks back
       // (with their tracking) after an accidental Escape or click-away
@@ -6637,6 +7501,11 @@ export const annotationScript = `
     var el = manipSelected;
     if (!el) return;
 
+    if (manipDrag.kind === 'picker') {
+      manipPickerTrack(e);
+      return;
+    }
+
     if (manipDrag.kind === 'move') {
       var mdx = e.clientX - manipDrag.startX;
       var mdy = e.clientY - manipDrag.startY;
@@ -6674,7 +7543,7 @@ export const annotationScript = `
     }
     // A completed drag must not fall through as a click (Edit mode's click
     // handler would treat it as click-outside and cancel the popover)
-    if (drag.kind === 'scrub' || (drag.kind === 'move' && drag.started)) {
+    if (drag.kind === 'scrub' || drag.kind === 'picker' || (drag.kind === 'move' && drag.started)) {
       manipSuppressClick = true;
     }
     queueManipReposition();
