@@ -294,7 +294,7 @@ export default function Toolbar({
             ? 'Close inspector to edit'
             : annotateMode
               ? 'Exit Edit Mode (Cmd+E)'
-              : 'Enter Edit Mode (Cmd+E)'
+              : 'Enter Edit Mode (Cmd+E) — annotate, drag, resize and restyle elements'
         }
       >
         <kbd className="toolbar-kbd">&#8984;E</kbd>

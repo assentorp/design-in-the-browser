@@ -242,15 +242,34 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
           await webview.executeJavaScript(
             `window.__claudeDesignSetGridSizes && window.__claudeDesignSetGridSizes(${Number(settings.gridSpatialSize) || 8}, ${Number(settings.gridBaselineSize) || 4}); true;`
           );
+          await webview.executeJavaScript(
+            `window.__claudeDesignSetPanelPersistent && window.__claudeDesignSetPanelPersistent(${!!settings.persistentDesignPanel}); true;`
+          );
         }
       } catch (err) {
         console.error('[Browser] Failed to inject grid sizes:', err);
       }
 
-      // Inject project files for @-mention autocomplete
       if (mainAPI && projectPath) {
+        // Independent project scans — start them together so they don't queue.
+        // Each is awaited further down; the no-op catch only stops Chromium
+        // logging an unhandled rejection while the earlier await is pending.
+        const scan = <T,>(run: (() => Promise<T>) | undefined, fallback: T): Promise<T> => {
+          if (!run) return Promise.resolve(fallback);
+          const promise = run();
+          promise.catch(() => {});
+          return promise;
+        };
+        const filesPromise = scan(() => mainAPI.listProjectFiles(projectPath), []);
+        const tokensPromise = scan(() => mainAPI.listDesignTokens(projectPath), []);
+        const variantsPromise = scan(
+          mainAPI.listComponentVariants ? () => mainAPI.listComponentVariants(projectPath) : undefined,
+          []
+        );
+
+        // Inject project files for @-mention autocomplete
         try {
-          const files = await mainAPI.listProjectFiles(projectPath);
+          const files = await filesPromise;
           await webview.executeJavaScript(
             `window.__claudeDesignProjectFiles = ${JSON.stringify(files)}; true;`
           );
@@ -261,13 +280,24 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
 
         // Inject design tokens for >mention autocomplete
         try {
-          const tokens = await mainAPI.listDesignTokens(projectPath);
+          const tokens = await tokensPromise;
           await webview.executeJavaScript(
             `window.__claudeDesignTokens = ${JSON.stringify(tokens)}; true;`
           );
           console.log('[Browser] Injected design tokens:', tokens.length);
         } catch (err) {
           console.error('[Browser] Failed to inject design tokens:', err);
+        }
+
+        // Inject cva/tailwind-variants declarations for the design panel
+        try {
+          const variants = await variantsPromise;
+          await webview.executeJavaScript(
+            `window.__claudeDesignComponentVariants = ${JSON.stringify(variants)}; true;`
+          );
+          console.log('[Browser] Injected component variants:', variants.length);
+        } catch (err) {
+          console.error('[Browser] Failed to inject component variants:', err);
         }
       }
 
@@ -872,6 +902,23 @@ export default function Browser({ sessionId, active, url, onUrlChange, annotateM
     };
     window.addEventListener('claude-design-grid-sizes', handler);
     return () => window.removeEventListener('claude-design-grid-sizes', handler);
+  }, [isReady]);
+
+  // Same for the "persistent design panel" preference
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const webview = webviewRef.current;
+      if (!webview || !isReady) return;
+      const detail = (e as CustomEvent<{ persistent: boolean }>).detail;
+      if (!detail) return;
+      webview
+        .executeJavaScript(
+          `window.__claudeDesignSetPanelPersistent && window.__claudeDesignSetPanelPersistent(${!!detail.persistent}); true;`
+        )
+        .catch(() => {});
+    };
+    window.addEventListener('claude-design-panel-persistent', handler);
+    return () => window.removeEventListener('claude-design-panel-persistent', handler);
   }, [isReady]);
 
   // Toggle annotate mode in webview

@@ -2414,6 +2414,11 @@ textarea {
   animation: modal-pop-in 0.18s ease;
 }
 
+/* Modals take focus on open so Escape reaches them; that shouldn't draw a ring */
+.modal:focus {
+  outline: none;
+}
+
 @keyframes modal-pop-in {
   from {
     opacity: 0;

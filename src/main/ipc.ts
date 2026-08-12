@@ -12,6 +12,7 @@ import { formatAnnotationPrompt, formatMultiEditPrompt, type MultiEditAnnotation
 import { getSettings, saveSettings, getScreenshotCleanupMs, type AppSettings } from './settings';
 import { getPresets, savePresets } from './presets';
 import { getDesignTokens } from './tailwind-tokens';
+import { getComponentVariants } from './component-variants';
 
 // Max buffered output chunks before renderer signals ready (~5MB worth)
 const MAX_OUTPUT_BUFFER = 1000;
@@ -1687,6 +1688,42 @@ export function setupIPC(win: BrowserWindow) {
         tokenInFlight.delete(projectPath);
       });
     tokenInFlight.set(projectPath, promise);
+    return promise;
+  });
+
+  // Component variant declarations (cva/tailwind-variants) for the design
+  // panel's size/variant pickers. Same cache + in-flight dedup as tokens: the
+  // scan reads every source file, so it must not rerun per webview reload.
+  type VariantSetList = ReturnType<typeof getComponentVariants>;
+  const VARIANT_TTL_MS = 30_000;
+  const variantCache = new Map<string, { ts: number; sets: VariantSetList }>();
+  const variantInFlight = new Map<string, Promise<VariantSetList>>();
+
+  ipcMain.handle('project:list-component-variants', async (_, { projectPath }: { projectPath: string }) => {
+    const cached = variantCache.get(projectPath);
+    if (cached && Date.now() - cached.ts < VARIANT_TTL_MS) {
+      return cached.sets;
+    }
+    const inFlight = variantInFlight.get(projectPath);
+    if (inFlight) return inFlight;
+
+    const promise = Promise.resolve()
+      .then(() => {
+        try {
+          return getComponentVariants(projectPath);
+        } catch (err) {
+          console.error('[IPC] Failed to read component variants:', err);
+          return [] as VariantSetList;
+        }
+      })
+      .then((sets) => {
+        variantCache.set(projectPath, { ts: Date.now(), sets });
+        return sets;
+      })
+      .finally(() => {
+        variantInFlight.delete(projectPath);
+      });
+    variantInFlight.set(projectPath, promise);
     return promise;
   });
 

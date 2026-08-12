@@ -22,6 +22,8 @@ export interface AppSettings {
   browserWidthPercent?: number;
   gridSpatialSize: number;
   gridBaselineSize: number;
+  // Keep the design panel open across selections instead of per-element
+  persistentDesignPanel: boolean;
 }
 
 const defaultSettings: AppSettings = {
@@ -34,6 +36,7 @@ const defaultSettings: AppSettings = {
   discordDismissed: false,
   gridSpatialSize: 8,
   gridBaselineSize: 4,
+  persistentDesignPanel: false,
 };
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
