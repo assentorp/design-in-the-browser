@@ -1306,12 +1306,14 @@ export const annotationScript = `
         display: flex !important;
         align-items: center !important;
         gap: 8px !important;
-        padding: 11px 16px 9px !important;
+        /* The headline gets air below it so it reads as a title, not a row */
+        padding: 12px 16px 14px !important;
       }
       .claude-design-manip-flyout-title {
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        color: #8f8f8f !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        color: #f0f0f0 !important;
+        letter-spacing: 0.1px !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
@@ -1933,11 +1935,6 @@ export const annotationScript = `
       .claude-design-manip-flyout .claude-design-manip-shadow-inset.on {
         background: rgba(198, 97, 63, 0.2) !important;
         color: #eb9b78 !important;
-      }
-      .claude-design-manip-shadow-empty {
-        padding: 4px 0 !important;
-        color: #7a7a7a !important;
-        font-size: 11px !important;
       }
     \`;
     document.head.appendChild(style);
@@ -6272,7 +6269,8 @@ export const annotationScript = `
   // One row per shadow in the stack, each with its own colour and offsets
   function manipShadowRowsHtml(el) {
     var layers = manipShadowLayers(el);
-    if (!layers.length) return '<div class="claude-design-manip-shadow-empty">No shadow</div>';
+    // No layers, no rows: the preset button already reads "none"
+    if (!layers.length) return '';
     var html = '<div class="claude-design-manip-shadow-head">' +
       '<span class="lead"></span><span>X</span><span>Y</span><span>Blur</span><span>Spread</span>' +
       '<span class="trail"></span></div>';
@@ -6323,13 +6321,6 @@ export const annotationScript = `
 
     // Groups the element actually has something to say about
     var tabs = [];
-    if (manipPanelFamilies.length) {
-      tabs.push({
-        key: 'component',
-        label: manipPanelFamilies.length === 1 ? manipPanelFamilies[0].base : 'Component',
-        body: manipComponentSectionHtml(manipPanelFamilies)
-      });
-    }
     tabs.push({ key: 'layout', label: 'Layout', body:
       '<div class="claude-design-manip-section">' +
         manipLabelHtml('Dimensions') +
@@ -6341,7 +6332,10 @@ export const annotationScript = `
           manipCellHtml('Corner radius', manipFieldHtml('border-radius')) +
           (showGap ? manipCellHtml('Gap', manipFieldHtml('gap')) : '<div class="claude-design-manip-cell"></div>') +
         '</div>' +
-      '</div>' });
+      '</div>' +
+      // A detected component reads as part of the element's layout: its
+      // variants sit at the bottom of the tab rather than in one of their own
+      manipComponentSectionHtml(manipPanelFamilies) });
     tabs.push({ key: 'spacing', label: 'Spacing', body:
       '<div class="claude-design-manip-section">' +
         manipLabelHtml('Margin') +
@@ -6393,7 +6387,9 @@ export const annotationScript = `
 
     var html = '' +
       '<div class="claude-design-manip-flyout-header">' +
-        '<span class="claude-design-manip-flyout-title">' + escapeHtml(generateDisplaySelector(el)) + '</span>' +
+        // A headline, not the selector: the corner marks already say which
+        // element this is. The selector stays reachable as the tooltip.
+        '<span class="claude-design-manip-flyout-title" title="' + escapeHtml(generateDisplaySelector(el)) + '">Design controls</span>' +
         (manipIsTailwindProject()
           ? '<button class="claude-design-manip-statebtn" title="Which state these controls edit">' +
               '<span class="claude-design-manip-statebtn-value"></span>' + MANIP_CARET_SVG +
@@ -7245,7 +7241,8 @@ export const annotationScript = `
         var tab = MANIP_TAB_OF_PROP[prop];
         if (tab) changedTabs[tab] = true;
       });
-      if (Object.keys(rec.classSwaps || {}).length) changedTabs.component = true;
+      // Class swaps live on the Layout tab with the rest of the component
+      if (Object.keys(rec.classSwaps || {}).length) changedTabs.layout = true;
     }
     manipPanel.querySelectorAll('.claude-design-manip-tab').forEach(function(tabEl) {
       tabEl.classList.toggle('changed', !!changedTabs[tabEl.getAttribute('data-tab')]);
