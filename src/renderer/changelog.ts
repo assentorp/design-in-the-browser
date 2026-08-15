@@ -6,6 +6,18 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.1.0',
+    date: 'August 15, 2026',
+    changes: [
+      'Design the page directly in Edit mode: select an element and the sliders button in the prompt box opens a design panel under your note — layout, spacing, text, fill, shadow and border. Scrub or type a value, see it live, and one Send delivers your note and the changes together',
+      'Edits speak your project\'s vocabulary: fields offer your Tailwind scale and palette, so the instruction asks for text-2xl and bg-brand/60 rather than pixels and hex',
+      'Swap a component\'s size or variant — cva, tailwind-variants, DaisyUI, Bootstrap and BEM are detected — and get a prop change, not CSS',
+      'Edit hover, focus and active states without hovering the element (Tailwind projects)',
+      'Cmd+Z steps back through tweaks, and abandoning a selection reverts the preview so the page keeps matching your code',
+      'Fix design previews staying on the page after a queued edit was cancelled',
+    ],
+  },
+  {
     version: '2.0.1',
     date: 'August 4, 2026',
     changes: [
