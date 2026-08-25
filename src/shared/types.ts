@@ -222,6 +222,9 @@ export interface MainAPI {
   terminalReady: (sessionId: string) => void;
   sendAnnotation: (data: AnnotationData) => void;
   onTerminalData: (callback: (sessionId: string, data: string) => void) => void;
+  onTerminalExited: (callback: (sessionId: string) => void) => void;
+  isTerminalAlive: (sessionId: string) => Promise<boolean>;
+  onSystemResume: (callback: () => void) => void;
   toggleAnnotateMode: () => void;
   onAnnotateModeChanged: (callback: (enabled: boolean) => void) => void;
   showOpenDialog: () => Promise<string | null>;

@@ -190,6 +190,11 @@ export function setupIPC(win: BrowserWindow) {
       s.disposables.length = 0;
       s.outputBuffer.length = 0;
       sessions.delete(sessionId);
+      // Tell the renderer so the tab can say so instead of silently swallowing
+      // every keystroke from here on.
+      if (!mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send('terminal:exited', { sessionId });
+      }
     });
 
     session.disposables.push(dataDisposable, exitDisposable);
@@ -230,6 +235,21 @@ export function setupIPC(win: BrowserWindow) {
     const session = sessions.get(sessionId);
     if (session) {
       session.ptyProcess.write(data);
+    }
+  });
+
+  // Is this tab's shell still running? The renderer asks after the machine
+  // wakes from sleep, so a tab whose PTY died while suspended reports itself
+  // instead of looking alive but ignoring input.
+  ipcMain.handle('terminal:is-alive', (_, { sessionId }: { sessionId: string }) => {
+    const session = sessions.get(sessionId);
+    if (!session) return false;
+    try {
+      // Signal 0 checks for existence without touching the process.
+      process.kill(session.ptyProcess.pid, 0);
+      return true;
+    } catch {
+      return false;
     }
   });
 

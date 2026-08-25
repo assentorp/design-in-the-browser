@@ -45,6 +45,18 @@ const mainAPI: MainAPI = {
     ipcRenderer.on('terminal:data', (_, { sessionId, data }) => callback(sessionId, data));
   },
 
+  onTerminalExited: (callback: (sessionId: string) => void) => {
+    ipcRenderer.on('terminal:exited', (_, { sessionId }) => callback(sessionId));
+  },
+
+  isTerminalAlive: (sessionId: string): Promise<boolean> => {
+    return ipcRenderer.invoke('terminal:is-alive', { sessionId });
+  },
+
+  onSystemResume: (callback: () => void) => {
+    ipcRenderer.on('system:resume', () => callback());
+  },
+
   toggleAnnotateMode: () => {
     ipcRenderer.send('toggle-annotate');
   },

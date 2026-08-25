@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, session, nativeImage, Menu, clipboard, shell } from 'electron';
+import { app, BrowserWindow, screen, session, nativeImage, Menu, clipboard, shell, powerMonitor } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { setupIPC, rebindIPCMainWindow } from './ipc';
@@ -224,9 +224,30 @@ async function sweepStaleScreenshots() {
   }
 }
 
+// Waking from sleep (and unlocking after it) leaves Chromium's focus stuck on
+// whichever frame had it when the machine went down — usually the <webview>
+// guest, which is then gone or detached. The main frame stops receiving key
+// events entirely, so the terminal looks alive but swallows every keystroke and
+// clicking it doesn't help. Pull focus back to the main frame and let the
+// renderer re-focus/refit the active terminal.
+function handleSystemResume() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const win = mainWindow;
+  // Chromium needs a beat after wake before focus calls stick.
+  setTimeout(() => {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) return;
+    if (win.isFocused()) {
+      win.webContents.focus();
+    }
+    win.webContents.send('system:resume');
+  }, 300);
+}
+
 app.whenReady().then(() => {
   createWindow();
   setTimeout(sweepStaleScreenshots, 5000);
+  powerMonitor.on('resume', handleSystemResume);
+  powerMonitor.on('unlock-screen', handleSystemResume);
 });
 
 // Local dev servers often use self-signed certs (mkcert, `next dev

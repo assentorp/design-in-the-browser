@@ -16,6 +16,15 @@ interface TerminalInstance {
 // Global state for terminal instances (keyed by tab ID)
 const terminalInstances = new Map<string, TerminalInstance>();
 const createdTabs = new Set<string>();
+// Spawn arguments per tab, so a tab whose shell died can be restarted in the
+// same project directory without the owning component being involved.
+const tabSpawnConfig = new Map<string, { cwd?: string; shell?: ShellType }>();
+// Tabs whose PTY has exited. Their xterm is still on screen but keystrokes
+// have nowhere to go, so we swallow them and offer a restart instead.
+const deadTabs = new Set<string>();
+// The tab the user is currently looking at, mirrored at module scope for the
+// once-registered main-process listeners below.
+let currentActiveTabId: string | null = null;
 let dataListenerSetup = false;
 
 // Writes queued before the xterm instance is created — flushed on creation.
@@ -40,6 +49,38 @@ export function writeToTerminal(tabId: string, text: string) {
   const queue = pendingTerminalWrites.get(tabId) || [];
   queue.push(text);
   pendingTerminalWrites.set(tabId, queue);
+}
+
+// Bring a tab's shell back after its PTY exited (either the user quit the
+// shell, or it died while the machine was asleep).
+function respawnTerminal(tabId: string) {
+  const mainAPI = getMainAPI();
+  const instance = terminalInstances.get(tabId);
+  if (!mainAPI || !instance) return;
+
+  deadTabs.delete(tabId);
+  instance.terminal.write('\r\n');
+  const config = tabSpawnConfig.get(tabId);
+  mainAPI.createTerminal(tabId, config?.cwd, config?.shell);
+  mainAPI.terminalReady(tabId);
+  try {
+    if (instance.containerEl.offsetWidth > 0 && instance.containerEl.offsetHeight > 0) {
+      instance.fitAddon.fit();
+      mainAPI.resizeTerminal(tabId, instance.terminal.cols, instance.terminal.rows);
+    }
+  } catch {
+    // Ignore fit errors
+  }
+  instance.terminal.focus();
+}
+
+function markTerminalDead(tabId: string) {
+  if (deadTabs.has(tabId)) return;
+  deadTabs.add(tabId);
+  const instance = terminalInstances.get(tabId);
+  if (!instance) return;
+  instance.terminal.write('\r\n\x1b[33m[shell exited — press Enter to start a new one]\x1b[0m\r\n');
+  instance.terminal.scrollToBottom();
 }
 
 const DEFAULT_FONT_SIZE = 13;
@@ -89,6 +130,46 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
         instance.terminal.write(data);
         // Always scroll to bottom to show latest output
         instance.terminal.scrollToBottom();
+      }
+    });
+
+    mainAPI.onTerminalExited?.((tabId: string) => {
+      markTerminalDead(tabId);
+    });
+
+    // Waking from sleep leaves Chromium's keyboard focus stranded (usually on
+    // the <webview> guest that owned it when the machine went down), so the
+    // terminal stops receiving keystrokes and clicking it doesn't help. The
+    // main process pulls focus back to this frame; re-fit and re-focus the
+    // active terminal here, and check that every shell actually survived.
+    mainAPI.onSystemResume?.(() => {
+      const activeInstance = currentActiveTabId ? terminalInstances.get(currentActiveTabId) : null;
+      if (activeInstance && currentActiveTabId) {
+        try {
+          if (activeInstance.containerEl.offsetWidth > 0 && activeInstance.containerEl.offsetHeight > 0) {
+            activeInstance.fitAddon.fit();
+            mainAPI.resizeTerminal(currentActiveTabId, activeInstance.terminal.cols, activeInstance.terminal.rows);
+          }
+        } catch {
+          // Ignore fit errors
+        }
+        // Only reclaim focus if nothing outside the terminal holds it — the
+        // user may have left the caret in the URL bar before sleeping.
+        const active = document.activeElement;
+        const focusIsLoose = !active || active === document.body || active === document.documentElement;
+        if (focusIsLoose || activeInstance.containerEl.contains(active)) {
+          activeInstance.terminal.blur();
+          activeInstance.terminal.focus();
+        }
+      }
+
+      if (!mainAPI.isTerminalAlive) return;
+      for (const tabId of createdTabs) {
+        mainAPI.isTerminalAlive(tabId).then((alive) => {
+          if (!alive) markTerminalDead(tabId);
+        }).catch(() => {
+          // Probe failed — leave the tab alone rather than declaring it dead
+        });
       }
     });
   }, []);
@@ -152,9 +233,16 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
     if (mainAPI && !createdTabs.has(tabId)) {
       createdTabs.add(tabId);
+      tabSpawnConfig.set(tabId, { cwd: projectPathRef.current, shell: shellRef.current });
       mainAPI.createTerminal(tabId, projectPathRef.current, shellRef.current);
 
       terminal.onData((data) => {
+        if (deadTabs.has(tabId)) {
+          // Nothing is listening on the other end. Enter restarts the shell;
+          // everything else would vanish silently, so drop it.
+          if (data === '\r' || data === '\n') respawnTerminal(tabId);
+          return;
+        }
         mainAPI.sendTerminalInput(tabId, data);
       });
     } else if (!mainAPI) {
@@ -192,6 +280,8 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
       mainAPI.destroyTerminal(tabId);
     }
     createdTabs.delete(tabId);
+    deadTabs.delete(tabId);
+    tabSpawnConfig.delete(tabId);
 
     const filtered = tabs.filter(t => t.id !== tabId);
     if (filtered.length === 0) {
@@ -312,6 +402,7 @@ export default function Terminal({ sessionId, collapsed, tabs, activeTabId, tabC
 
   // Focus terminal when tab changes
   useEffect(() => {
+    currentActiveTabId = activeTabId;
     const instance = terminalInstances.get(activeTabId);
     if (instance) {
       setTimeout(() => instance.terminal.focus(), 100);
@@ -560,6 +651,8 @@ export function destroyTerminalSession(sessionId: string) {
         mainAPI.destroyTerminal(tabId);
       }
       createdTabs.delete(tabId);
+      deadTabs.delete(tabId);
+      tabSpawnConfig.delete(tabId);
     }
   }
 }
